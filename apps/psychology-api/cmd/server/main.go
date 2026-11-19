@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 
+	"psychology/api/internal/auth"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func setupRouter() http.Handler {
+func setupRouter(authHandler *auth.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -25,6 +27,20 @@ func setupRouter() http.Handler {
 		})
 	})
 
+	r.Route("/v1", func(v1 chi.Router) {
+		v1.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status": "ok",
+			})
+		})
+
+		if authHandler != nil {
+			authHandler.MountRoutes(v1)
+		}
+	})
+
 	return r
 }
 
@@ -37,7 +53,7 @@ func main() {
 		port = "8080"
 	}
 
-	router := setupRouter()
+	router := setupRouter(nil)
 
 	logger.Info("starting psychology API server", "port", port)
 	if err := http.ListenAndServe(":"+port, router); err != nil {
