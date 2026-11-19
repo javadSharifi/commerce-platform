@@ -16,3 +16,11 @@ sql:
         package: "authdb"
         out: "internal/auth/authdb"
         sql_package: "pgx/v5"
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/settings/queries.sql"
+    gen:
+      go:
+        package: "settingsdb"
+        out: "internal/settings/settingsdb"
+        sql_package: "pgx/v5"

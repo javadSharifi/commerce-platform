@@ -1,0 +1,97 @@
+---
+import { defaultTheme } from '../theme/theme.js';
+
+interface Props {
+  title?: string;
+  description?: string;
+  primaryColor?: string;
+}
+
+const {
+  title = 'مرکز خدمات روان‌شناختی و مشاوره',
+  description = 'سامانه تخصصی مشاوره، کارگاه‌ها و آموزش روان‌شناسی',
+  primaryColor = defaultTheme.defaultPrimaryColor,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <style define:vars={{ primaryColor, fontFamily: defaultTheme.fontFamily }}>
+      :root {
+        --primary: var(--primaryColor);
+        --font-base: var(--fontFamily);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: var(--font-base);
+        background-color: #f8fafc;
+        color: #1e293b;
+        line-height: 1.6;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      a {
+        color: var(--primary);
+        text-decoration: none;
+      }
+      .container {
+        max-width: 1024px;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+        width: 100%;
+      }
+      .btn {
+        display: inline-block;
+        padding: 0.6rem 1.25rem;
+        border-radius: 0.5rem;
+        background-color: var(--primary);
+        color: #ffffff;
+        font-weight: 500;
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.2s ease;
+      }
+      .btn:hover {
+        opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <header style="background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 1rem 0;">
+      <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-weight: 700; font-size: 1.25rem; color: var(--primary);">
+          {title}
+        </div>
+        <nav style="display: flex; gap: 1.5rem; font-size: 0.95rem;">
+          <a href="/">صفحه اصلی</a>
+          <a href="/workshops">کارگاه‌ها</a>
+          <a href="/blog">مطالب و مقالات</a>
+          <a href="/booking">درخواست نوبت</a>
+        </nav>
+      </div>
+    </header>
+
+    <main style="flex: 1; padding: 2rem 0;">
+      <div class="container">
+        <slot />
+      </div>
+    </main>
+
+    <footer style="background: #0f172a; color: #94a3b8; padding: 2rem 0; margin-top: auto; border-top: 1px solid #1e293b;">
+      <div class="container" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
+        <div>تمامی حقوق محفوظ است © {new Date().toLocaleDateString('fa-IR', { year: 'numeric' })}</div>
+        <div>پلتفرم اختصاصی سایت‌ساز روان‌شناسان و کلینیک‌ها</div>
+      </div>
+    </footer>
+  </body>
+</html>

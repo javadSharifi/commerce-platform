@@ -1,0 +1,96 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+
+// Settings data model representation:
+const settings = {
+  title: 'دکتر مریم علوی - روان‌درمانگر و مشاور خانواده',
+  description: 'مرکز تخصصی روان‌درمانی فردی، اضطراب و زوج‌درمانی',
+  phone: '۰۲۱-۸۸۸۸۸۸۸۸',
+  address: 'تهران، خیابان ولیعصر، بالاتر از میدان ونک',
+  primaryColor: '#0284c7',
+};
+---
+
+<AdminLayout title="تنظیمات و هویت بصری کلینیک" currentNav="settings">
+  <div class="card" style="max-width: 720px;">
+    <h2 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 1.5rem;">
+      مشخصات و ظاهر وب‌سایت مطب
+    </h2>
+
+    <form style="display: flex; flex-direction: column; gap: 1.25rem;">
+      <div>
+        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+          عنوان وب‌سایت مطب / درمانگر
+        </label>
+        <input
+          type="text"
+          value={settings.title}
+          style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+          placeholder="مثال: دکتر علوی - روان‌درمانگر"
+        />
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+          توضیح کوتاه و بیوگرافی معرفی
+        </label>
+        <textarea
+          rows="3"
+          style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-family: inherit;"
+        >{settings.description}</textarea>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div>
+          <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+            تلفن تماس عمومی
+          </label>
+          <input
+            type="text"
+            value={settings.phone}
+            style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+            placeholder="۰۲۱..."
+          />
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+            رنگ اصلی پوسته (برند مطب)
+          </label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input
+              type="color"
+              value={settings.primaryColor}
+              style="width: 48px; height: 38px; border: 1px solid #cbd5e1; border-radius: 0.375rem; cursor: pointer;"
+            />
+            <input
+              type="text"
+              value={settings.primaryColor}
+              style="flex: 1; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-family: monospace;"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+          آدرس مطب / کلینیک
+        </label>
+        <input
+          type="text"
+          value={settings.address}
+          style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+          placeholder="شهر، خیابان..."
+        />
+      </div>
+
+      <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+        <button
+          type="button"
+          style="padding: 0.7rem 1.5rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer;"
+        >
+          ذخیره تغییرات تنظیمات
+        </button>
+      </div>
+    </form>
+  </div>
+</AdminLayout>

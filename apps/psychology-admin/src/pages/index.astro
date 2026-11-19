@@ -1,15 +1,48 @@
 ---
+import AdminLayout from '../layouts/AdminLayout.astro';
 ---
-<html lang="fa" dir="rtl">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>پنل مدیریت کلینیک</title>
-  </head>
-  <body>
-    <main style="font-family: system-ui, sans-serif; padding: 2rem; max-width: 800px; margin: auto;">
-      <h1>پنل مدیریت کلینیک روان‌شناسی</h1>
-      <p>پنل مدیریت کلینیک با موفقیت راه‌اندازی شد.</p>
-    </main>
-  </body>
-</html>
+
+<AdminLayout title="داشبورد مدیریت کلینیک" currentNav="dashboard">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+    <div class="card">
+      <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem;">کارگاه‌های فعال</div>
+      <div style="font-size: 1.75rem; font-weight: 800; color: #0284c7;">۲ کارگاه</div>
+      <div style="font-size: 0.85rem; color: #10b981; margin-top: 0.5rem;">ظرفیت تکمیل: ۷۵٪</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem;">ثبت‌نام‌های اخیر</div>
+      <div style="font-size: 1.75rem; font-weight: 800; color: #0f172a;">۲۸ نفر</div>
+      <div style="font-size: 0.85rem; color: #64748b; margin-top: 0.5rem;">در ۷ روز گذشته</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem;">مقالات منتشرشده</div>
+      <div style="font-size: 1.75rem; font-weight: 800; color: #0f172a;">۱۲ مطلب</div>
+      <div style="font-size: 0.85rem; color: #64748b; margin-top: 0.5rem;">همراه با ۲ پادکست صوتی</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem;">وضعیت پوسته و دامنه</div>
+      <div style="font-size: 1.1rem; font-weight: 700; color: #16a34a;">فعال و تأییدشده</div>
+      <div style="font-size: 0.85rem; color: #64748b; margin-top: 0.5rem;">dr-alavi.ir</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem;">
+      دسترسی‌های سریع
+    </h2>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <a href="/settings" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
+        ویرایش مشخصات و رنگ مطب ←
+      </a>
+      <a href="/workshops" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
+        تعریف کارگاه جدید ←
+      </a>
+      <a href="/blog" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
+        نوشتن مقاله جدید ←
+      </a>
+    </div>
+  </div>
+</AdminLayout>

@@ -1,0 +1,155 @@
+---
+interface Props {
+  title?: string;
+  currentNav?: string;
+}
+
+const { title = 'پنل مدیریت کلینیک', currentNav = 'dashboard' } = Astro.props;
+---
+
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} | سامانه مدیریت روان‌شناسی</title>
+    <style>
+      :root {
+        --primary: #0284c7;
+        --sidebar-bg: #0f172a;
+        --sidebar-text: #94a3b8;
+        --sidebar-active: #38bdf8;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background-color: #f1f5f9;
+        color: #1e293b;
+        display: flex;
+        min-height: 100vh;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .sidebar {
+        width: 260px;
+        background: var(--sidebar-bg);
+        color: var(--sidebar-text);
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+      }
+      .sidebar-header {
+        padding: 1.5rem 1.25rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #ffffff;
+        border-bottom: 1px solid #1e293b;
+      }
+      .nav-list {
+        list-style: none;
+        padding: 1rem 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .nav-item {
+        display: block;
+        padding: 0.65rem 1rem;
+        border-radius: 0.5rem;
+        font-size: 0.95rem;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .nav-item:hover {
+        background: #1e293b;
+        color: #ffffff;
+      }
+      .nav-item.active {
+        background: #0369a1;
+        color: #ffffff;
+        font-weight: 600;
+      }
+      .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .topbar {
+        background: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 1rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .content-body {
+        padding: 2rem;
+        flex: 1;
+      }
+      .card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      }
+    </style>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        مدیریت کلینیک روان‌شناسی
+      </div>
+      <ul class="nav-list">
+        <li>
+          <a href="/" class={`nav-item ${currentNav === 'dashboard' ? 'active' : ''}`}>
+            📊 داشبورد
+          </a>
+        </li>
+        <li>
+          <a href="/workshops" class={`nav-item ${currentNav === 'workshops' ? 'active' : ''}`}>
+            👥 کارگاه‌ها و ثبت‌نام‌ها
+          </a>
+        </li>
+        <li>
+          <a href="/blog" class={`nav-item ${currentNav === 'blog' ? 'active' : ''}`}>
+            ✍️ مقالات و بلاگ
+          </a>
+        </li>
+        <li>
+          <a href="/appointments" class={`nav-item ${currentNav === 'appointments' ? 'active' : ''}`}>
+            📅 نوبت‌دهی و تقویم
+          </a>
+        </li>
+        <li>
+          <a href="/settings" class={`nav-item ${currentNav === 'settings' ? 'active' : ''}`}>
+            ⚙️ تنظیمات و ظاهر مطب
+          </a>
+        </li>
+      </ul>
+      <div style="margin-top: auto; padding: 1.25rem; border-top: 1px solid #1e293b; font-size: 0.85rem; color: #64748b;">
+        نسخه سامانه: ۱.۰.۰
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <h1 style="font-size: 1.25rem; font-weight: 700; color: #0f172a;">{title}</h1>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <span style="font-size: 0.9rem; color: #64748b;">دکتر علوی (مدیر مطب)</span>
+          <button style="padding: 0.4rem 0.8rem; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem;">خروج</button>
+        </div>
+      </header>
+
+      <section class="content-body">
+        <slot />
+      </section>
+    </div>
+  </body>
+</html>
