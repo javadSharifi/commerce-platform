@@ -14,7 +14,7 @@
 
 [پلتفرم](modules/platform.md) · [نقشهٔ مسیرها](PROJECT_MAP.md)
 
-- [ ] PSY-0.1 ساخت یا بازاستفاده workspace ریشه، Go app مستقل، دو app Astro و PostgreSQL محلی. health check API و اجرای محلی سه app را تأیید کن.
+- [x] PSY-0.1 ساخت یا بازاستفاده workspace ریشه، Go app مستقل، دو app Astro و PostgreSQL محلی. health check API و اجرای محلی سه app را تأیید کن.
 - [ ] PSY-0.2 تدوین `docs/psychology/database.md` برای هسته بر اساس [مدل داده](DATA_MODEL.md). `tenant_id`، شناسه‌های ترکیبی، ترتیب قفل‌ها، زمان UTC و قواعد ریال را ثبت کن. Schema دامنه به‌صورت افزایشی در هر فاز تکمیل می‌شود.
 - [ ] PSY-0.3 ساخت قرارداد سراسری `/v1`، جداسازی Public/Account/Admin و Callback در OpenAPI و تولید کلاینت typed. خطا، pagination و پاسخ‌های خصوصی را تعریف کن.
 - [ ] PSY-0.4 ساخت migration نقش‌ها، `tenants`، دامنه‌ها، هویت پنل، عضویت و نشست با RLS و lookup محدود. `up/down/up` را اجرا کن.
