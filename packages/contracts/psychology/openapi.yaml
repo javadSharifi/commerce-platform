@@ -1,0 +1,462 @@
+openapi: 3.0.3
+info:
+  title: Psychology Platform API
+  description: Multi-tenant API for psychologists, therapists, and clinic site builder.
+  version: 1.0.0
+servers:
+  - url: /v1
+    description: V1 Base Path
+
+paths:
+  # ----------------------------------------------------
+  # PUBLIC ENDPOINTS (Resolved by Host / Domain)
+  # ----------------------------------------------------
+  /public/site:
+    get:
+      tags:
+        - Public
+      summary: Get public site profile and settings
+      description: Returns public information of the clinic resolved from request Host.
+      operationId: getPublicSite
+      responses:
+        '200':
+          description: Public site profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicSiteResponse'
+        '404':
+          description: Clinic or domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # ADMIN AUTH ENDPOINTS
+  # ----------------------------------------------------
+  /admin/auth/login:
+    post:
+      tags:
+        - Admin Auth
+      summary: Panel login
+      description: Authenticates a panel user (owner, therapist, receptionist) with email and password.
+      operationId: loginAdmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: "session_token=abc123xyz; Path=/; HttpOnly; Secure; SameSite=Lax"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/auth/logout:
+    post:
+      tags:
+        - Admin Auth
+      summary: Panel logout
+      description: Terminates the current active panel session.
+      operationId: logoutAdmin
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /admin/auth/me:
+    get:
+      tags:
+        - Admin Auth
+      summary: Current panel identity and memberships
+      description: Returns the authenticated user's profile and clinic memberships.
+      operationId: getAdminMe
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: Current user identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMeResponse'
+        '401':
+          description: Unauthorized session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # ADMIN CLINIC / SITE SETTINGS
+  # ----------------------------------------------------
+  /admin/site:
+    get:
+      tags:
+        - Admin Site
+      summary: Get clinic settings
+      description: Returns clinic settings for the authenticated tenant.
+      operationId: getAdminSite
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: Clinic settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteSettingsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+        - Admin Site
+      summary: Update clinic settings
+      description: Updates clinic title, description, contact details and visual settings.
+      operationId: updateAdminSite
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteSettingsRequest'
+      responses:
+        '200':
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteSettingsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # ACCOUNT ENDPOINTS (Phase 3 Placeholder)
+  # ----------------------------------------------------
+  /account/profile:
+    get:
+      tags:
+        - Account
+      summary: Client / Buyer profile
+      description: Client profile scoped to the tenant (Phase 3).
+      operationId: getAccountProfile
+      security:
+        - BuyerAuth: []
+      responses:
+        '200':
+          description: Buyer profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerProfileResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # CALLBACK ENDPOINTS (Phase 1 Placeholder)
+  # ----------------------------------------------------
+  /callbacks/payments/zarinpal:
+    get:
+      tags:
+        - Callbacks
+      summary: ZarinPal payment gateway return callback
+      description: Public return endpoint called by payment gateway after customer transaction.
+      operationId: handleZarinpalCallback
+      parameters:
+        - in: query
+          name: Authority
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: Status
+          schema:
+            type: string
+          required: true
+      responses:
+        '302':
+          description: Redirects to receipt or payment status page on the tenant storefront
+
+components:
+  securitySchemes:
+    SessionAuth:
+      type: apiKey
+      in: cookie
+      name: session_token
+      description: Server-side session token cookie for panel admins
+    BuyerAuth:
+      type: apiKey
+      in: cookie
+      name: buyer_session
+      description: Server-side session cookie for buyers/clients
+
+  schemas:
+    # ---------------- Error & Common ----------------
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: "UNAUTHORIZED"
+        message:
+          type: string
+          example: "نشست نامعتبر یا منقضی شده است."
+        details:
+          type: object
+          additionalProperties: true
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "عملیات با موفقیت انجام شد."
+
+    PaginationMeta:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+        - total_pages
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 45
+        total_pages:
+          type: integer
+          example: 3
+
+    # ---------------- Public Site ----------------
+    PublicSiteResponse:
+      type: object
+      required:
+        - name
+        - title
+        - description
+        - primary_color
+      properties:
+        name:
+          type: string
+          example: "کلینیک روان‌شناسی مهر"
+        title:
+          type: string
+          example: "دکتر مریم علوی - روان‌درمانگر و مشاور خانواده"
+        description:
+          type: string
+          example: "مرکز مشاوره و خدمات روان‌شناختی مهر"
+        phone:
+          type: string
+          example: "02188888888"
+        address:
+          type: string
+          example: "تهران، خیابان ولیعصر"
+        primary_color:
+          type: string
+          example: "#0284c7"
+        logo_url:
+          type: string
+          nullable: true
+          example: "https://storage.iran.liara.space/media/logo.png"
+
+    # ---------------- Admin Auth ----------------
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "doctor@example.com"
+        password:
+          type: string
+          format: password
+          example: "StrongPassword123"
+
+    AuthSessionResponse:
+      type: object
+      required:
+        - user
+        - token
+      properties:
+        token:
+          type: string
+          example: "sess_6a7f8e9d0c..."
+        user:
+          $ref: '#/components/schemas/PanelUser'
+
+    PanelUser:
+      type: object
+      required:
+        - id
+        - email
+        - full_name
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+
+    Membership:
+      type: object
+      required:
+        - tenant_id
+        - tenant_name
+        - tenant_slug
+        - role
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        tenant_name:
+          type: string
+        tenant_slug:
+          type: string
+        role:
+          type: string
+          enum: [owner, content_manager, receptionist, therapist]
+
+    AdminMeResponse:
+      type: object
+      required:
+        - user
+        - memberships
+      properties:
+        user:
+          $ref: '#/components/schemas/PanelUser'
+        memberships:
+          type: array
+          items:
+            $ref: '#/components/schemas/Membership'
+
+    # ---------------- Admin Site Settings ----------------
+    SiteSettingsResponse:
+      type: object
+      required:
+        - tenant_id
+        - title
+        - description
+        - phone
+        - address
+        - primary_color
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        primary_color:
+          type: string
+        logo_media_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    UpdateSiteSettingsRequest:
+      type: object
+      required:
+        - title
+        - description
+        - primary_color
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        primary_color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+        logo_media_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    # ---------------- Buyer / Account ----------------
+    BuyerProfileResponse:
+      type: object
+      required:
+        - id
+        - phone
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+        full_name:
+          type: string
+          nullable: true

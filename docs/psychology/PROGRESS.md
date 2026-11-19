@@ -1,15 +1,22 @@
 # وضعیت مسیر روان‌شناسی
 
-- آخرین کار تکمیل‌شده — `PSY-0.2`، تدوین `docs/psychology/database.md` برای ساختار پایگاه داده و Schema هسته بر اساس مدل داده.
+- آخرین کار تکمیل‌شده — `PSY-0.3`، ساخت قرارداد OpenAPI در `packages/contracts/psychology/openapi.yaml` و بسته کلاینت TypeScript تایپ‌شده در `packages/psychology-api-client/`.
 - تسک در حال انجام — هیچ‌کدام.
-- تسک پیشنهادی بعدی — `PSY-0.3`، ساخت قرارداد سراسری `/v1`، جداسازی Public/Account/Admin و Callback در OpenAPI و تولید کلاینت typed.
-- دستور تأیید برنامه — `cd apps/psychology-api && go test ./...` و در ریشه `pnpm build && pnpm test`. دستور کامل `make verify-psychology` در `PSY-0.8` تنظیم می‌شود.
+- تسک پیشنهادی بعدی — `PSY-0.4`، ساخت migration نقش‌ها، `tenants`، دامنه‌ها، هویت پنل، عضویت و نشست با RLS و lookup محدود.
+- دستور تأیید برنامه — `cd apps/psychology-api && go test ./...` و در ریشه `pnpm typecheck && pnpm build && pnpm test`. دستور کامل `make verify-psychology` در `PSY-0.8` تنظیم می‌شود.
 
 ## تأییدهای محیط هدف
 
 - حساب هدف زرین‌پال، باکت پارس‌پک، دامنه و تنظیمات آروان، شرایط عرضه و نگه‌داری داده در تسک‌های عرضهٔ هر نسخه بررسی می‌شوند. مسیر محلی با دادهٔ ساختگی و Adapter پرداخت تستی قابل اجراست. [نقشهٔ راه](TASKS.md)
 
 ## گزارش‌ها
+
+### ۲۰۲۶-۱۱-۱۹ — اجرای تسک PSY-0.3 (قرارداد OpenAPI و کلاینت تایپ‌شده)
+
+- قرارداد سراسری OpenAPI 3.0.3 تحت پیشوند `/v1` در فایل `packages/contracts/psychology/openapi.yaml` تعریف شد.
+- جداسازی حوزه‌ها انجام شد: Public (دریافت اطلاعات سایت بر مبنای Host)، Admin Auth (ورود، خروج و me)، Admin Site (تنظیمات کلینیک)، Account (حساب خریدار برای فاز ۳) و Callbacks (بازگشت از درگاه زرین‌پال).
+- الگوهای استاندارد خطا (`ErrorResponse`)، صفحه‌بندی (`PaginationMeta`) و طرح احراز هویت با کوکی نشست (`SessionAuth`) مستند شدند.
+- بسته کلاینت `@psychology/api-client` در `packages/psychology-api-client/` با تایپ‌های کامل TypeScript، کلاس خطای استاندارد `ApiClientError` و متدهای ارتباط با API پیاده‌سازی و در مونو‌ریپو متصل شد (`typecheck` و `build` سبز).
 
 ### ۲۰۲۶-۱۱-۱۹ — اجرای تسک PSY-0.2 (مستند پایگاه داده و اسکیما)
 
