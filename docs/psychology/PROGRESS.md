@@ -1,8 +1,8 @@
 # وضعیت مسیر روان‌شناسی
 
-- آخرین کار تکمیل‌شده — `PSY-0.4`، ساخت فایل‌های migration اولیه برای هسته (`000001_create_core_schema`) شامل نقش‌ها، `tenants`، `domains`، `site_settings`، `panel_identities`، `memberships`، `panel_sessions` و `password_resets` همراه با فعال‌سازی کامل RLS و سیاست‌های جداسازی.
+- آخرین کار تکمیل‌شده — `PSY-0.5`، ساخت Domain Resolver و `WithTenantTx` با pool و sqlc همراه با آزمون تفکیک Hostها و وضعیت تأیید دامنه.
 - تسک در حال انجام — هیچ‌کدام.
-- تسک پیشنهادی بعدی — `PSY-0.5`، ساخت resolver دامنه و `WithTenantTx` با pool و sqlc. دو Host و یک Host تأییدنشده را با نقش واقعی آزمون کن.
+- تسک پیشنهادی بعدی — `PSY-0.6`، ساخت ورود، بازیابی و عضویت پنل، انتخاب Tenant و کنترل نقش در API.
 - دستور تأیید برنامه — `cd apps/psychology-api && go test ./...` و در ریشه `pnpm typecheck && pnpm build && pnpm test`. دستور کامل `make verify-psychology` در `PSY-0.8` تنظیم می‌شود.
 
 ## تأییدهای محیط هدف
@@ -10,6 +10,13 @@
 - حساب هدف زرین‌پال، باکت پارس‌پک، دامنه و تنظیمات آروان، شرایط عرضه و نگه‌داری داده در تسک‌های عرضهٔ هر نسخه بررسی می‌شوند. مسیر محلی با دادهٔ ساختگی و Adapter پرداخت تستی قابل اجراست. [نقشهٔ راه](TASKS.md)
 
 ## گزارش‌ها
+
+### ۲۰۲۶-۱۱-۱۹ — اجرای تسک PSY-0.5 (دامنه رسیلور و WithTenantTx)
+
+- پکیج `tenantctx` در `internal/platform/tenantctx` برای انتقال ایمن `tenant_id` در کانتکست پیاده‌سازی شد.
+- تابع `WithTenantTx` در `internal/platform/db/store.go` جهت اجرای تراکنش‌های ایزوله مستاجر با ست کردن `SELECT set_config('app.tenant_id', ...)` پیاده‌سازی شد.
+- کوئری‌های SQL دامنه تعریف شده و کدهای Go با `sqlc generate` در `internal/domain/domaindb` تولید شدند.
+- ماژول `domain.Resolver` در `internal/domain/resolver.go` همراه با پاک‌سازی Host و آزمون سناریوهای دو Host معتبر، Host تأییدنشده و نامعتبر نوشته و پاس شد.
 
 ### ۲۰۲۶-۱۱-۱۹ — اجرای تسک PSY-0.4 (مهاجرت‌های هسته و RLS)
 

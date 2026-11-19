@@ -1,18 +1,7 @@
 -- 000001_create_core_schema.up.sql
--- Core roles, tenants, domains, site_settings, panel_identities, memberships, panel_sessions, password_resets
+-- Core tenants, domains, site_settings, panel_identities, memberships, panel_sessions, password_resets
 
--- 1. Roles (Idempotent creation)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_user') THEN
-        CREATE ROLE app_user LOGIN NOSUPERUSER NOBYPASSRLS;
-    END IF;
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'lookup_user') THEN
-        CREATE ROLE lookup_user LOGIN NOSUPERUSER NOBYPASSRLS;
-    END IF;
-END $$;
-
--- 2. Tenants Table
+-- 1. Tenants Table
 CREATE TABLE tenants (
     id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     name       text        NOT NULL,
