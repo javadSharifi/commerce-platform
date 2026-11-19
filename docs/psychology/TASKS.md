@@ -21,7 +21,7 @@
 - [x] PSY-0.5 ساخت resolver دامنه و `WithTenantTx` با pool و sqlc. دو Host و یک Host تأییدنشده را با نقش واقعی آزمون کن.
 - [x] PSY-0.6 ساخت ورود، بازیابی و عضویت پنل، انتخاب Tenant و کنترل نقش در API. آزمون نشست مستقل، CSRF و خواندن یا نوشتن بین دو Tenant را اجرا کن.
 - [x] PSY-0.7 ساخت پوستهٔ RTL پنل و سایت، پروفایل مطب و تنظیم لوگو و رنگ یک قالب نسخه‌دار. خروجی عمومی فقط فیلدهای انتشارپذیر را نمایش دهد.
-- [ ] PSY-0.8 تنظیم `make verify-psychology` برای build/vet/test Go و lint/typecheck/test بسته‌های مرتبط. اجرای CI و fixtureهای A و B را مستند کن.
+- [x] PSY-0.8 تنظیم `make verify-psychology` برای build/vet/test Go و lint/typecheck/test بسته‌های مرتبط. اجرای CI و fixtureهای A و B را مستند کن.
 
 **پایان فاز** — دو سایت محلی با Host جدا، پنل محافظت‌شده و تست ایزولاسیون نقش runtime کار می‌کنند. سناریوی `PSY-A01` تأیید شده است.
 
