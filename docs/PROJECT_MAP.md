@@ -1,6 +1,8 @@
-# نقشهٔ پروژه
+# نقشهٔ پروژهٔ فروشگاه‌ساز
 
 برای پیدا کردن یک قابلیت، از ردیف همان قابلیت شروع کن. اولویت کار در [TASKS.md](../TASKS.md)، تصمیم‌ها در [DECISIONS.md](DECISIONS.md) و وضعیت اجرا در [PROGRESS.md](PROGRESS.md) ثبت می‌شوند.
+
+برای مسیر کارگاه، نوبت و دوره به [نقشهٔ پروژهٔ روان‌شناسی](psychology/PROJECT_MAP.md) مراجعه کن.
 
 ## ساختار Monorepo
 
@@ -46,7 +48,8 @@ commerce-platform/
 | ورود مدیر، نشست، عضویت و نقش | `apps/api/internal/auth/` و `apps/admin/` | [Auth](modules/auth.md)، `P1.4` و `P4.1` |
 | محصول، تنوع، دسته‌بندی و جستجو | `apps/api/internal/{catalog,category}/`، `apps/storefront/` و `apps/admin/` | [Catalog](modules/catalog.md) · [Category](modules/category.md)، `P2.1`، `P3.3` و `P4.2` |
 | صفحهٔ اصلی فروشگاه، نمایش کالا و RTL | `apps/storefront/` | [TASKS.md](../TASKS.md)، `P3.1.6` و `P3.3` |
-| تصویر محصول، آپلود و S3 پارس‌پک | فرم در `apps/admin/`، نمایش در `apps/storefront/`. مسیر بخش Go در `P2.2` مشخص می‌شود. | [Media](modules/media.md)، `P2.2` و `P4.2.6` |
+| تصویر محصول، آپلود فیلم و ویس و S3 پارس‌پک | فرم محصول و مطلب در `apps/admin/`، پخش در `apps/storefront/`. مسیر بخش Go در `P2.2` مشخص می‌شود. | [Media](modules/media.md)، `P2.2`، `P3.3.11` و `P4.2.6` |
+| بلاگ، پیش‌نویس و انتشار مطلب | ماژول Go در `apps/api/internal/`، ویرایشگر در `apps/admin/`، فهرست و صفحهٔ مطلب در `apps/storefront/` | [Blog](modules/blog.md)، `P2.8`، `P3.3.10` و `P4.2.15` |
 | موجودی و جلوگیری از oversell | `apps/api/internal/inventory/` و `apps/admin/` | [Inventory](modules/inventory.md)، `P2.3` و `P4.2.5` |
 | ثبت‌نام و حساب مشتری | `apps/api/internal/customer/`، `apps/storefront/` و `apps/admin/` | [Customer](modules/customer.md)، `P2.4` و `P3.3.7` |
 | سبد مهمان و مشتری | رابط در `apps/storefront/`. مسیر بخش Go در `P2.4` مشخص می‌شود. | [Cart](modules/cart.md)، `P2.4` و `P3.3.5` |
