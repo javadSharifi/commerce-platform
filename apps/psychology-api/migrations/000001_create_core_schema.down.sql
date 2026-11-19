@@ -1,0 +1,9 @@
+-- 000001_create_core_schema.down.sql
+
+DROP TABLE IF EXISTS password_resets CASCADE;
+DROP TABLE IF EXISTS panel_sessions CASCADE;
+DROP TABLE IF EXISTS memberships CASCADE;
+DROP TABLE IF EXISTS panel_identities CASCADE;
+DROP TABLE IF EXISTS site_settings CASCADE;
+DROP TABLE IF EXISTS domains CASCADE;
+DROP TABLE IF EXISTS tenants CASCADE;

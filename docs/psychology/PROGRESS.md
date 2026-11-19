@@ -1,8 +1,8 @@
 # وضعیت مسیر روان‌شناسی
 
-- آخرین کار تکمیل‌شده — `PSY-0.3`، ساخت قرارداد OpenAPI در `packages/contracts/psychology/openapi.yaml` و بسته کلاینت TypeScript تایپ‌شده در `packages/psychology-api-client/`.
+- آخرین کار تکمیل‌شده — `PSY-0.4`، ساخت فایل‌های migration اولیه برای هسته (`000001_create_core_schema`) شامل نقش‌ها، `tenants`، `domains`، `site_settings`، `panel_identities`، `memberships`، `panel_sessions` و `password_resets` همراه با فعال‌سازی کامل RLS و سیاست‌های جداسازی.
 - تسک در حال انجام — هیچ‌کدام.
-- تسک پیشنهادی بعدی — `PSY-0.4`، ساخت migration نقش‌ها، `tenants`، دامنه‌ها، هویت پنل، عضویت و نشست با RLS و lookup محدود.
+- تسک پیشنهادی بعدی — `PSY-0.5`، ساخت resolver دامنه و `WithTenantTx` با pool و sqlc. دو Host و یک Host تأییدنشده را با نقش واقعی آزمون کن.
 - دستور تأیید برنامه — `cd apps/psychology-api && go test ./...` و در ریشه `pnpm typecheck && pnpm build && pnpm test`. دستور کامل `make verify-psychology` در `PSY-0.8` تنظیم می‌شود.
 
 ## تأییدهای محیط هدف
@@ -10,6 +10,14 @@
 - حساب هدف زرین‌پال، باکت پارس‌پک، دامنه و تنظیمات آروان، شرایط عرضه و نگه‌داری داده در تسک‌های عرضهٔ هر نسخه بررسی می‌شوند. مسیر محلی با دادهٔ ساختگی و Adapter پرداخت تستی قابل اجراست. [نقشهٔ راه](TASKS.md)
 
 ## گزارش‌ها
+
+### ۲۰۲۶-۱۱-۱۹ — اجرای تسک PSY-0.4 (مهاجرت‌های هسته و RLS)
+
+- فایل‌های migration `000001_create_core_schema.up.sql` و `000001_create_core_schema.down.sql` ایجاد شدند.
+- نقش‌های کم‌اختیار `app_user` و `lookup_user` با `NOSUPERUSER NOBYPASSRLS` به صورت idempotent اضافه شدند.
+- جدول‌های `tenants`، `domains`، `site_settings`، `panel_identities`، `memberships`، `panel_sessions` و `password_resets` پیاده‌سازی شدند.
+- سیاست‌های `ENABLE ROW LEVEL SECURITY` و `FORCE ROW LEVEL SECURITY` همراه با policyهای جداسازی مستاجر بر اساس `app.tenant_id` روی جدول‌های tenant-scoped اعمال گردیدند.
+- تست یکپارچگی فایل‌های migration و تطابق امنیتی RLS در `apps/psychology-api/migrations/migration_test.go` نوشته شد و با موفقیت پاس شد.
 
 ### ۲۰۲۶-۱۱-۱۹ — اجرای تسک PSY-0.3 (قرارداد OpenAPI و کلاینت تایپ‌شده)
 
