@@ -8,6 +8,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BlogPost struct {
+	ID             pgtype.UUID
+	TenantID       pgtype.UUID
+	Title          string
+	Slug           string
+	SeoDescription string
+	ContentBlocks  []byte
+	Status         string
+	PublishedAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type Domain struct {
 	ID         pgtype.UUID
 	TenantID   pgtype.UUID
@@ -17,6 +30,35 @@ type Domain struct {
 	VerifiedAt pgtype.Timestamptz
 	CreatedAt  pgtype.Timestamptz
 	UpdatedAt  pgtype.Timestamptz
+}
+
+type MediaAsset struct {
+	ID               pgtype.UUID
+	TenantID         pgtype.UUID
+	StorageKey       string
+	OriginalName     string
+	MimeType         string
+	SizeBytes        int64
+	AccessClass      string
+	ValidationStatus string
+	UploadedBy       pgtype.UUID
+	VerifiedAt       pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type MediaUpload struct {
+	ID                pgtype.UUID
+	TenantID          pgtype.UUID
+	StagingKey        string
+	OriginalName      string
+	AccessClass       string
+	ExpectedMimeType  string
+	ExpectedSizeBytes int64
+	ExpiresAt         pgtype.Timestamptz
+	Status            string
+	InitiatedBy       pgtype.UUID
+	CreatedAt         pgtype.Timestamptz
 }
 
 type Membership struct {
@@ -55,6 +97,47 @@ type PasswordReset struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type PaymentAttempt struct {
+	ID             pgtype.UUID
+	TenantID       pgtype.UUID
+	PurchaseID     pgtype.UUID
+	Provider       string
+	Authority      string
+	AmountRials    int64
+	Status         string
+	TrackingCode   pgtype.Text
+	GatewayRefID   pgtype.Text
+	IdempotencyKey string
+	ErrorMessage   pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type Purchase struct {
+	ID            pgtype.UUID
+	TenantID      pgtype.UUID
+	ItemType      string
+	ItemID        pgtype.UUID
+	AmountRials   int64
+	TitleSnapshot string
+	Status        string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type Refund struct {
+	ID               pgtype.UUID
+	TenantID         pgtype.UUID
+	PurchaseID       pgtype.UUID
+	PaymentAttemptID pgtype.UUID
+	AmountRials      int64
+	Reason           string
+	ReferenceNumber  string
+	RegisteredBy     pgtype.UUID
+	RegisteredAt     pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+}
+
 type SiteSetting struct {
 	TenantID     pgtype.UUID
 	Title        string
@@ -74,4 +157,36 @@ type Tenant struct {
 	Status    string
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+}
+
+type Workshop struct {
+	ID                   pgtype.UUID
+	TenantID             pgtype.UUID
+	Title                string
+	Slug                 string
+	Description          string
+	InstructorName       string
+	StartsAt             pgtype.Timestamptz
+	EndsAt               pgtype.Timestamptz
+	Location             string
+	RegistrationDeadline pgtype.Timestamptz
+	Capacity             int32
+	PriceRials           int64
+	Status               string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type WorkshopRegistration struct {
+	ID              pgtype.UUID
+	TenantID        pgtype.UUID
+	WorkshopID      pgtype.UUID
+	GuestName       string
+	GuestPhone      string
+	Status          string
+	ExpiresAt       pgtype.Timestamptz
+	PurchaseID      pgtype.UUID
+	GuestLookupHash string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }

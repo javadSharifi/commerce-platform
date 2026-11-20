@@ -33,6 +33,236 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   # ----------------------------------------------------
+  # PUBLIC WORKSHOPS
+  # ----------------------------------------------------
+  /public/workshops:
+    get:
+      tags:
+        - Public Workshops
+      summary: List published workshops
+      description: Returns active published workshops for the current clinic domain with remaining capacity.
+      operationId: getPublicWorkshops
+      responses:
+        '200':
+          description: List of published workshops
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicWorkshopItem'
+
+  /public/workshops/{id}:
+    get:
+      tags:
+        - Public Workshops
+      summary: Get published workshop details
+      description: Returns details of a single published workshop.
+      operationId: getPublicWorkshopDetail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Workshop details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicWorkshopDetail'
+        '404':
+          description: Workshop not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /public/workshops/{id}/register:
+    post:
+      tags:
+        - Public Workshops
+      summary: Register guest participant for workshop
+      description: Registers a guest participant. For free workshops, instantly confirms. For paid workshops, reserves seat for 15 minutes (TTL) and generates payment gateway URL.
+      operationId: registerPublicWorkshop
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterWorkshopRequest'
+      responses:
+        '201':
+          description: Registration initiated or confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterWorkshopResponse'
+        '400':
+          description: Validation error or registration deadline passed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workshop not found or not published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Capacity full or phone already has active registration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /public/workshops/registrations/{id}:
+    get:
+      tags:
+        - Public Workshops
+      summary: Check guest registration status
+      description: Returns current status of guest registration using a secret lookup token.
+      operationId: getPublicRegistrationStatus
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: lookup_token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Registration status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationStatusResponse'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # PUBLIC BLOG
+  # ----------------------------------------------------
+  /public/blog:
+    get:
+      tags:
+        - Public Blog
+      summary: List published blog articles
+      description: Returns paginated list of published blog posts for the current clinic.
+      operationId: getPublicBlogPosts
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: List of published blog articles
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - meta
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicBlogPostItem'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /public/blog/{slug}:
+    get:
+      tags:
+        - Public Blog
+      summary: Get published blog article by slug
+      description: Returns details and structured content blocks of a published article.
+      operationId: getPublicBlogPostBySlug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Blog article details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBlogPostDetail'
+        '404':
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # PUBLIC MEDIA STREAMING
+  # ----------------------------------------------------
+  /public/media/{id}/stream-url:
+    get:
+      tags:
+        - Public Media
+      summary: Get short-lived stream URL for verified public media
+      description: Returns a short-lived presigned URL (TTL 5 minutes) for streaming audio/video attached to published content.
+      operationId: getPublicMediaStreamUrl
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Streaming URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamUrlResponse'
+        '403':
+          description: Media is not verified or not public
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Media asset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
   # ADMIN AUTH ENDPOINTS
   # ----------------------------------------------------
   /admin/auth/login:
@@ -171,6 +401,578 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # ADMIN WORKSHOPS
+  # ----------------------------------------------------
+  /admin/workshops:
+    get:
+      tags:
+        - Admin Workshops
+      summary: List workshops for clinic
+      description: Returns all workshops with optional status filter for panel members.
+      operationId: getAdminWorkshops
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, published, closed, cancelled]
+      responses:
+        '200':
+          description: List of workshops
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminWorkshopItem'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Admin Workshops
+      summary: Create workshop draft
+      description: Creates a new workshop in draft status. Requires owner or content_manager role.
+      operationId: createAdminWorkshop
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkshopRequest'
+      responses:
+        '201':
+          description: Workshop created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWorkshopDetail'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/workshops/{id}:
+    get:
+      tags:
+        - Admin Workshops
+      summary: Get workshop detail
+      description: Returns complete details of a workshop.
+      operationId: getAdminWorkshopDetail
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Workshop detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWorkshopDetail'
+        '404':
+          description: Workshop not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+        - Admin Workshops
+      summary: Update workshop
+      description: Updates workshop details. Changing price or dates is blocked if confirmed registrations exist.
+      operationId: updateAdminWorkshop
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkshopRequest'
+      responses:
+        '200':
+          description: Workshop updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWorkshopDetail'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Cannot modify price or schedule after registrations exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/workshops/{id}/publish:
+    post:
+      tags:
+        - Admin Workshops
+      summary: Publish workshop
+      description: Transitions workshop from draft to published.
+      operationId: publishAdminWorkshop
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Workshop published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWorkshopDetail'
+
+  /admin/workshops/{id}/close:
+    post:
+      tags:
+        - Admin Workshops
+      summary: Close registrations
+      description: Closes registration for new attendees. Existing valid holds can still pay.
+      operationId: closeAdminWorkshop
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Workshop closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWorkshopDetail'
+
+  /admin/workshops/{id}/cancel:
+    post:
+      tags:
+        - Admin Workshops
+      summary: Cancel workshop
+      description: Cancels the entire workshop, releases seats and marks paid attendees for refund.
+      operationId: cancelAdminWorkshop
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Workshop cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWorkshopDetail'
+
+  /admin/workshops/{id}/registrations:
+    get:
+      tags:
+        - Admin Workshops
+      summary: List registrations for workshop
+      description: Returns attendees for receptionist and owner.
+      operationId: getAdminWorkshopRegistrations
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Attendee registrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminRegistrationItem'
+
+  /admin/workshops/{id}/registrations/{reg_id}/cancel:
+    post:
+      tags:
+        - Admin Workshops
+      summary: Cancel registration
+      description: Records guest cancellation by receptionist or owner.
+      operationId: cancelAdminRegistration
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: reg_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Registration cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  # ----------------------------------------------------
+  # ADMIN PAYMENTS & REFUNDS
+  # ----------------------------------------------------
+  /admin/payments:
+    get:
+      tags:
+        - Admin Payments
+      summary: List purchases and payments
+      description: Financial log for owner role.
+      operationId: getAdminPayments
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, completed, refund_required, refunded, failed]
+      responses:
+        '200':
+          description: Purchases and payments list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminPurchaseItem'
+        '403':
+          description: Forbidden - Owner role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/payments/{purchase_id}/refund:
+    post:
+      tags:
+        - Admin Payments
+      summary: Record manual refund
+      description: Records reference number and details of manual refund performed by clinic owner.
+      operationId: recordAdminRefund
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: purchase_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordRefundRequest'
+      responses:
+        '200':
+          description: Refund recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+        '403':
+          description: Forbidden - Owner role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # ADMIN BLOG
+  # ----------------------------------------------------
+  /admin/blog:
+    get:
+      tags:
+        - Admin Blog
+      summary: List blog posts
+      description: Returns all posts (drafts and published) for content managers and owners.
+      operationId: getAdminBlogPosts
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: Blog post items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminBlogPostItem'
+    post:
+      tags:
+        - Admin Blog
+      summary: Create blog post
+      description: Creates a new post in draft status.
+      operationId: createAdminBlogPost
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBlogPostRequest'
+      responses:
+        '201':
+          description: Blog post created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBlogPostDetail'
+
+  /admin/blog/{id}:
+    get:
+      tags:
+        - Admin Blog
+      summary: Get blog post for editor
+      description: Returns full structured blog content for editing.
+      operationId: getAdminBlogPostDetail
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Blog post details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBlogPostDetail'
+    put:
+      tags:
+        - Admin Blog
+      summary: Update blog post
+      description: Updates blog title, slug, seo description and content blocks.
+      operationId: updateAdminBlogPost
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBlogPostRequest'
+      responses:
+        '200':
+          description: Blog post updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBlogPostDetail'
+    delete:
+      tags:
+        - Admin Blog
+      summary: Delete blog post
+      description: Deletes a blog post draft or published post.
+      operationId: deleteAdminBlogPost
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Blog post deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /admin/blog/{id}/publish:
+    post:
+      tags:
+        - Admin Blog
+      summary: Publish blog post
+      description: Transitions blog post from draft to published and sets published_at timestamp.
+      operationId: publishAdminBlogPost
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Blog post published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBlogPostDetail'
+
+  /admin/blog/{id}/unpublish:
+    post:
+      tags:
+        - Admin Blog
+      summary: Unpublish blog post
+      description: Returns published blog post back to draft.
+      operationId: unpublishAdminBlogPost
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Blog post unpublished
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBlogPostDetail'
+
+  # ----------------------------------------------------
+  # ADMIN MEDIA UPLOADS & MANAGEMENT
+  # ----------------------------------------------------
+  /admin/media/upload-url:
+    post:
+      tags:
+        - Admin Media
+      summary: Request presigned staging upload URL
+      description: Checks storage quota (10 GiB max) and issues a short-lived presigned upload URL (TTL 15 min) for direct upload to S3 staging.
+      operationId: requestMediaUploadUrl
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestMediaUploadRequest'
+      responses:
+        '201':
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestMediaUploadResponse'
+        '403':
+          description: Storage quota exceeded (10 GiB limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/media/finalize:
+    post:
+      tags:
+        - Admin Media
+      summary: Finalize uploaded media
+      description: Notifies backend to move file from staging to final key, validate actual size and MIME type, and create media asset record.
+      operationId: finalizeMediaUpload
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizeMediaUploadRequest'
+      responses:
+        '200':
+          description: Media asset registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAssetResponse'
+
+  /admin/media:
+    get:
+      tags:
+        - Admin Media
+      summary: List clinic media assets
+      description: Returns media assets and overall storage quota usage.
+      operationId: getAdminMediaList
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: Media assets and quota
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaListResponse'
 
   # ----------------------------------------------------
   # ACCOUNT ENDPOINTS (Phase 3 Placeholder)
@@ -460,3 +1262,739 @@ components:
         full_name:
           type: string
           nullable: true
+
+    # ---------------- Public Workshops ----------------
+    PublicWorkshopItem:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - instructor_name
+        - starts_at
+        - ends_at
+        - location
+        - price_rials
+        - remaining_capacity
+        - is_registration_open
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        instructor_name:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        location:
+          type: string
+        price_rials:
+          type: integer
+          format: int64
+          example: 5000000
+        remaining_capacity:
+          type: integer
+          example: 12
+        is_registration_open:
+          type: boolean
+
+    PublicWorkshopDetail:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - description
+        - instructor_name
+        - starts_at
+        - ends_at
+        - location
+        - registration_deadline
+        - price_rials
+        - remaining_capacity
+        - is_registration_open
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        instructor_name:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        location:
+          type: string
+        registration_deadline:
+          type: string
+          format: date-time
+        price_rials:
+          type: integer
+          format: int64
+        remaining_capacity:
+          type: integer
+        is_registration_open:
+          type: boolean
+
+    RegisterWorkshopRequest:
+      type: object
+      required:
+        - guest_name
+        - guest_phone
+      properties:
+        guest_name:
+          type: string
+          minLength: 2
+          example: "علی رضایی"
+        guest_phone:
+          type: string
+          pattern: '^09[0-9]{9}$'
+          example: "09123456789"
+
+    RegisterWorkshopResponse:
+      type: object
+      required:
+        - registration_id
+        - status
+        - lookup_token
+      properties:
+        registration_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [confirmed, pending_payment]
+        lookup_token:
+          type: string
+          example: "tok_sec_9a8b7c..."
+        payment_url:
+          type: string
+          nullable: true
+          example: "https://www.zarinpal.com/pg/StartPay/A0000..."
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    RegistrationStatusResponse:
+      type: object
+      required:
+        - registration_id
+        - workshop_id
+        - workshop_title
+        - guest_name
+        - status
+      properties:
+        registration_id:
+          type: string
+          format: uuid
+        workshop_id:
+          type: string
+          format: uuid
+        workshop_title:
+          type: string
+        guest_name:
+          type: string
+        status:
+          type: string
+          enum: [pending_payment, confirmed, cancelled, expired]
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ---------------- Public Blog & Media ----------------
+    ContentBlock:
+      type: object
+      required:
+        - type
+        - data
+      properties:
+        type:
+          type: string
+          enum: [paragraph, heading, image, video, audio]
+        data:
+          type: object
+          additionalProperties: true
+
+    PublicBlogPostItem:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - seo_description
+        - published_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        seo_description:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+
+    PublicBlogPostDetail:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - seo_description
+        - content_blocks
+        - published_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        seo_description:
+          type: string
+        content_blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+        published_at:
+          type: string
+          format: date-time
+
+    StreamUrlResponse:
+      type: object
+      required:
+        - stream_url
+        - expires_in_seconds
+      properties:
+        stream_url:
+          type: string
+          example: "https://s3.parspack.com/media/audio.mp3?X-Amz-Signature=..."
+        expires_in_seconds:
+          type: integer
+          example: 300
+
+    # ---------------- Admin Workshops ----------------
+    AdminWorkshopItem:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - instructor_name
+        - starts_at
+        - ends_at
+        - capacity
+        - confirmed_count
+        - pending_count
+        - price_rials
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        instructor_name:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+        confirmed_count:
+          type: integer
+        pending_count:
+          type: integer
+        price_rials:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [draft, published, closed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+
+    AdminWorkshopDetail:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - description
+        - instructor_name
+        - starts_at
+        - ends_at
+        - location
+        - registration_deadline
+        - capacity
+        - confirmed_count
+        - pending_count
+        - price_rials
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        instructor_name:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        location:
+          type: string
+        registration_deadline:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+        confirmed_count:
+          type: integer
+        pending_count:
+          type: integer
+        price_rials:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [draft, published, closed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateWorkshopRequest:
+      type: object
+      required:
+        - title
+        - slug
+        - instructor_name
+        - starts_at
+        - ends_at
+        - location
+        - registration_deadline
+        - capacity
+        - price_rials
+      properties:
+        title:
+          type: string
+          minLength: 2
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+        description:
+          type: string
+          default: ""
+        instructor_name:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        location:
+          type: string
+        registration_deadline:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          minimum: 1
+        price_rials:
+          type: integer
+          format: int64
+          minimum: 0
+
+    UpdateWorkshopRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 2
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+        description:
+          type: string
+        instructor_name:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        location:
+          type: string
+        registration_deadline:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          minimum: 1
+        price_rials:
+          type: integer
+          format: int64
+          minimum: 0
+
+    AdminRegistrationItem:
+      type: object
+      required:
+        - id
+        - guest_name
+        - guest_phone
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        guest_name:
+          type: string
+        guest_phone:
+          type: string
+        status:
+          type: string
+          enum: [pending_payment, confirmed, cancelled, expired]
+        purchase_id:
+          type: string
+          format: uuid
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ---------------- Admin Payments & Refunds ----------------
+    AdminPurchaseItem:
+      type: object
+      required:
+        - id
+        - item_type
+        - item_id
+        - title_snapshot
+        - amount_rials
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        item_type:
+          type: string
+          enum: [workshop, course]
+        item_id:
+          type: string
+          format: uuid
+        title_snapshot:
+          type: string
+        amount_rials:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [pending, completed, refund_required, refunded, failed]
+        tracking_code:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    RecordRefundRequest:
+      type: object
+      required:
+        - reference_number
+        - reason
+        - amount_rials
+      properties:
+        reference_number:
+          type: string
+          minLength: 3
+          example: "REF-20261120-9988"
+        reason:
+          type: string
+          example: "پرداخت دیرهنگام پس از تکمیل ظرفیت صندلی"
+        amount_rials:
+          type: integer
+          format: int64
+          minimum: 1
+
+    RefundResponse:
+      type: object
+      required:
+        - refund_id
+        - purchase_id
+        - reference_number
+        - amount_rials
+        - registered_at
+      properties:
+        refund_id:
+          type: string
+          format: uuid
+        purchase_id:
+          type: string
+          format: uuid
+        reference_number:
+          type: string
+        amount_rials:
+          type: integer
+          format: int64
+        registered_at:
+          type: string
+          format: date-time
+
+    # ---------------- Admin Blog ----------------
+    AdminBlogPostItem:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    AdminBlogPostDetail:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - seo_description
+        - content_blocks
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        seo_description:
+          type: string
+        content_blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+        status:
+          type: string
+          enum: [draft, published]
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateBlogPostRequest:
+      type: object
+      required:
+        - title
+        - slug
+        - seo_description
+        - content_blocks
+      properties:
+        title:
+          type: string
+          minLength: 2
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+        seo_description:
+          type: string
+        content_blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+
+    UpdateBlogPostRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 2
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+        seo_description:
+          type: string
+        content_blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+
+    # ---------------- Admin Media ----------------
+    RequestMediaUploadRequest:
+      type: object
+      required:
+        - original_name
+        - mime_type
+        - size_bytes
+        - access_class
+      properties:
+        original_name:
+          type: string
+          example: "workshop-intro.mp4"
+        mime_type:
+          type: string
+          example: "video/mp4"
+        size_bytes:
+          type: integer
+          format: int64
+          maximum: 134217728 # 128 MiB for blog video
+          example: 45000000
+        access_class:
+          type: string
+          enum: [public, course_private]
+
+    RequestMediaUploadResponse:
+      type: object
+      required:
+        - upload_id
+        - upload_url
+        - staging_key
+        - expires_at
+      properties:
+        upload_id:
+          type: string
+          format: uuid
+        upload_url:
+          type: string
+          example: "https://s3.parspack.com/bucket/staging-key?X-Amz-Signature=..."
+        staging_key:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    FinalizeMediaUploadRequest:
+      type: object
+      required:
+        - upload_id
+      properties:
+        upload_id:
+          type: string
+          format: uuid
+
+    MediaAssetResponse:
+      type: object
+      required:
+        - id
+        - storage_key
+        - original_name
+        - mime_type
+        - size_bytes
+        - access_class
+        - validation_status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        storage_key:
+          type: string
+        original_name:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        access_class:
+          type: string
+          enum: [public, course_private]
+        validation_status:
+          type: string
+          enum: [pending, verified, rejected]
+        created_at:
+          type: string
+          format: date-time
+
+    MediaListResponse:
+      type: object
+      required:
+        - items
+        - quota_used_bytes
+        - quota_total_bytes
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaAssetResponse'
+        quota_used_bytes:
+          type: integer
+          format: int64
+          example: 104857600
+        quota_total_bytes:
+          type: integer
+          format: int64
+          example: 10737418240

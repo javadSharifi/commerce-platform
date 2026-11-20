@@ -1,0 +1,307 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="تعریف کارگاه جدید" currentNav="workshops">
+  <div style="max-width: 800px; margin: 0 auto;">
+    <div style="margin-bottom: 1.5rem;">
+      <a href="/workshops" style="color: #64748b; font-size: 0.9rem; text-decoration: none;">
+        ← بازگشت به فهرست کارگاه‌ها
+      </a>
+      <h2 style="font-size: 1.35rem; font-weight: 700; color: #0f172a; margin-top: 0.5rem;">
+        مشخصات کارگاه جدید
+      </h2>
+      <p style="color: #64748b; font-size: 0.9rem;">
+        کارگاه پس از ایجاد در وضعیت «پیش‌نویس» قرار می‌گیرد و پس از بررسی نهایی می‌توانید آن را منتشر نمایید.
+      </p>
+    </div>
+
+    <div class="card">
+      <form id="create-workshop-form" style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <div id="form-error" style="display: none; background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #991b1b; font-size: 0.9rem;"></div>
+        <div id="form-success" style="display: none; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #166534; font-size: 0.9rem;"></div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
+          <div>
+            <label for="title" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              عنوان کامل کارگاه <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="title"
+              name="title"
+              type="text"
+              required
+              placeholder="مثال: کارگاه خودآگاهی و مدیریت استرس"
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+            />
+          </div>
+          <div>
+            <label for="slug" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              نامک انگلیسی (Slug) <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="slug"
+              name="slug"
+              type="text"
+              dir="ltr"
+              required
+              placeholder="stress-management-workshop"
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; font-family: monospace;"
+            />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div>
+            <label for="instructor_name" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              نام مدرس / سخنران <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="instructor_name"
+              name="instructor_name"
+              type="text"
+              required
+              placeholder="مثال: دکتر مریم علوی"
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+            />
+          </div>
+          <div>
+            <label for="location" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              محل برگزاری کارگاه <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="location"
+              name="location"
+              type="text"
+              required
+              placeholder="مثال: سالن شماره یک کلینیک مهر"
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+            />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+          <div>
+            <label for="starts_at" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              تاریخ و ساعت شروع <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="starts_at"
+              name="starts_at"
+              type="datetime-local"
+              required
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; font-family: inherit;"
+            />
+          </div>
+          <div>
+            <label for="ends_at" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              تاریخ و ساعت پایان <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="ends_at"
+              name="ends_at"
+              type="datetime-local"
+              required
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; font-family: inherit;"
+            />
+          </div>
+          <div>
+            <label for="registration_deadline" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              مهلت ثبت‌نام <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="registration_deadline"
+              name="registration_deadline"
+              type="datetime-local"
+              required
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; font-family: inherit;"
+            />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div>
+            <label for="capacity" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              ظرفیت صندلی‌ها (نفر) <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="capacity"
+              name="capacity"
+              type="number"
+              min="1"
+              value="20"
+              required
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+            />
+          </div>
+          <div>
+            <label for="price_rials" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+              شهریه ثبت‌نام (ریال) <span style="color: #ef4444;">*</span>
+            </label>
+            <input
+              id="price_rials"
+              name="price_rials"
+              type="number"
+              min="0"
+              step="10000"
+              value="0"
+              required
+              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+            />
+            <span id="price-toman-preview" style="display: block; font-size: 0.85rem; color: #0284c7; margin-top: 0.25rem; font-weight: 600;">
+              معادل: رایگان
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <label for="description" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+            توضیحات، سرفصل‌ها و شرایط شرکت در کارگاه
+          </label>
+          <textarea
+            id="description"
+            name="description"
+            rows="5"
+            placeholder="سرفصل‌های کارگاه، پیش‌نیازها و توضیحات تکمیلی..."
+            style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-family: inherit;"
+          ></textarea>
+        </div>
+
+        <div style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 1rem;">
+          <a href="/workshops" style="padding: 0.7rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; color: #475569; font-weight: 600; text-decoration: none;">
+            انصراف
+          </a>
+          <button
+            id="submit-btn"
+            type="submit"
+            style="padding: 0.7rem 1.5rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer;"
+          >
+            ذخیره و ایجاد کارگاه
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const titleInput = document.getElementById('title') as HTMLInputElement;
+    const slugInput = document.getElementById('slug') as HTMLInputElement;
+    const priceInput = document.getElementById('price_rials') as HTMLInputElement;
+    const pricePreview = document.getElementById('price-toman-preview');
+    const form = document.getElementById('create-workshop-form') as HTMLFormElement;
+    const errorBox = document.getElementById('form-error');
+    const successBox = document.getElementById('form-success');
+    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
+
+    // Auto slug suggestion
+    if (titleInput && slugInput) {
+      titleInput.addEventListener('blur', () => {
+        if (!slugInput.value) {
+          const suggested = titleInput.value.trim().toLowerCase()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/[\s_-]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          if (suggested) slugInput.value = suggested;
+        }
+      });
+    }
+
+    // Live Toman preview
+    if (priceInput && pricePreview) {
+      priceInput.addEventListener('input', () => {
+        const val = parseInt(priceInput.value, 10) || 0;
+        if (val === 0) {
+          pricePreview.textContent = 'معادل: رایگان';
+        } else {
+          const toman = Math.floor(val / 10);
+          pricePreview.textContent = `معادل: ${toman.toLocaleString('fa-IR')} تومان`;
+        }
+      });
+    }
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (errorBox) errorBox.style.display = 'none';
+        if (successBox) successBox.style.display = 'none';
+
+        const startsAtVal = (document.getElementById('starts_at') as HTMLInputElement).value;
+        const endsAtVal = (document.getElementById('ends_at') as HTMLInputElement).value;
+        const deadlineVal = (document.getElementById('registration_deadline') as HTMLInputElement).value;
+
+        if (!startsAtVal || !endsAtVal || !deadlineVal) {
+          showError('لطفاً تمامی تاریخ‌ها و ساعت‌ها را مشخص نمایید.');
+          return;
+        }
+
+        const startsAtISO = new Date(startsAtVal).toISOString();
+        const endsAtISO = new Date(endsAtVal).toISOString();
+        const deadlineISO = new Date(deadlineVal).toISOString();
+
+        if (new Date(endsAtISO) <= new Date(startsAtISO)) {
+          showError('زمان پایان کارگاه باید بعد از زمان شروع باشد.');
+          return;
+        }
+
+        if (new Date(deadlineISO) > new Date(startsAtISO)) {
+          showError('مهلت ثبت‌نام حداکثر تا زمان شروع کارگاه مجاز است.');
+          return;
+        }
+
+        const payload = {
+          title: titleInput.value.trim(),
+          slug: slugInput.value.trim(),
+          instructor_name: (document.getElementById('instructor_name') as HTMLInputElement).value.trim(),
+          location: (document.getElementById('location') as HTMLInputElement).value.trim(),
+          starts_at: startsAtISO,
+          ends_at: endsAtISO,
+          registration_deadline: deadlineISO,
+          capacity: parseInt((document.getElementById('capacity') as HTMLInputElement).value, 10) || 1,
+          price_rials: parseInt(priceInput.value, 10) || 0,
+          description: (document.getElementById('description') as HTMLTextAreaElement).value.trim(),
+        };
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'در حال ذخیره‌سازی...';
+
+        try {
+          const res = await fetch('/admin/workshops', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            showError(data.message || 'خطا در ایجاد کارگاه.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'ذخیره و ایجاد کارگاه';
+            return;
+          }
+
+          if (successBox) {
+            successBox.textContent = 'کارگاه با موفقیت ایجاد گردید. در حال انتقال...';
+            successBox.style.display = 'block';
+          }
+
+          setTimeout(() => {
+            window.location.href = `/workshops/${data.id || ''}`;
+          }, 800);
+        } catch (err) {
+          showError('خطا در برقراری ارتباط با سرور.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'ذخیره و ایجاد کارگاه';
+        }
+      });
+    }
+
+    function showError(msg: string) {
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = 'block';
+      }
+    }
+  </script>
+</AdminLayout>

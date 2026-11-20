@@ -24,3 +24,35 @@ sql:
         package: "settingsdb"
         out: "internal/settings/settingsdb"
         sql_package: "pgx/v5"
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/workshops/queries.sql"
+    gen:
+      go:
+        package: "workshopsdb"
+        out: "internal/workshops/workshopsdb"
+        sql_package: "pgx/v5"
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/payments/queries.sql"
+    gen:
+      go:
+        package: "paymentsdb"
+        out: "internal/payments/paymentsdb"
+        sql_package: "pgx/v5"
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/blog/queries.sql"
+    gen:
+      go:
+        package: "blogdb"
+        out: "internal/blog/blogdb"
+        sql_package: "pgx/v5"
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/media/queries.sql"
+    gen:
+      go:
+        package: "mediadb"
+        out: "internal/media/mediadb"
+        sql_package: "pgx/v5"

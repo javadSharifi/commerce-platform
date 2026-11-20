@@ -1,0 +1,284 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const { id } = Astro.params;
+
+// Fallback sample data if API is offline
+const fallbackWorkshop = {
+  id: id || 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+  title: 'کارگاه روان‌درمانی تحلیلی و تنظیم هیجان',
+  slug: 'analytic-psychotherapy-workshop',
+  description: 'در این کارگاه چهار ساعته، به بررسی الگوهای دفاعی ناخودآگاه، شناسایی تله‌های هیجانی و تکنیک‌های عملی تنظیم خشم و اضطراب می‌پردازیم. این دوره مناسب تمام علاقه‌مندان به خودشناسی و رشد فردی است.',
+  instructor_name: 'دکتر مریم علوی',
+  starts_at: '2026-12-10T14:00:00Z',
+  ends_at: '2026-12-10T18:00:00Z',
+  registration_deadline: '2026-12-09T23:59:00Z',
+  location: 'تهران، سالن کنفرانس کلینیک مهر',
+  price_rials: 5000000,
+  remaining_capacity: 5,
+  is_registration_open: true,
+};
+
+let workshop = fallbackWorkshop;
+
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+try {
+  const host = Astro.request.headers.get('host') || 'localhost:3000';
+  const res = await fetch(`${apiBase}/public/workshops/${id}`, {
+    headers: { 'Host': host },
+    signal: AbortSignal.timeout(1000),
+  });
+  if (res.ok) {
+    workshop = await res.json();
+  }
+} catch {
+  // Graceful fallback
+}
+
+function formatDateTehran(dateStr: string) {
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      timeZone: 'Asia/Tehran',
+      dateStyle: 'full',
+      timeStyle: 'short',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatPriceToman(priceRials: number) {
+  if (priceRials === 0) return 'رایگان';
+  const toman = Math.floor(priceRials / 10);
+  return `${toman.toLocaleString('fa-IR')} تومان`;
+}
+
+const isFull = workshop.remaining_capacity <= 0;
+const isFree = workshop.price_rials === 0;
+---
+
+<BaseLayout title={workshop.title} description={workshop.description}>
+  <div style="max-width: 800px; margin: 0 auto;">
+    <nav style="margin-bottom: 1.5rem; font-size: 0.9rem; color: #64748b;">
+      <a href="/workshops" style="color: #64748b;">کارگاه‌ها</a>
+      <span style="margin: 0 0.5rem;">/</span>
+      <span style="color: #0f172a;">{workshop.title}</span>
+    </nav>
+
+    <article style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+        <div>
+          <span style={`display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem; ${
+            workshop.is_registration_open && !isFull
+              ? 'background: #dcfce7; color: #15803d;'
+              : 'background: #fee2e2; color: #b91c1c;'
+          }`}>
+            {workshop.is_registration_open && !isFull ? 'ثبت‌نام فعال' : isFull ? 'ظرفیت تکمیل است' : 'پایان مهلت ثبت‌نام'}
+          </span>
+          <h1 style="font-size: 1.65rem; font-weight: 800; color: #0f172a; line-height: 1.35;">
+            {workshop.title}
+          </h1>
+        </div>
+        <div style="text-align: left;">
+          <div style="font-size: 0.85rem; color: #64748b;">شهریه کارگاه:</div>
+          <div style="font-size: 1.35rem; font-weight: 800; color: #0284c7;">
+            {formatPriceToman(workshop.price_rials)}
+          </div>
+        </div>
+      </div>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1.25rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; font-size: 0.95rem;">
+        <div>
+          <span style="color: #64748b; display: block; font-size: 0.85rem;">مدرس کارگاه:</span>
+          <strong style="color: #1e293b;">{workshop.instructor_name}</strong>
+        </div>
+        <div>
+          <span style="color: #64748b; display: block; font-size: 0.85rem;">زمان برگزاری:</span>
+          <strong style="color: #1e293b;">{formatDateTehran(workshop.starts_at)}</strong>
+        </div>
+        <div>
+          <span style="color: #64748b; display: block; font-size: 0.85rem;">محل برگزاری:</span>
+          <strong style="color: #1e293b;">{workshop.location}</strong>
+        </div>
+        <div>
+          <span style="color: #64748b; display: block; font-size: 0.85rem;">ظرفیت باقیمانده:</span>
+          <strong style={`color: ${isFull ? '#ef4444' : '#0f172a'};`}>
+            {isFull ? 'تکمیل شده (۰ صندلی)' : `${workshop.remaining_capacity} صندلی خالی`}
+          </strong>
+        </div>
+      </div>
+
+      <div style="line-height: 1.8; color: #334155; font-size: 1rem; margin-bottom: 2rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 0.75rem;">
+          درباره این دوره و سرفصل‌ها
+        </h3>
+        <p style="white-space: pre-line;">{workshop.description}</p>
+      </div>
+
+      <!-- Registration Box -->
+      <div id="registration-section" style="border-top: 2px dashed #e2e8f0; padding-top: 2rem;">
+        <h3 style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-bottom: 0.5rem;">
+          فرم ثبت‌نام آنلاین در کارگاه
+        </h3>
+        <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1.25rem;">
+          {isFree
+            ? 'این کارگاه به صورت رایگان برگزار می‌شود و پس از تکمیل فرم، صندلی شما فوراً قطعی می‌گردد.'
+            : 'پس از ثبت فرم، صندلی شما به مدت ۱۵ دقیقه رزرو موقت شده و جهت پرداخت به درگاه امن بانکی هدایت می‌شوید.'}
+        </p>
+
+        {isFull ? (
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.75rem; padding: 1.25rem; color: #991b1b; text-align: center; font-weight: 600;">
+            متأسفانه ظرفیت این کارگاه تکمیل شده است. در صورت انصراف شرکت‌کنندگان یا تعریف دوره جدید، صندلی‌ها باز خواهند شد.
+          </div>
+        ) : !workshop.is_registration_open ? (
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.75rem; padding: 1.25rem; color: #991b1b; text-align: center; font-weight: 600;">
+            مهلت ثبت‌نام در این کارگاه به پایان رسیده است.
+          </div>
+        ) : (
+          <form id="register-form" style="display: flex; flex-direction: column; gap: 1.25rem; max-width: 520px;">
+            <div id="form-error" style="display: none; background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #991b1b; font-size: 0.9rem;"></div>
+
+            <div>
+              <label for="guest_name" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+                نام و نام خانوادگی <span style="color: #ef4444;">*</span>
+              </label>
+              <input
+                id="guest_name"
+                name="guest_name"
+                type="text"
+                required
+                placeholder="مثال: سارا محمدی"
+                style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+              />
+            </div>
+
+            <div>
+              <label for="guest_phone" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+                شماره تلفن همراه <span style="color: #ef4444;">*</span>
+              </label>
+              <input
+                id="guest_phone"
+                name="guest_phone"
+                type="tel"
+                dir="ltr"
+                required
+                placeholder="09123456789"
+                style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 1rem; text-align: right;"
+              />
+              <span style="display: block; font-size: 0.8rem; color: #64748b; margin-top: 0.25rem;">
+                پیامک تأیید و پیگیری ثبت‌نام به این شماره ارسال خواهد شد.
+              </span>
+            </div>
+
+            <button
+              id="submit-btn"
+              type="submit"
+              class="btn"
+              style="padding: 0.85rem 1.5rem; font-size: 1rem; font-weight: 700; width: 100%; margin-top: 0.5rem;"
+            >
+              {isFree ? 'ثبت و تایید نهایی ثبت‌نام رایگان' : `رزرو صندلی و پرداخت (${formatPriceToman(workshop.price_rials)})`}
+            </button>
+          </form>
+        )}
+      </div>
+    </article>
+  </div>
+
+  <script define:vars={{ workshopId: workshop.id, isFree }}>
+    const form = document.getElementById('register-form');
+    const errorBox = document.getElementById('form-error');
+    const submitBtn = document.getElementById('submit-btn');
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorBox.style.display = 'none';
+        errorBox.textContent = '';
+
+        const nameInput = document.getElementById('guest_name');
+        const phoneInput = document.getElementById('guest_phone');
+
+        const guestName = nameInput.value.trim();
+        let guestPhone = phoneInput.value.trim();
+
+        // Convert Persian/Arabic digits to English
+        const p2e = s => s.replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+                          .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)]);
+        guestPhone = p2e(guestPhone).replace(/[\s-]/g, '');
+
+        if (!guestName) {
+          showError('لطفاً نام و نام خانوادگی خود را وارد نمایید.');
+          return;
+        }
+
+        if (!/^09\d{9}$/.test(guestPhone)) {
+          showError('فرمت شماره تلفن همراه نامعتبر است. مثال: 09123456789');
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'در حال ثبت اطلاعات...';
+
+        try {
+          const res = await fetch(`/public/workshops/${workshopId}/register`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              guest_name: guestName,
+              guest_phone: guestPhone,
+            }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            let msg = data.message || 'خطا در ثبت‌نام. لطفاً دوباره تلاش کنید.';
+            if (data.code === 'CAPACITY_FULL') {
+              msg = 'متأسفانه ظرفیت کارگاه تکمیل شده است.';
+            } else if (data.code === 'DUPLICATE_REGISTRATION') {
+              msg = 'یک ثبت‌نام فعال با این شماره موبایل قبلاً ثبت شده است.';
+            } else if (data.code === 'DEADLINE_PASSED') {
+              msg = 'مهلت ثبت‌نام در این کارگاه به پایان رسیده است.';
+            }
+            showError(msg);
+            submitBtn.disabled = false;
+            submitBtn.textContent = isFree ? 'ثبت و تایید نهایی ثبت‌نام رایگان' : 'رزرو صندلی و پرداخت';
+            return;
+          }
+
+          // Registration succeeded!
+          // Save lookup token locally
+          if (data.lookup_token) {
+            try {
+              localStorage.setItem(`reg_${data.registration_id}`, data.lookup_token);
+            } catch {}
+          }
+
+          if (isFree || data.status === 'confirmed') {
+            // Instant redirect to status confirmation
+            window.location.href = `/workshops/registrations/${data.registration_id}?lookup_token=${data.lookup_token}`;
+          } else if (data.payment_url) {
+            // Redirect to payment gateway
+            window.location.href = data.payment_url;
+          } else {
+            // Redirect to registration status page
+            window.location.href = `/workshops/registrations/${data.registration_id}?lookup_token=${data.lookup_token}`;
+          }
+        } catch (err) {
+          showError('خطا در برقراری ارتباط با سرور.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = isFree ? 'ثبت و تایید نهایی ثبت‌نام رایگان' : 'رزرو صندلی و پرداخت';
+        }
+      });
+    }
+
+    function showError(msg) {
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = 'block';
+      }
+    }
+  </script>
+</BaseLayout>

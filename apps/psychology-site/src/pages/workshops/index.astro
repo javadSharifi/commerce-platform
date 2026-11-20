@@ -1,0 +1,144 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// Fallback sample data for SSR/preview if API not reachable
+const fallbackWorkshops = [
+  {
+    id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    title: 'کارگاه روان‌درمانی تحلیلی و تنظیم هیجان',
+    slug: 'analytic-psychotherapy-workshop',
+    instructor_name: 'دکتر مریم علوی',
+    starts_at: '2026-12-10T14:00:00Z',
+    ends_at: '2026-12-10T18:00:00Z',
+    location: 'تهران، سالن کنفرانس کلینیک مهر',
+    price_rials: 5000000,
+    remaining_capacity: 4,
+    is_registration_open: true,
+  },
+  {
+    id: 'a12bc34d-58cc-4372-a567-0e02b2c3d480',
+    title: 'کارگاه مهارت‌های ارتباطی موثر در روابط زوجین (رایگان)',
+    slug: 'effective-communication-workshop',
+    instructor_name: 'دکتر مریم علوی',
+    starts_at: '2026-12-17T15:00:00Z',
+    ends_at: '2026-12-17T17:00:00Z',
+    location: 'تهران، سالن کنفرانس کلینیک مهر',
+    price_rials: 0,
+    remaining_capacity: 0,
+    is_registration_open: false,
+  },
+];
+
+let workshops = fallbackWorkshops;
+
+// Attempt to load live workshops from API if available
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+try {
+  const host = Astro.request.headers.get('host') || 'localhost:3000';
+  const res = await fetch(`${apiBase}/public/workshops`, {
+    headers: { 'Host': host },
+    signal: AbortSignal.timeout(1000),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) {
+      workshops = data;
+    }
+  }
+} catch {
+  // Graceful fallback to static demo data for dev/preview
+}
+
+function formatDateTehran(dateStr: string) {
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      timeZone: 'Asia/Tehran',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatPriceToman(priceRials: number) {
+  if (priceRials === 0) return 'رایگان';
+  const toman = Math.floor(priceRials / 10);
+  return `${toman.toLocaleString('fa-IR')} تومان`;
+}
+---
+
+<BaseLayout title="کارگاه‌های آموزشی و روان‌شناسی" description="مشاهده و ثبت‌نام در کارگاه‌های تخصصی رشد فردی و روان‌درمانی">
+  <div style="margin-bottom: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <h1 style="font-size: 1.75rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem;">
+          کارگاه‌های تخصصی و آموزشی
+        </h1>
+        <p style="color: #64748b; font-size: 1rem;">
+          برگزاری دوره‌ها و کارگاه‌های مهارت‌های فردی، خودشناسی و زوج‌درمانی با ظرفیت محدود
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">
+    {workshops.map((ws) => (
+      <article style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 1rem;">
+            <span style={`padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; ${
+              ws.is_registration_open && ws.remaining_capacity > 0
+                ? 'background: #dcfce7; color: #15803d;'
+                : 'background: #fee2e2; color: #b91c1c;'
+            }`}>
+              {ws.is_registration_open && ws.remaining_capacity > 0 ? 'ثبت‌نام فعال' : 'تکمیل ظرفیت / پایان مهلت'}
+            </span>
+            <span style="font-size: 0.85rem; font-weight: 600; color: #0284c7;">
+              {formatPriceToman(ws.price_rials)}
+            </span>
+          </div>
+
+          <h2 style="font-size: 1.2rem; font-weight: 700; color: #0f172a; margin-bottom: 0.75rem; line-height: 1.4;">
+            <a href={`/workshops/${ws.id}`} style="color: inherit; text-decoration: none;">
+              {ws.title}
+            </a>
+          </h2>
+
+          <div style="font-size: 0.9rem; color: #475569; display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.25rem;">
+            <div>
+              <strong style="color: #334155;">مدرس:</strong> {ws.instructor_name}
+            </div>
+            <div>
+              <strong style="color: #334155;">زمان شروع:</strong> {formatDateTehran(ws.starts_at)}
+            </div>
+            <div>
+              <strong style="color: #334155;">محل برگزاری:</strong> {ws.location}
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #f1f5f9; padding-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-size: 0.85rem; color: #64748b;">
+            {ws.remaining_capacity > 0 ? (
+              <span>ظرفیت باقیمانده: <strong style="color: #0f172a;">{ws.remaining_capacity} صندلی</strong></span>
+            ) : (
+              <span style="color: #ef4444; font-weight: 600;">ظرفیت تکمیل است</span>
+            )}
+          </div>
+          <a
+            href={`/workshops/${ws.id}`}
+            class="btn"
+            style={`font-size: 0.9rem; padding: 0.5rem 1rem; ${
+              ws.is_registration_open && ws.remaining_capacity > 0
+                ? ''
+                : 'background: #e2e8f0; color: #64748b; cursor: pointer;'
+            }`}
+          >
+            {ws.is_registration_open && ws.remaining_capacity > 0 ? 'ثبت‌نام در کارگاه' : 'مشاهده جزئیات'}
+          </a>
+        </div>
+      </article>
+    ))}
+  </div>
+</BaseLayout>

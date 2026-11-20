@@ -1,0 +1,178 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+
+const { id } = Astro.params;
+
+const url = new URL(Astro.request.url);
+const lookupToken = url.searchParams.get('lookup_token') || '';
+const paymentStatus = url.searchParams.get('payment_status') || '';
+const refId = url.searchParams.get('ref_id') || '';
+
+// Fallback registration status for preview
+const fallbackStatus = {
+  registration_id: id || '',
+  workshop_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+  workshop_title: 'کارگاه روان‌درمانی تحلیلی و تنظیم هیجان',
+  guest_name: 'سارا محمدی',
+  status: paymentStatus || 'confirmed',
+  expires_at: null,
+};
+
+let statusData = fallbackStatus;
+let fetchError = '';
+
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+if (lookupToken) {
+  try {
+    const host = Astro.request.headers.get('host') || 'localhost:3000';
+    const res = await fetch(`${apiBase}/public/workshops/registrations/${id}?lookup_token=${encodeURIComponent(lookupToken)}`, {
+      headers: { 'Host': host },
+      signal: AbortSignal.timeout(1000),
+    });
+    if (res.ok) {
+      statusData = await res.json();
+    } else if (res.status === 404) {
+      fetchError = 'اطلاعات ثبت‌نام با توکن ارسالی یافت نشد.';
+    }
+  } catch {
+    // Fallback
+  }
+}
+
+// Override or reconcile status with payment callback query if present
+const finalStatus = paymentStatus || statusData.status;
+
+function getStatusBadge(st: string) {
+  switch (st) {
+    case 'confirmed':
+      return { text: 'تأییدشده و قطعی', color: '#15803d', bg: '#dcfce7', icon: '✓' };
+    case 'pending_payment':
+      return { text: 'در انتظار پرداخت (رزرو موقت)', color: '#0369a1', bg: '#e0f2fe', icon: '⏳' };
+    case 'refund_required':
+      return { text: 'نیازمند استرداد وجه', color: '#c2410c', bg: '#ffedd5', icon: '⚠️' };
+    case 'expired':
+      return { text: 'منقضی‌شده', color: '#64748b', bg: '#f1f5f9', icon: '✕' };
+    case 'cancelled':
+      return { text: 'لغو شده', color: '#b91c1c', bg: '#fee2e2', icon: '✕' };
+    default:
+      return { text: st, color: '#334155', bg: '#f8fafc', icon: '•' };
+  }
+}
+
+const badge = getStatusBadge(finalStatus);
+---
+
+<BaseLayout title="پیگیری وضعیت ثبت‌نام کارگاه">
+  <div style="max-width: 640px; margin: 0 auto;">
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+      <div style="text-align: center; margin-bottom: 2rem;">
+        <div style={`display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 50%; font-size: 2rem; margin-bottom: 1rem; background: ${badge.bg}; color: ${badge.color};`}>
+          {badge.icon}
+        </div>
+        <h1 style="font-size: 1.5rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem;">
+          وضعیت ثبت‌نام کارگاه
+        </h1>
+        <div style={`display: inline-block; padding: 0.35rem 1rem; border-radius: 9999px; font-size: 0.9rem; font-weight: 700; background: ${badge.bg}; color: ${badge.color};`}>
+          {badge.text}
+        </div>
+      </div>
+
+      {fetchError && (
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 1rem; color: #991b1b; margin-bottom: 1.5rem; text-align: center; font-size: 0.95rem;">
+          {fetchError}
+        </div>
+      )}
+
+      <!-- Notice Alert by Status -->
+      {finalStatus === 'confirmed' && (
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.75rem; padding: 1.25rem; color: #166534; font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.6;">
+          <strong>تبریک!</strong> ثبت‌نام شما در کارگاه با موفقیت تایید و صندلی شما رزرو قطعی شد. جزئیات برگزاری و لینک ورود یا آدرس سالن از طریق پیامک به شماره همراه شما ارسال خواهد شد.
+          {refId && (
+            <div style="margin-top: 0.75rem; font-size: 0.9rem; background: #ffffff; padding: 0.5rem 0.75rem; border-radius: 0.375rem; border: 1px solid #dcfce7;">
+              کد رهگیری بانک: <strong style="font-family: monospace;" dir="ltr">{refId}</strong>
+            </div>
+          )}
+        </div>
+      )}
+
+      {finalStatus === 'refund_required' && (
+        <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 0.75rem; padding: 1.25rem; color: #9a3412; font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.6;">
+          <strong>توجه مهم:</strong> مبلغ شهریه توسط درگاه بانکی از حساب شما کسر گردید، اما به دلیل پایان مهلت ۱۵ دقیقه‌ای رزرو صندلی یا تکمیل هم‌زمان ظرفیت توسط سایر متقاضیان، امکان قطعی شدن صندلی وجود نداشت.
+          <br /><br />
+          سفارش شما در وضعیت <strong>نیازمند استرداد وجه</strong> ثبت شد و همکاران مالی کلینیک به زودی جهت عودت کامل وجه به کارت مبدأ با شما تماس خواهند گرفت.
+          {refId && (
+            <div style="margin-top: 0.75rem; font-size: 0.9rem; background: #ffffff; padding: 0.5rem 0.75rem; border-radius: 0.375rem; border: 1px solid #ffedd5;">
+              کد رهگیری پرداخت بانکی: <strong style="font-family: monospace;" dir="ltr">{refId}</strong>
+            </div>
+          )}
+        </div>
+      )}
+
+      {finalStatus === 'pending_payment' && (
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 0.75rem; padding: 1.25rem; color: #1e40af; font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.6;">
+          صندلی شما به مدت ۱۵ دقیقه رزرو موقت شده است. لطفاً جهت قطعی شدن ثبت‌نام، پرداخت خود را از طریق درگاه بانکی تکمیل فرمایید.
+          <div id="countdown-timer" style="margin-top: 0.75rem; font-weight: 700; color: #1d4ed8;"></div>
+        </div>
+      )}
+
+      {finalStatus === 'expired' && (
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1.25rem; color: #475569; font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.6;">
+          مهلت پرداخت رزرو موقت به پایان رسیده و صندلی آزاد شده است. در صورت تمایل می‌توانید از صفحه کارگاه مجدداً ثبت‌نام نمایید.
+        </div>
+      )}
+
+      {finalStatus === 'cancelled' && (
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.75rem; padding: 1.25rem; color: #991b1b; font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.6;">
+          این ثبت‌نام بنا به درخواست یا لغو کارگاه باطل شده است.
+        </div>
+      )}
+
+      <!-- Details List -->
+      <div style="border-top: 1px solid #f1f5f9; padding-top: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.95rem;">
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: #64748b;">عنوان کارگاه:</span>
+          <strong style="color: #0f172a;">{statusData.workshop_title}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: #64748b;">نام شرکت‌کننده:</span>
+          <strong style="color: #0f172a;">{statusData.guest_name}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: #64748b;">کد پیگیری ثبت‌نام:</span>
+          <span style="font-family: monospace; font-size: 0.85rem; color: #475569;" dir="ltr">{id}</span>
+        </div>
+      </div>
+
+      <div style="margin-top: 2rem; display: flex; gap: 1rem; justify-content: center;">
+        <a href="/workshops" class="btn" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;">
+          بازگشت به فهرست کارگاه‌ها
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script define:vars={{ expiresAt: statusData.expires_at }}>
+    // If pending_payment and expires_at is present, show countdown
+    if (expiresAt) {
+      const targetTime = new Date(expiresAt).getTime();
+      const timerEl = document.getElementById('countdown-timer');
+
+      function updateTimer() {
+        const now = Date.now();
+        const diff = targetTime - now;
+        if (diff <= 0) {
+          if (timerEl) timerEl.textContent = 'مهلت پرداخت به پایان رسیده است.';
+          return;
+        }
+        const mins = Math.floor(diff / 60000);
+        const secs = Math.floor((diff % 60000) / 1000);
+        if (timerEl) {
+          timerEl.textContent = `زمان باقیمانده جهت تکمیل پرداخت: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+      }
+
+      updateTimer();
+      setInterval(updateTimer, 1000);
+    }
+  </script>
+</BaseLayout>

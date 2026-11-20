@@ -83,3 +83,243 @@ export interface BuyerProfileResponse {
   phone: string;
   full_name?: string | null;
 }
+
+// ---------------- Public Workshops ----------------
+export interface PublicWorkshopItem {
+  id: string;
+  title: string;
+  slug: string;
+  instructor_name: string;
+  starts_at: string;
+  ends_at: string;
+  location: string;
+  price_rials: number;
+  remaining_capacity: number;
+  is_registration_open: boolean;
+}
+
+export interface PublicWorkshopDetail extends PublicWorkshopItem {
+  description: string;
+  registration_deadline: string;
+}
+
+export interface RegisterWorkshopRequest {
+  guest_name: string;
+  guest_phone: string;
+}
+
+export type RegistrationStatus = 'pending_payment' | 'confirmed' | 'cancelled' | 'expired';
+
+export interface RegisterWorkshopResponse {
+  registration_id: string;
+  status: 'confirmed' | 'pending_payment';
+  lookup_token: string;
+  payment_url?: string | null;
+  expires_at?: string | null;
+}
+
+export interface RegistrationStatusResponse {
+  registration_id: string;
+  workshop_id: string;
+  workshop_title: string;
+  guest_name: string;
+  status: RegistrationStatus;
+  expires_at?: string | null;
+}
+
+// ---------------- Public Blog & Media ----------------
+export type ContentBlockType = 'paragraph' | 'heading' | 'image' | 'video' | 'audio';
+
+export interface ContentBlock {
+  type: ContentBlockType;
+  data: Record<string, unknown>;
+}
+
+export interface PublicBlogPostItem {
+  id: string;
+  title: string;
+  slug: string;
+  seo_description: string;
+  published_at: string;
+}
+
+export interface PublicBlogPostDetail {
+  id: string;
+  title: string;
+  slug: string;
+  seo_description: string;
+  content_blocks: ContentBlock[];
+  published_at: string;
+}
+
+export interface StreamUrlResponse {
+  stream_url: string;
+  expires_in_seconds: number;
+}
+
+// ---------------- Admin Workshops ----------------
+export type WorkshopStatus = 'draft' | 'published' | 'closed' | 'cancelled';
+
+export interface AdminWorkshopItem {
+  id: string;
+  title: string;
+  slug: string;
+  instructor_name: string;
+  starts_at: string;
+  ends_at: string;
+  capacity: number;
+  confirmed_count: number;
+  pending_count: number;
+  price_rials: number;
+  status: WorkshopStatus;
+  created_at: string;
+}
+
+export interface AdminWorkshopDetail extends AdminWorkshopItem {
+  description: string;
+  location: string;
+  registration_deadline: string;
+  updated_at: string;
+}
+
+export interface CreateWorkshopRequest {
+  title: string;
+  slug: string;
+  description?: string;
+  instructor_name: string;
+  starts_at: string;
+  ends_at: string;
+  location: string;
+  registration_deadline: string;
+  capacity: number;
+  price_rials: number;
+}
+
+export interface UpdateWorkshopRequest {
+  title?: string;
+  slug?: string;
+  description?: string;
+  instructor_name?: string;
+  starts_at?: string;
+  ends_at?: string;
+  location?: string;
+  registration_deadline?: string;
+  capacity?: number;
+  price_rials?: number;
+}
+
+export interface AdminRegistrationItem {
+  id: string;
+  guest_name: string;
+  guest_phone: string;
+  status: RegistrationStatus;
+  purchase_id?: string | null;
+  expires_at?: string | null;
+  created_at: string;
+}
+
+// ---------------- Admin Payments & Refunds ----------------
+export type PurchaseItemType = 'workshop' | 'course';
+export type PurchaseStatus = 'pending' | 'completed' | 'refund_required' | 'refunded' | 'failed';
+
+export interface AdminPurchaseItem {
+  id: string;
+  item_type: PurchaseItemType;
+  item_id: string;
+  title_snapshot: string;
+  amount_rials: number;
+  status: PurchaseStatus;
+  tracking_code?: string | null;
+  created_at: string;
+}
+
+export interface RecordRefundRequest {
+  reference_number: string;
+  reason: string;
+  amount_rials: number;
+}
+
+export interface RefundResponse {
+  refund_id: string;
+  purchase_id: string;
+  reference_number: string;
+  amount_rials: number;
+  registered_at: string;
+}
+
+// ---------------- Admin Blog ----------------
+export type BlogPostStatus = 'draft' | 'published';
+
+export interface AdminBlogPostItem {
+  id: string;
+  title: string;
+  slug: string;
+  status: BlogPostStatus;
+  published_at?: string | null;
+  created_at: string;
+}
+
+export interface AdminBlogPostDetail {
+  id: string;
+  title: string;
+  slug: string;
+  seo_description: string;
+  content_blocks: ContentBlock[];
+  status: BlogPostStatus;
+  published_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateBlogPostRequest {
+  title: string;
+  slug: string;
+  seo_description: string;
+  content_blocks: ContentBlock[];
+}
+
+export interface UpdateBlogPostRequest {
+  title?: string;
+  slug?: string;
+  seo_description?: string;
+  content_blocks?: ContentBlock[];
+}
+
+// ---------------- Admin Media ----------------
+export type MediaAccessClass = 'public' | 'course_private';
+export type MediaValidationStatus = 'pending' | 'verified' | 'rejected';
+
+export interface RequestMediaUploadRequest {
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  access_class: MediaAccessClass;
+}
+
+export interface RequestMediaUploadResponse {
+  upload_id: string;
+  upload_url: string;
+  staging_key: string;
+  expires_at: string;
+}
+
+export interface FinalizeMediaUploadRequest {
+  upload_id: string;
+}
+
+export interface MediaAssetResponse {
+  id: string;
+  storage_key: string;
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  access_class: MediaAccessClass;
+  validation_status: MediaValidationStatus;
+  created_at: string;
+}
+
+export interface MediaListResponse {
+  items: MediaAssetResponse[];
+  quota_used_bytes: number;
+  quota_total_bytes: number;
+}

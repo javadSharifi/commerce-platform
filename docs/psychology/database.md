@@ -179,11 +179,519 @@ CREATE INDEX password_resets_user_id_idx ON password_resets (user_id);
 
 ---
 
-## ۵. نقشهٔ راه تکمیل افزایشی جداول در فازهای بعدی
+## ۵. ساختار جداول فاز ۱ (PSY-1: کارگاه حضوری، پرداخت، بلاگ و رسانه)
+
+### ۵.۱ نمودار ارتباط موجودیت‌ها (ERD)
+
+```mermaid
+erDiagram
+    tenants ||--o{ workshops : "دارد"
+    tenants ||--o{ purchases : "دارد"
+    tenants ||--o{ blog_posts : "دارد"
+    tenants ||--o{ media_assets : "دارد"
+    tenants ||--o{ media_uploads : "دارد"
+
+    workshops ||--o{ workshop_registrations : "شامل"
+    purchases ||--o{ payment_attempts : "تلاش‌های پرداخت"
+    purchases ||--o{ refunds : "بازپرداخت‌ها"
+    purchases ||--o| workshop_registrations : "اتصال خرید به ثبت‌نام"
+
+    workshops {
+        uuid id PK
+        uuid tenant_id FK
+        text title
+        text slug
+        text description
+        text instructor_name
+        timestamptz starts_at
+        timestamptz ends_at
+        text location
+        timestamptz registration_deadline
+        int capacity
+        bigint price_rials
+        text status
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    workshop_registrations {
+        uuid id PK
+        uuid tenant_id FK
+        uuid workshop_id FK
+        text guest_name
+        text guest_phone
+        text status
+        timestamptz expires_at
+        uuid purchase_id FK
+        text guest_lookup_hash
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    purchases {
+        uuid id PK
+        uuid tenant_id FK
+        text item_type
+        uuid item_id
+        bigint amount_rials
+        text title_snapshot
+        text status
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    payment_attempts {
+        uuid id PK
+        uuid tenant_id FK
+        uuid purchase_id FK
+        text provider
+        text authority
+        bigint amount_rials
+        text status
+        text tracking_code
+        text gateway_ref_id
+        text idempotency_key
+        text error_message
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    refunds {
+        uuid id PK
+        uuid tenant_id FK
+        uuid purchase_id FK
+        uuid payment_attempt_id FK
+        bigint amount_rials
+        text reason
+        text reference_number
+        uuid registered_by FK
+        timestamptz registered_at
+        timestamptz created_at
+    }
+
+    blog_posts {
+        uuid id PK
+        uuid tenant_id FK
+        text title
+        text slug
+        text seo_description
+        jsonb content_blocks
+        text status
+        timestamptz published_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    media_assets {
+        uuid id PK
+        uuid tenant_id FK
+        text storage_key
+        text original_name
+        text mime_type
+        bigint size_bytes
+        text access_class
+        text validation_status
+        uuid uploaded_by FK
+        timestamptz verified_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    media_uploads {
+        uuid id PK
+        uuid tenant_id FK
+        text staging_key
+        text expected_mime_type
+        bigint expected_size_bytes
+        timestamptz expires_at
+        text status
+        uuid initiated_by FK
+        timestamptz created_at
+    }
+```
+
+---
+
+### ۵.۲ جدول `workshops` (کارگاه‌های حضوری)
+
+کارگاه تک‌رویداد حضوری با ظرفیت مشخص، مهلت ثبت‌نام، و مبلغ قطعی به ریال.
+
+```sql
+CREATE TABLE workshops (
+    id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id             uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    title                 text        NOT NULL,
+    slug                  text        NOT NULL,
+    description           text        NOT NULL DEFAULT '',
+    instructor_name       text        NOT NULL,
+    starts_at             timestamptz NOT NULL,
+    ends_at               timestamptz NOT NULL,
+    location              text        NOT NULL,
+    registration_deadline timestamptz NOT NULL,
+    capacity              integer     NOT NULL CHECK (capacity >= 1),
+    price_rials           bigint      NOT NULL DEFAULT 0 CHECK (price_rials >= 0),
+    status                text        NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'closed', 'cancelled')),
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    updated_at            timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT workshops_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT workshops_tenant_slug_uq UNIQUE (tenant_id, slug),
+    CONSTRAINT workshops_dates_check CHECK (starts_at < ends_at AND registration_deadline <= starts_at)
+);
+
+CREATE INDEX workshops_tenant_status_idx ON workshops (tenant_id, status);
+CREATE INDEX workshops_tenant_starts_at_idx ON workshops (tenant_id, starts_at);
+
+ALTER TABLE workshops ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workshops FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON workshops
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+### ۵.۳ جدول `workshop_registrations` (ثبت‌نام‌ها و رزرو صندلی)
+
+هر ردیف یک صندلی از کارگاه را نمایندگی می‌کند. ثبت‌نام رایگان بلافاصله `confirmed` شده و ثبت‌نام پولی `pending_payment` با مهلت انقضای ۱۵ دقیقه‌ای می‌گیرد.
+
+```sql
+CREATE TABLE workshop_registrations (
+    id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id         uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    workshop_id       uuid        NOT NULL,
+    guest_name        text        NOT NULL,
+    guest_phone       text        NOT NULL,
+    status            text        NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('pending_payment', 'confirmed', 'cancelled', 'expired')),
+    expires_at        timestamptz,
+    purchase_id       uuid,
+    guest_lookup_hash text        NOT NULL,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT registrations_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT registrations_workshop_fk FOREIGN KEY (tenant_id, workshop_id) REFERENCES workshops(tenant_id, id) ON DELETE CASCADE
+);
+
+-- ایندکس جهت جلوگیری از ثبت‌نام فعال تکراری برای یک شماره تماس در یک کارگاه
+CREATE UNIQUE INDEX workshop_registrations_active_phone_uq
+    ON workshop_registrations (tenant_id, workshop_id, guest_phone)
+    WHERE status IN ('pending_payment', 'confirmed');
+
+CREATE INDEX workshop_registrations_tenant_workshop_status_idx 
+    ON workshop_registrations (tenant_id, workshop_id, status);
+
+CREATE INDEX workshop_registrations_status_expires_at_idx 
+    ON workshop_registrations (status, expires_at) 
+    WHERE status = 'pending_payment';
+
+CREATE INDEX workshop_registrations_lookup_hash_idx
+    ON workshop_registrations (tenant_id, guest_lookup_hash);
+
+ALTER TABLE workshop_registrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workshop_registrations FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON workshop_registrations
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+### ۵.۴ جدول `purchases` (خریدها و سفارشات مالی)
+
+شناسه خرید منبع حقیقت مالی ثبت‌نام کارگاه یا دوره‌های آموزشی است و عنوان و مبلغ را اسنپ‌شات می‌کند.
+
+```sql
+CREATE TABLE purchases (
+    id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id      uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    item_type      text        NOT NULL CHECK (item_type IN ('workshop', 'course')),
+    item_id        uuid        NOT NULL,
+    amount_rials   bigint      NOT NULL CHECK (amount_rials > 0),
+    title_snapshot text        NOT NULL,
+    status         text        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'refund_required', 'refunded', 'failed')),
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    updated_at     timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT purchases_tenant_id_id_uq UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX purchases_tenant_status_idx ON purchases (tenant_id, status);
+CREATE INDEX purchases_tenant_item_idx ON purchases (tenant_id, item_type, item_id);
+
+ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE purchases FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON purchases
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+### ۵.۵ جدول `payment_attempts` (تلاش‌های پرداخت درگاه)
+
+ثبت تراکنش درگاه با کلید یکتای Idempotency و شناسه Authority ارائه‌دهنده (زرین‌پال).
+
+```sql
+CREATE TABLE payment_attempts (
+    id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    purchase_id     uuid        NOT NULL,
+    provider        text        NOT NULL DEFAULT 'zarinpal' CHECK (provider IN ('zarinpal', 'mock')),
+    authority       text        NOT NULL,
+    amount_rials    bigint      NOT NULL CHECK (amount_rials > 0),
+    status          text        NOT NULL DEFAULT 'initiated' CHECK (status IN ('initiated', 'verified', 'failed')),
+    tracking_code   text,
+    gateway_ref_id  text,
+    idempotency_key text        NOT NULL,
+    error_message   text,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT payment_attempts_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT payment_attempts_purchase_fk FOREIGN KEY (tenant_id, purchase_id) REFERENCES purchases(tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT payment_attempts_tenant_authority_uq UNIQUE (tenant_id, authority),
+    CONSTRAINT payment_attempts_tenant_idempotency_uq UNIQUE (tenant_id, idempotency_key)
+);
+
+CREATE INDEX payment_attempts_tenant_purchase_idx ON payment_attempts (tenant_id, purchase_id);
+
+ALTER TABLE payment_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_attempts FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON payment_attempts
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+### ۵.۶ جدول `refunds` (ثبت بازپرداخت‌های مالی)
+
+برای مواردی که پرداخت پس از انقضا یا لغو کارگاه با موفقیت تایید شده و وارد وضعیت `refund_required` شده است.
+
+```sql
+CREATE TABLE refunds (
+    id                 uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    purchase_id        uuid        NOT NULL,
+    payment_attempt_id uuid,
+    amount_rials       bigint      NOT NULL CHECK (amount_rials > 0),
+    reason             text        NOT NULL,
+    reference_number   text        NOT NULL,
+    registered_by      uuid        NOT NULL REFERENCES panel_identities(id),
+    registered_at      timestamptz NOT NULL DEFAULT now(),
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT refunds_tenant_purchase_fk FOREIGN KEY (tenant_id, purchase_id) REFERENCES purchases(tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT refunds_tenant_reference_uq UNIQUE (tenant_id, reference_number)
+);
+
+CREATE INDEX refunds_tenant_purchase_idx ON refunds (tenant_id, purchase_id);
+
+ALTER TABLE refunds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE refunds FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON refunds
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+### ۵.۷ جدول `blog_posts` (مطالب بلاگ)
+
+مطالب بلاگ شامل عنوان، اسلاگ یکتا در سطح کلینیک، توضیحات سئو و بلوک‌های ساخت‌یافته و ایمن (JSONB بدون امکان اجرای کد یا HTML خام).
+
+```sql
+CREATE TABLE blog_posts (
+    id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    title           text        NOT NULL,
+    slug            text        NOT NULL,
+    seo_description text        NOT NULL DEFAULT '',
+    content_blocks  jsonb       NOT NULL DEFAULT '[]'::jsonb,
+    status          text        NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+    published_at    timestamptz,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT blog_posts_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT blog_posts_tenant_slug_uq UNIQUE (tenant_id, slug)
+);
+
+CREATE INDEX blog_posts_tenant_status_published_idx 
+    ON blog_posts (tenant_id, status, published_at DESC);
+
+ALTER TABLE blog_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blog_posts FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON blog_posts
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+### ۵.۸ جدول `media_assets` (فایل‌های رسانه‌ای تأییدشده)
+
+رسانه‌های نهایی روی باکت خصوصی با کلید یکتا و دسته‌بندی امنیتی دسترسی (`public` یا `course_private`).
+
+```sql
+CREATE TABLE media_assets (
+    id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id         uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    storage_key       text        NOT NULL UNIQUE,
+    original_name     text        NOT NULL,
+    mime_type         text        NOT NULL,
+    size_bytes        bigint      NOT NULL CHECK (size_bytes > 0),
+    access_class      text        NOT NULL CHECK (access_class IN ('public', 'course_private')),
+    validation_status text        NOT NULL DEFAULT 'pending' CHECK (validation_status IN ('pending', 'verified', 'rejected')),
+    uploaded_by       uuid        NOT NULL REFERENCES panel_identities(id),
+    verified_at       timestamptz,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT media_assets_tenant_id_id_uq UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX media_assets_tenant_validation_idx ON media_assets (tenant_id, validation_status);
+CREATE INDEX media_assets_tenant_access_class_idx ON media_assets (tenant_id, access_class);
+
+ALTER TABLE media_assets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media_assets FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON media_assets
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+### ۵.۹ جدول `media_uploads` (رزرو موقت آپلود و سهمیه)
+
+رهگیری پیش‌رزرو آپلود مستقیم، سهمیه مجاز (سقف ۱۰ گیگابایت در هر کلینیک) و انقضای کلیدهای موقت در Staging.
+
+```sql
+CREATE TABLE media_uploads (
+    id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id           uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    staging_key         text        NOT NULL UNIQUE,
+    expected_mime_type  text        NOT NULL,
+    expected_size_bytes bigint      NOT NULL CHECK (expected_size_bytes > 0),
+    expires_at          timestamptz NOT NULL,
+    status              text        NOT NULL DEFAULT 'reserved' CHECK (status IN ('reserved', 'completed', 'expired')),
+    initiated_by        uuid        NOT NULL REFERENCES panel_identities(id),
+    created_at          timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX media_uploads_tenant_status_idx ON media_uploads (tenant_id, status);
+CREATE INDEX media_uploads_status_expires_at_idx ON media_uploads (status, expires_at) WHERE status = 'reserved';
+
+ALTER TABLE media_uploads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media_uploads FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON media_uploads
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+## ۶. نمودارهای وضعیت (State Machines)، ماتریس نقش، سیاست‌های زمانی و ترتیب قفل‌ها
+
+### ۶.۱ ماتریس نقش‌ها و مجوزها در فاز ۱
+
+| عملیات | مالک (`owner`) | مدیر محتوا (`content_manager`) | پذیرش (`receptionist`) | درمانگر (`therapist`) |
+| --- | :---: | :---: | :---: | :---: |
+| ساخت پیش‌نویس کارگاه | ✅ | ✅ | ❌ | ❌ |
+| ویرایش کارگاه قبل از ثبت‌نام | ✅ | ✅ | ❌ | ❌ |
+| انتشار یا بستن کارگاه | ✅ | ✅ | ❌ | ❌ |
+| لغو کارگاه | ✅ | ❌ | ❌ | ❌ |
+| مشاهده لیست ثبت‌نام‌ها | ✅ | ❌ | ✅ | ❌ |
+| ثبت انصراف دستی مسافر/مهمان | ✅ | ❌ | ✅ | ❌ |
+| مشاهده تراکنش‌ها و پرداخت‌ها | ✅ | ❌ | ❌ | ❌ |
+| ثبت مرجع بازپرداخت مالی | ✅ | ❌ | ❌ | ❌ |
+| مدیریت مطالب بلاگ (ایجاد، ویرایش، انتشار) | ✅ | ✅ | ❌ | ❌ |
+| آپلود رسانه عمومی | ✅ | ✅ | ❌ | ❌ |
+
+---
+
+### ۶.۲ چرخه وضعیت‌ها (State Transitions)
+
+#### چرخه وضعیت کارگاه (`workshops.status`)
+```
+[draft] ──(انتشار توسط مدیر)──> [published] ──(پایان مهلت یا تکمیل ظرفیت)──> [closed]
+   │                                   │
+   └───────────(لغو توسط مالک)─────────┴────────────────────────────────────> [cancelled]
+```
+
+#### چرخه وضعیت ثبت‌نام (`workshop_registrations.status`)
+```
+[شروع ثبت‌نام رایگان] ──────────────────────────────────────────────> [confirmed]
+[شروع ثبت‌نام پولی] ──> [pending_payment] ──(پرداخت موفق قبل از انقضا)──> [confirmed]
+                              │                     │
+                (انقضای ۱۵ دقیقه یا لغو)    (انصراف پذیرش/مالک)
+                              │                     │
+                              ▼                     ▼
+                          [expired]             [cancelled]
+```
+
+#### چرخه وضعیت خرید (`purchases.status`)
+```
+[ایجاد خرید] ──> [pending] ──(Verify موفق و صندلی معتبر)─────────> [completed]
+                    │
+                    ├──(Verify موفق اما صندلی منقضی یا لغوشده)───> [refund_required] ──(ثبت مرجع)──> [refunded]
+                    │
+                    └──(خطای قطعی درگاه یا انصراف خریدار)───────> [failed]
+```
+
+#### چرخه وضعیت اعتبارسنجی رسانه (`media_assets.validation_status`)
+```
+[پایان آپلود در باکت] ──> [pending] ──(تأیید نوع، فرمت، حجم واقعی)──> [verified]
+                                │
+                                └──(عدم تطابق نوع/حجم/فرمت)──────────> [rejected]
+```
+
+---
+
+### ۶.۳ سیاست‌های زمانی و TTL
+
+1. **مهلت نگه‌داشت صندلی کارگاه پولی (`pending_payment` TTL):**
+   - حداکثر ۱۵ دقیقه از زمان ایجاد ثبت‌نام.
+   - سقف این مهلت نمی‌تواند از `registration_deadline` کارگاه فراتر رود: `expires_at = LEAST(now() + interval '15 minutes', workshop.registration_deadline)`.
+2. **مهلت کلید آپلود Staging و لینک Presigned S3:**
+   - حداکثر ۱۵ دقیقه اعتبار دارد. در صورت عدم نهایی‌سازی در این مدت، کلید منقضی و سهمیه آزاد می‌شود.
+3. **طول عمر لینک پخش رسانه عمومی/ویدیو (`stream-url` TTL):**
+   - حداکثر ۵ دقیقه (`300 seconds`). هر لینک پس از این مدت منقضی می‌شود و برای ادامه پخش مجدداً با اعتبارسنجی مجوز صادر می‌گردد.
+4. **سهمیه فضای ذخیره‌سازی رسانه:**
+   - هر Tenant حداکثر ۱۰ گیگابایت (`10 GiB = 10,737,418,240 bytes`) برای مجموع رسانه‌های تأییدشده و رزروهای در جریان دارد.
+
+---
+
+### ۶.۴ ترتیب قفل‌ها (Lock Ordering) و پیشگیری از Deadlock
+
+در تمامی تراکنش‌هایی که کارگاه، ثبت‌نام و خرید را درگیر می‌کنند، ترتیب اخذ قفل‌ها اجباری و تغییرناپذیر است:
+1. **قفل والد (`workshops`):**
+   ```sql
+   SELECT id, capacity, status, price_rials, registration_deadline 
+   FROM workshops 
+   WHERE tenant_id = $1 AND id = $2 
+   FOR UPDATE;
+   ```
+2. **محاسبه صندلی‌های اشغال‌شده:**
+   ```sql
+   SELECT COUNT(*) 
+   FROM workshop_registrations 
+   WHERE tenant_id = $1 AND workshop_id = $2 
+     AND (status = 'confirmed' OR (status = 'pending_payment' AND expires_at > now()));
+   ```
+3. **قفل ردیف فرزند (`workshop_registrations` یا `purchases`):**
+   در صورت چند ردیفی بودن، حتماً با `ORDER BY id ASC FOR UPDATE`.
+4. **اکیداً تماس‌های شبکه با زرین‌پال یا پارس‌پک خارج از تراکنش دیتابیس صورت می‌گیرد.**
+
+---
+
+## ۷. نقشهٔ راه تکمیل افزایشی جداول در فازهای بعدی
 
 | فاز | جداول جدید | شرح و قیدهای کلیدی |
 | --- | --- | --- |
-| **`PSY-1` (کارگاه و بلاگ)** | `workshops`<br>`workshop_registrations`<br>`purchases`<br>`payment_attempts`<br>`blog_posts`<br>`media_assets` | • قفل کارگاه روی ظرفیت صندلی‌ها<br>• ثبت‌نام مهمان با شماره تماس<br>• اسنپ‌شات ریالی در خرید و پرداخت<br>• کلیدهای خارجی ترکیبی `(tenant_id, workshop_id)` |
 | **`PSY-2` (نوبت‌دهی)** | `therapists`<br>`therapist_schedules`<br>`appointment_slots`<br>`appointments` | • تولید سانس‌های غیرهم‌پوشان<br>• قفل اتمیک سانس نوبت جهت جلوگیری از رزرو هم‌زمان<br>• ثبت تاریخچه تغییر وضعیت نوبت |
 | **`PSY-3` (دوره‌ها)** | `buyer_accounts`<br>`buyer_sessions`<br>`courses`<br>`course_lessons`<br>`course_entitlements` | • حساب مجزای خریدار مقید به Tenant<br>• دسترسی فعال به دوره با پیوند به خرید موفق<br>• عدم دسترسی به لینک‌های ویدیو بدون خرید |
 | **`PSY-4` (بهره‌برداری)** | `outbox_events` (در صورت نیاز به CDN purge) | • رویدادهای پاک‌سازی کش در همان تراکنش تغییر داده |

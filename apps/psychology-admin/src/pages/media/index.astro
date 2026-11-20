@@ -1,0 +1,303 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import type { MediaListResponse } from '@psychology/api-client';
+
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const tenantId = Astro.cookies.get('tenant_id')?.value || '4f3b7b51-7890-4e12-b345-67890abcdef1';
+const sessionToken = Astro.cookies.get('session_token')?.value || '';
+
+// Fallback demo media data
+const fallbackMedia: MediaListResponse = {
+  quota_used_bytes: 157286400, // ~150 MiB
+  quota_total_bytes: 10737418240, // 10 GiB
+  items: [
+    {
+      id: 'm1111111-1111-1111-1111-111111111111',
+      storage_key: 'assets/clinic/mindfulness_intro.mp3',
+      original_name: 'mindfulness_intro.mp3',
+      mime_type: 'audio/mpeg',
+      size_bytes: 15728640,
+      access_class: 'public',
+      validation_status: 'verified',
+      created_at: '2026-11-15T09:00:00Z',
+    },
+    {
+      id: 'm2222222-2222-2222-2222-222222222222',
+      storage_key: 'assets/clinic/neurobiology_model.mp4',
+      original_name: 'neurobiology_model.mp4',
+      mime_type: 'video/mp4',
+      size_bytes: 94371840,
+      access_class: 'public',
+      validation_status: 'verified',
+      created_at: '2026-11-17T14:00:00Z',
+    },
+    {
+      id: 'm3333333-3333-3333-3333-333333333333',
+      storage_key: 'assets/clinic/clinic_cover.webp',
+      original_name: 'clinic_cover.webp',
+      mime_type: 'image/webp',
+      size_bytes: 2097152,
+      access_class: 'public',
+      validation_status: 'verified',
+      created_at: '2026-11-18T10:30:00Z',
+    },
+  ],
+};
+
+let mediaData = fallbackMedia;
+
+try {
+  const res = await fetch(`${apiBase}/admin/media`, {
+    headers: {
+      'X-Tenant-ID': tenantId,
+      'Authorization': `Bearer ${sessionToken}`,
+    },
+    signal: AbortSignal.timeout(1000),
+  });
+  if (res.ok) {
+    mediaData = await res.json();
+  }
+} catch {
+  // Graceful fallback to demo data
+}
+
+const usedGiB = (mediaData.quota_used_bytes / (1024 * 1024 * 1024)).toFixed(2);
+const totalGiB = (mediaData.quota_total_bytes / (1024 * 1024 * 1024)).toFixed(0);
+const percentUsed = Math.min(100, Math.round((mediaData.quota_used_bytes / mediaData.quota_total_bytes) * 100));
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatDatePersian(dateStr?: string | null) {
+  if (!dateStr) return '—';
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Asia/Tehran',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+---
+
+<AdminLayout title="مدیریت رسانه‌ها و فضای ذخیره‌سازی" currentNav="media">
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Storage Quota Header Card -->
+    <div class="card" style="display: flex; flex-direction: column; gap: 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 700; color: #0f172a;">سهمیه فضای ابری کلینیک</h2>
+          <p style="font-size: 0.9rem; color: #64748b; margin-top: 0.25rem;">
+            میزان مصرف باکت اختصاصی پارس‌پک (سقف ۱۰ گیگابایت برای هر کلینیک)
+          </p>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 0.5rem;">
+          <span style="font-size: 1.5rem; font-weight: 800; color: #0284c7;">{usedGiB} گیگابایت</span>
+          <span style="color: #64748b; font-size: 0.95rem;">از {totalGiB} گیگابایت ({percentUsed}٪ مصرف شده)</span>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div style="background: #e2e8f0; height: 10px; border-radius: 9999px; overflow: hidden;">
+        <div
+          style={`background: ${percentUsed > 85 ? '#ef4444' : '#0284c7'}; width: ${Math.max(1, percentUsed)}%; height: 100%; transition: width 0.3s ease;`}
+        ></div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #64748b;">
+        <span>تعداد فایل‌های تأییدشده: {mediaData.items.length} فایل</span>
+        <span>فضای آزاد: {(10 - Number(usedGiB)).toFixed(2)} گیگابایت</span>
+      </div>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="card" style="background: #f8fafc; border: 1px dashed #cbd5e1; text-align: center; padding: 2rem 1.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 0.5rem;">
+        بارگذاری مستقیم فایل رسانه‌ای جدید
+      </h3>
+      <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem;">
+        تصاویر تا ۵MB (JPEG, PNG, WebP) · صوت بلاگ تا ۳۲MB (MP3) · ویدئو بلاگ تا ۱۲۸MB (MP4)
+      </p>
+
+      <div style="display: flex; justify-content: center; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <input type="file" id="media-file-input" style="display: none;" accept="image/jpeg,image/png,image/webp,audio/mpeg,video/mp4" />
+        <button type="button" id="btn-upload-direct" class="btn-primary">
+          📤 انتخاب و بارگذاری فایل به پارس‌پک
+        </button>
+        <span id="upload-progress-text" style="font-size: 0.85rem; color: #475569;"></span>
+      </div>
+    </div>
+
+    <!-- Media Table -->
+    <div class="card" style="padding: 0; overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+        <thead>
+          <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569;">
+            <th style="padding: 1rem 1.25rem;">نام فایل</th>
+            <th style="padding: 1rem 1.25rem;">نوع و پسوند</th>
+            <th style="padding: 1rem 1.25rem;">کلاس دسترسی</th>
+            <th style="padding: 1rem 1.25rem;">حجم</th>
+            <th style="padding: 1rem 1.25rem;">تاریخ بارگذاری</th>
+            <th style="padding: 1rem 1.25rem; text-align: center;">عملیات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {mediaData.items.length === 0 ? (
+            <tr>
+              <td colspan="6" style="padding: 3rem; text-align: center; color: #94a3b8;">
+                هنوز فایلی در کتابخانه رسانه‌ها بارگذاری نشده است.
+              </td>
+            </tr>
+          ) : (
+            mediaData.items.map((item) => (
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 1rem 1.25rem; font-weight: 600; color: #0f172a;">
+                  {item.original_name}
+                </td>
+                <td style="padding: 1rem 1.25rem; font-family: monospace; color: #64748b; font-size: 0.85rem;">
+                  {item.mime_type}
+                </td>
+                <td style="padding: 1rem 1.25rem;">
+                  <span
+                    style={`display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; background: ${item.access_class === 'public' ? '#e0f2fe' : '#fef3c7'}; color: ${item.access_class === 'public' ? '#0369a1' : '#92400e'};`}
+                  >
+                    {item.access_class === 'public' ? 'عمومی (بلاگ/سایت)' : 'خصوصی (درس)'}
+                  </span>
+                </td>
+                <td style="padding: 1rem 1.25rem; color: #475569;">
+                  {formatBytes(item.size_bytes)}
+                </td>
+                <td style="padding: 1rem 1.25rem; color: #64748b;">
+                  {formatDatePersian(item.created_at)}
+                </td>
+                <td style="padding: 1rem 1.25rem; text-align: center;">
+                  <button
+                    class="btn-copy-id"
+                    data-id={item.id}
+                    title="کپی شناسه رسانه"
+                    style="padding: 0.3rem 0.6rem; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 0.375rem; cursor: pointer; font-size: 0.8rem;"
+                  >
+                    📋 کپی ID
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+    const uploadBtn = document.getElementById('btn-upload-direct');
+    const fileInput = document.getElementById('media-file-input') as HTMLInputElement;
+    const progressText = document.getElementById('upload-progress-text');
+
+    uploadBtn?.addEventListener('click', () => fileInput?.click());
+
+    fileInput?.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      if (progressText) progressText.textContent = '⏳ در حال رزرو سهمیه و صدور آدرس آپلود...';
+
+      try {
+        // 1. Request presigned upload URL
+        const reqRes = await fetch(`${apiBase}/admin/media/upload-url`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({
+            original_name: file.name,
+            mime_type: file.type,
+            size_bytes: file.size,
+            access_class: 'public',
+          }),
+        });
+
+        if (!reqRes.ok) {
+          const err = await reqRes.json();
+          alert(`خطا: ${err.message || 'صدور مجوز رد شد.'}`);
+          if (progressText) progressText.textContent = '';
+          return;
+        }
+
+        const uploadData = await reqRes.json();
+        if (progressText) progressText.textContent = '📤 در حال ارسال مستقیم به باکت پارس‌پک...';
+
+        // 2. Direct PUT to S3
+        await fetch(uploadData.upload_url, {
+          method: 'PUT',
+          body: file,
+          headers: {
+            'Content-Type': file.type,
+          },
+        });
+
+        // 3. Finalize upload
+        if (progressText) progressText.textContent = '🔄 در حال نهایی‌سازی و اعتبارسنجی سروری...';
+        const finRes = await fetch(`${apiBase}/admin/media/finalize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({
+            upload_id: uploadData.upload_id,
+          }),
+        });
+
+        if (!finRes.ok) {
+          const finErr = await finRes.json();
+          alert(`خطا: ${finErr.message || 'نهایی‌سازی فایل با شکست مواجه شد.'}`);
+          if (progressText) progressText.textContent = '';
+          return;
+        }
+
+        alert('فایل با موفقیت بارگذاری، بررسی و در کتابخانه ثبت شد.');
+        window.location.reload();
+      } catch (err: any) {
+        alert(`خطا در آپلود: ${err.message || 'خطای شبکه'}`);
+        if (progressText) progressText.textContent = '';
+      }
+    });
+
+    document.querySelectorAll('.btn-copy-id').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        if (id) {
+          navigator.clipboard.writeText(id);
+          alert(`شناسه رسانه در کلیپ‌بورد کپی شد:\n${id}`);
+        }
+      });
+    });
+  </script>
+
+  <style>
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #0284c7;
+      color: #ffffff;
+      padding: 0.55rem 1.25rem;
+      border-radius: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary:hover {
+      background: #0369a1;
+    }
+  </style>
+</AdminLayout>

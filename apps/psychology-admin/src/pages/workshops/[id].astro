@@ -1,0 +1,426 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+
+const { id } = Astro.params;
+
+// Fallback sample data for SSR/preview
+const fallbackWorkshop = {
+  id: id || 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+  title: 'کارگاه روان‌درمانی تحلیلی و تنظیم هیجان',
+  slug: 'analytic-psychotherapy-workshop',
+  description: 'در این کارگاه چهار ساعته، به بررسی الگوهای دفاعی ناخودآگاه، شناسایی تله‌های هیجانی و تکنیک‌های عملی تنظیم خشم و اضطراب می‌پردازیم.',
+  instructor_name: 'دکتر مریم علوی',
+  starts_at: '2026-12-10T14:00:00Z',
+  ends_at: '2026-12-10T18:00:00Z',
+  registration_deadline: '2026-12-09T23:59:00Z',
+  location: 'تهران، سالن کنفرانس کلینیک مهر',
+  capacity: 20,
+  confirmed_count: 14,
+  pending_count: 2,
+  price_rials: 5000000,
+  status: 'published',
+  created_at: '2026-11-20T10:00:00Z',
+  updated_at: '2026-11-20T10:00:00Z',
+};
+
+const fallbackRegistrations = [
+  {
+    id: 'reg-001-uuid',
+    guest_name: 'سارا محمدی',
+    guest_phone: '09121112233',
+    status: 'confirmed',
+    purchase_id: 'pur-001-uuid',
+    expires_at: null,
+    created_at: '2026-11-20T11:30:00Z',
+  },
+  {
+    id: 'reg-002-uuid',
+    guest_name: 'امیرحسین رضایی',
+    guest_phone: '09359998877',
+    status: 'pending_payment',
+    purchase_id: 'pur-002-uuid',
+    expires_at: '2026-11-21T14:15:00Z',
+    created_at: '2026-11-21T14:00:00Z',
+  },
+  {
+    id: 'reg-003-uuid',
+    guest_name: 'نیلوفر کاظمی',
+    guest_phone: '09123334455',
+    status: 'expired',
+    purchase_id: null,
+    expires_at: '2026-11-20T16:15:00Z',
+    created_at: '2026-11-20T16:00:00Z',
+  },
+  {
+    id: 'reg-004-uuid',
+    guest_name: 'مهدی حسینی',
+    guest_phone: '09194445566',
+    status: 'cancelled',
+    purchase_id: null,
+    expires_at: null,
+    created_at: '2026-11-20T09:00:00Z',
+  },
+];
+
+let workshop = fallbackWorkshop;
+let registrations = fallbackRegistrations;
+
+function formatDateTehran(dateStr: string) {
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      timeZone: 'Asia/Tehran',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatPriceToman(priceRials: number) {
+  if (priceRials === 0) return 'رایگان';
+  const toman = Math.floor(priceRials / 10);
+  return `${toman.toLocaleString('fa-IR')} تومان`;
+}
+
+function getStatusBadge(st: string) {
+  switch (st) {
+    case 'published':
+      return { text: 'منتشرشده (ثبت‌نام فعال)', bg: '#dcfce7', color: '#15803d' };
+    case 'draft':
+      return { text: 'پیش‌نویس', bg: '#f1f5f9', color: '#475569' };
+    case 'closed':
+      return { text: 'بسته‌شده / پایان مهلت', bg: '#fef3c7', color: '#b45309' };
+    case 'cancelled':
+      return { text: 'لغو شده', bg: '#fee2e2', color: '#b91c1c' };
+    default:
+      return { text: st, bg: '#f1f5f9', color: '#475569' };
+  }
+}
+
+function getRegBadge(st: string) {
+  switch (st) {
+    case 'confirmed':
+      return { text: 'قطعی', bg: '#dcfce7', color: '#15803d' };
+    case 'pending_payment':
+      return { text: 'در انتظار پرداخت (رزرو ۱۵ دقیقه)', bg: '#e0f2fe', color: '#0369a1' };
+    case 'expired':
+      return { text: 'منقضی‌شده', bg: '#f1f5f9', color: '#64748b' };
+    case 'cancelled':
+      return { text: 'لغو شده', bg: '#fee2e2', color: '#b91c1c' };
+    default:
+      return { text: st, bg: '#f1f5f9', color: '#64748b' };
+  }
+}
+
+const statusBadge = getStatusBadge(workshop.status);
+const activeReservations = workshop.confirmed_count + workshop.pending_count;
+const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
+---
+
+<AdminLayout title={`مدیریت کارگاه: ${workshop.title}`} currentNav="workshops">
+  <div style="margin-bottom: 1.5rem;">
+    <a href="/workshops" style="color: #64748b; font-size: 0.9rem; text-decoration: none;">
+      ← بازگشت به فهرست کارگاه‌ها
+    </a>
+  </div>
+
+  <!-- Header Banner -->
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+          <h1 style="font-size: 1.45rem; font-weight: 800; color: #0f172a;">
+            {workshop.title}
+          </h1>
+          <span style={`display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700; background: ${statusBadge.bg}; color: ${statusBadge.color};`}>
+            {statusBadge.text}
+          </span>
+        </div>
+        <p style="color: #64748b; font-size: 0.95rem;">
+          مدرس: <strong style="color: #334155;">{workshop.instructor_name}</strong> |
+          محل: <strong style="color: #334155;">{workshop.location}</strong>
+        </p>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;" id="action-buttons">
+        {workshop.status === 'draft' && (
+          <button
+            id="btn-publish"
+            style="padding: 0.5rem 1rem; background: #16a34a; color: #ffffff; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
+          >
+            انتشار کارگاه در وب‌سایت
+          </button>
+        )}
+
+        {workshop.status === 'published' && (
+          <button
+            id="btn-close"
+            style="padding: 0.5rem 1rem; background: #d97706; color: #ffffff; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
+          >
+            پایان مهلت ثبت‌نام (بستن)
+          </button>
+        )}
+
+        {workshop.status !== 'cancelled' && (
+          <button
+            id="btn-cancel"
+            style="padding: 0.5rem 1rem; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
+          >
+            لغو کل کارگاه (مالک)
+          </button>
+        )}
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; border-top: 1px solid #f1f5f9; padding-top: 1.25rem;">
+      <div style="background: #f8fafc; padding: 0.85rem; border-radius: 0.5rem;">
+        <span style="display: block; font-size: 0.8rem; color: #64748b;">ظرفیت کل صندلی‌ها</span>
+        <strong style="font-size: 1.25rem; color: #0f172a;">{workshop.capacity} نفر</strong>
+      </div>
+      <div style="background: #f0fdf4; padding: 0.85rem; border-radius: 0.5rem;">
+        <span style="display: block; font-size: 0.8rem; color: #166534;">ثبت‌نام‌های قطعی</span>
+        <strong style="font-size: 1.25rem; color: #15803d;">{workshop.confirmed_count} نفر</strong>
+      </div>
+      <div style="background: #eff6ff; padding: 0.85rem; border-radius: 0.5rem;">
+        <span style="display: block; font-size: 0.8rem; color: #1e40af;">رزروهای موقت درگاه</span>
+        <strong style="font-size: 1.25rem; color: #1d4ed8;">{workshop.pending_count} نفر</strong>
+      </div>
+      <div style="background: #fdf4ff; padding: 0.85rem; border-radius: 0.5rem;">
+        <span style="display: block; font-size: 0.8rem; color: #86198f;">صندلی‌های خالی</span>
+        <strong style="font-size: 1.25rem; color: #a21caf;">{remainingSeats} صندلی</strong>
+      </div>
+      <div style="background: #f8fafc; padding: 0.85rem; border-radius: 0.5rem;">
+        <span style="display: block; font-size: 0.8rem; color: #64748b;">شهریه هر نفر</span>
+        <strong style="font-size: 1.1rem; color: #0284c7;">{formatPriceToman(workshop.price_rials)}</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Capacity Management Card -->
+  <div class="card" style="margin-bottom: 1.5rem; max-width: 600px;">
+    <h3 style="font-size: 1.1rem; font-weight: 700; color: #0f172a; margin-bottom: 0.5rem;">
+      تغییر ظرفیت صندلی‌های کارگاه
+    </h3>
+    <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1rem;">
+      طبق قوانین سامانه، کاهش ظرفیت به کمتر از مجموع ثبت‌نام‌های قطعی و رزروهای موقت فعال ({activeReservations} صندلی) مجاز نمی‌باشد.
+    </p>
+
+    <form id="capacity-form" style="display: flex; gap: 0.75rem; align-items: flex-end;">
+      <div style="flex: 1;">
+        <label for="capacity-input" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; color: #334155;">
+          ظرفیت جدید (حداقل {activeReservations})
+        </label>
+        <input
+          id="capacity-input"
+          type="number"
+          min={activeReservations}
+          value={workshop.capacity}
+          style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.95rem;"
+        />
+      </div>
+      <button
+        type="submit"
+        style="padding: 0.55rem 1rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
+      >
+        ثبت ظرفیت جدید
+      </button>
+    </form>
+    <div id="capacity-msg" style="display: none; margin-top: 0.75rem; font-size: 0.85rem;"></div>
+  </div>
+
+  <!-- Attendees / Registrations List -->
+  <div class="card" style="padding: 0; overflow-x: auto;">
+    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
+        فهرست ثبت‌نام‌کنندگان و شرکت‌کنندگان ({registrations.length} رکورد)
+      </h3>
+      <span style="font-size: 0.85rem; color: #64748b;">
+        امکان لغو ثبت‌نام و آزادسازی فوری صندلی توسط مسئول پذیرش یا مالک
+      </span>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+      <thead>
+        <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569;">
+          <th style="padding: 0.85rem 1.25rem; font-weight: 600;">نام شرکت‌کننده</th>
+          <th style="padding: 0.85rem 1rem; font-weight: 600;">شماره همراه</th>
+          <th style="padding: 0.85rem 1rem; font-weight: 600;">وضعیت ثبت‌نام</th>
+          <th style="padding: 0.85rem 1rem; font-weight: 600;">زمان ثبت‌نام</th>
+          <th style="padding: 0.85rem 1rem; font-weight: 600;">مهلت انقضای رزرو</th>
+          <th style="padding: 0.85rem 1.25rem; font-weight: 600; text-align: left;">عملیات پذیرش</th>
+        </tr>
+      </thead>
+      <tbody>
+        {registrations.map((reg) => {
+          const badge = getRegBadge(reg.status);
+          const isCancelable = reg.status === 'confirmed' || reg.status === 'pending_payment';
+          return (
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 0.85rem 1.25rem; font-weight: 600; color: #0f172a;">
+                {reg.guest_name}
+              </td>
+              <td style="padding: 0.85rem 1rem; color: #334155; font-family: monospace;" dir="ltr">
+                {reg.guest_phone}
+              </td>
+              <td style="padding: 0.85rem 1rem;">
+                <span style={`display: inline-block; padding: 0.2rem 0.55rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; background: ${badge.bg}; color: ${badge.color};`}>
+                  {badge.text}
+                </span>
+              </td>
+              <td style="padding: 0.85rem 1rem; color: #64748b; font-size: 0.85rem;">
+                {formatDateTehran(reg.created_at)}
+              </td>
+              <td style="padding: 0.85rem 1rem; color: #64748b; font-size: 0.85rem;">
+                {reg.expires_at ? formatDateTehran(reg.expires_at) : '—'}
+              </td>
+              <td style="padding: 0.85rem 1.25rem; text-align: left;">
+                {isCancelable ? (
+                  <button
+                    class="btn-cancel-reg"
+                    data-reg-id={reg.id}
+                    data-guest-name={reg.guest_name}
+                    style="padding: 0.35rem 0.75rem; background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;"
+                  >
+                    لغو ثبت‌نام و آزادسازی صندلی
+                  </button>
+                ) : (
+                  <span style="color: #94a3b8; font-size: 0.8rem;">غیرفعال</span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+
+  <script define:vars={{ workshopId: workshop.id, activeReservations }}>
+    // Action: Publish
+    const btnPublish = document.getElementById('btn-publish');
+    if (btnPublish) {
+      btnPublish.addEventListener('click', async () => {
+        if (!confirm('آیا از انتشار این کارگاه در وب‌سایت مطمئن هستید؟ پس از انتشار متقاضیان امکان ثبت‌نام خواهند داشت.')) return;
+        try {
+          const res = await fetch(`/admin/workshops/${workshopId}/publish`, { method: 'POST' });
+          if (res.ok) window.location.reload();
+          else alert('خطا در انتشار کارگاه.');
+        } catch {
+          alert('خطا در ارتباط با سرور.');
+        }
+      });
+    }
+
+    // Action: Close
+    const btnClose = document.getElementById('btn-close');
+    if (btnClose) {
+      btnClose.addEventListener('click', async () => {
+        if (!confirm('آیا مایل به پایان مهلت ثبت‌نام هستید؟ پس از بستن، ثبت‌نام جدید پذیرفته نمی‌شود.')) return;
+        try {
+          const res = await fetch(`/admin/workshops/${workshopId}/close`, { method: 'POST' });
+          if (res.ok) window.location.reload();
+          else alert('خطا در بستن ثبت‌نام کارگاه.');
+        } catch {
+          alert('خطا در ارتباط با سرور.');
+        }
+      });
+    }
+
+    // Action: Cancel Workshop (Owner only)
+    const btnCancel = document.getElementById('btn-cancel');
+    if (btnCancel) {
+      btnCancel.addEventListener('click', async () => {
+        const confirmed = confirm(
+          'هشدار جدی: آیا از لغو کامل کارگاه اطمینان دارید؟\n' +
+          'با لغو کارگاه، تمام صندلی‌های فعال آزاد شده و خریدهای پرداخت‌شده به صف پیگیری بازپرداخت (refund_required) مالک منتقل می‌گردند.'
+        );
+        if (!confirmed) return;
+
+        try {
+          const res = await fetch(`/admin/workshops/${workshopId}/cancel`, { method: 'POST' });
+          if (res.ok) window.location.reload();
+          else {
+            const data = await res.json().catch(() => ({}));
+            alert(data.message || 'خطا در لغو کارگاه. فقط مالک دسترسی این عملیات را دارد.');
+          }
+        } catch {
+          alert('خطا در ارتباط با سرور.');
+        }
+      });
+    }
+
+    // Capacity Form
+    const capForm = document.getElementById('capacity-form');
+    const capInput = document.getElementById('capacity-input');
+    const capMsg = document.getElementById('capacity-msg');
+
+    if (capForm && capInput && capMsg) {
+      capForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        capMsg.style.display = 'none';
+
+        const newCap = parseInt(capInput.value, 10);
+        if (newCap < activeReservations) {
+          capMsg.textContent = `کاهش ظرفیت به کمتر از ${activeReservations} صندلی فعال مجاز نمی‌باشد.`;
+          capMsg.style.color = '#dc2626';
+          capMsg.style.display = 'block';
+          return;
+        }
+
+        try {
+          const res = await fetch(`/admin/workshops/${workshopId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ capacity: newCap }),
+          });
+
+          if (res.ok) {
+            capMsg.textContent = 'ظرفیت کارگاه با موفقیت به‌روزرسانی شد.';
+            capMsg.style.color = '#16a34a';
+            capMsg.style.display = 'block';
+            setTimeout(() => window.location.reload(), 800);
+          } else {
+            const d = await res.json().catch(() => ({}));
+            capMsg.textContent = d.message || 'خطا در تغییر ظرفیت.';
+            capMsg.style.color = '#dc2626';
+            capMsg.style.display = 'block';
+          }
+        } catch {
+          capMsg.textContent = 'خطا در ارتباط با سرور.';
+          capMsg.style.color = '#dc2626';
+          capMsg.style.display = 'block';
+        }
+      });
+    }
+
+    // Cancel Individual Registration (Receptionist / Owner)
+    document.querySelectorAll('.btn-cancel-reg').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const regId = btn.getAttribute('data-reg-id');
+        const guestName = btn.getAttribute('data-guest-name');
+
+        if (!confirm(`آیا از لغو ثبت‌نام «${guestName}» اطمینان دارید؟ صندلی مربوطه بلافاصله برای سایر متقاضیان آزاد خواهد شد.`)) {
+          return;
+        }
+
+        try {
+          const res = await fetch(`/admin/workshops/${workshopId}/registrations/${regId}/cancel`, {
+            method: 'POST',
+          });
+
+          if (res.ok) {
+            alert('ثبت‌نام با موفقیت لغو و صندلی آزاد گردید.');
+            window.location.reload();
+          } else {
+            const d = await res.json().catch(() => ({}));
+            alert(d.message || 'خطا در لغو ثبت‌نام.');
+          }
+        } catch {
+          alert('خطا در ارتباط با سرور.');
+        }
+      });
+    });
+  </script>
+</AdminLayout>

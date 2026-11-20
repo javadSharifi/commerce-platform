@@ -1,0 +1,269 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import type { ContentBlock } from '@psychology/api-client';
+
+const { slug } = Astro.params;
+const host = Astro.request.headers.get('host') || 'localhost:3000';
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+
+// Fallback sample post for local dev/preview
+const fallbackPost = {
+  id: 'b1111111-1111-1111-1111-111111111111',
+  title: 'نقش خودآگاهی و تنظیم هیجان در روابط بین‌فردی',
+  slug: 'self-awareness-and-emotional-regulation',
+  seo_description: 'بررسی راهکارهای علمی و روان‌شناختی جهت تقویت خودآگاهی و بهبود مهارت‌های ارتباطی در زندگی روزمره.',
+  published_at: '2026-11-15T10:00:00Z',
+  content_blocks: [
+    {
+      type: 'heading',
+      data: { level: 2, text: 'مقدمه‌ای بر هوش هیجانی و ارتباط سالم' },
+    },
+    {
+      type: 'paragraph',
+      data: {
+        text: 'روابط بین‌فردی ستون فقرات کیفیت زندگی روانی انسان‌ها را تشکیل می‌دهند. پژوهش‌های متعدد نشان می‌دهند که توانایی درک و نام‌گذاری هیجانات خود (Emotional Granularity)، اولین گام در تنظیم پاسخ‌های هیجانی و جلوگیری از واکنش‌های تکانشگرانه در گفت‌وگوهای حساس است.',
+      },
+    },
+    {
+      type: 'heading',
+      data: { level: 3, text: 'شنیدن پادکست آموزشی مرتبط' },
+    },
+    {
+      type: 'audio',
+      data: {
+        media_id: 'm1111111-1111-1111-1111-111111111111',
+        caption: 'فایل صوتی بررسی تکنیک‌های ذهن‌آگاهی و تنظیم هیجان',
+        url: 'https://mock-storage.local/audio/emotion_regulation.mp3',
+      },
+    },
+    {
+      type: 'paragraph',
+      data: {
+        text: 'در موقعیت‌های تعارض، ایجاد یک مکث کوتاه ۳ تا ۵ ثانیه‌ای پیش از پاسخ دادن، به قشر پیش‌پیشانی مغز اجازه می‌دهد تا به ارزیابی منطقی موقعیت پرداخته و از غلبه واکنش‌های واکنشی آمیگدال جلوگیری کند.',
+      },
+    },
+    {
+      type: 'heading',
+      data: { level: 3, text: 'مشاهده ویدئوی تشریح مدل هیجانی' },
+    },
+    {
+      type: 'video',
+      data: {
+        media_id: 'm2222222-2222-2222-2222-222222222222',
+        caption: 'ویدئوی تشریحی مکانیزم‌های عصبی هیجان در تعاملات اجتماعی',
+        url: 'https://mock-storage.local/video/neurobiology_emotion.mp4',
+      },
+    },
+  ] as ContentBlock[],
+};
+
+let post = fallbackPost;
+let notFound = false;
+
+try {
+  const res = await fetch(`${apiBase}/public/blog/${encodeURIComponent(slug || '')}`, {
+    headers: { 'Host': host },
+    signal: AbortSignal.timeout(1000),
+  });
+
+  if (res.status === 404) {
+    notFound = true;
+  } else if (res.ok) {
+    post = await res.json();
+  }
+} catch {
+  // If API unreachable and not matching fallback slug, treat as not found
+  if (slug !== fallbackPost.slug) {
+    notFound = true;
+  }
+}
+
+if (notFound) {
+  return new Response('مطلب مورد نظر یافت نشد.', { status: 404, statusText: 'Not Found' });
+}
+
+// Resolve streaming URLs for audio and video blocks that have media_id
+const resolvedBlocks = await Promise.all(
+  (post.content_blocks || []).map(async (block) => {
+    if ((block.type === 'audio' || block.type === 'video') && block.data?.media_id) {
+      try {
+        const streamRes = await fetch(`${apiBase}/public/media/${block.data.media_id}/stream-url`, {
+          headers: { 'Host': host },
+          signal: AbortSignal.timeout(800),
+        });
+        if (streamRes.ok) {
+          const streamData = await streamRes.json();
+          return {
+            ...block,
+            data: {
+              ...block.data,
+              stream_url: streamData.stream_url,
+            },
+          };
+        }
+      } catch {
+        // Fallback to static URL in block data if streaming fetch fails
+      }
+    }
+    return block;
+  })
+);
+
+function formatDatePersian(dateStr?: string | null) {
+  if (!dateStr) return '';
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      dateStyle: 'full',
+      timeZone: 'Asia/Tehran',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+// Sanitize text from raw scripts/tags
+function escapeHTML(str: unknown): string {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+const canonicalUrl = `https://${host}/blog/${post.slug}`;
+---
+
+<BaseLayout
+  title={`${post.title} | وبلاگ تخصصی روان‌شناسی`}
+  description={post.seo_description}
+>
+  <Fragment slot="head">
+    <link rel="canonical" href={canonicalUrl} />
+    <meta property="og:title" content={post.title} />
+    <meta property="og:description" content={post.seo_description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:type" content="article" />
+  </Fragment>
+
+  <article style="max-width: 820px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 2.5rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+    <header style="margin-bottom: 2rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-size: 0.85rem; color: #64748b;">
+        <span>📅 تاریخ انتشار: {formatDatePersian(post.published_at)}</span>
+        <a href="/blog" style="color: #0284c7; text-decoration: none;">← بازگشت به فهرست مقالات</a>
+      </div>
+      <h1 style="font-size: 1.85rem; font-weight: 800; color: #0f172a; line-height: 1.4; margin-bottom: 1rem;">
+        {post.title}
+      </h1>
+      {post.seo_description && (
+        <p style="font-size: 1.05rem; color: #475569; line-height: 1.7; background: #f8fafc; padding: 1rem 1.25rem; border-right: 4px solid #0284c7; border-radius: 0.25rem;">
+          {post.seo_description}
+        </p>
+      )}
+    </header>
+
+    <div class="prose-content" style="display: flex; flex-direction: column; gap: 1.5rem; color: #334155; line-height: 1.9; font-size: 1.05rem;">
+      {resolvedBlocks.map((block) => {
+        if (block.type === 'paragraph') {
+          return (
+            <p style="white-space: pre-line;">
+              {block.data.text}
+            </p>
+          );
+        }
+
+        if (block.type === 'heading') {
+          const level = Number(block.data.level) || 2;
+          if (level === 2) {
+            return (
+              <h2 style="font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.4rem;">
+                {block.data.text}
+              </h2>
+            );
+          }
+          if (level === 3) {
+            return (
+              <h3 style="font-size: 1.2rem; font-weight: 700; color: #1e293b; margin-top: 1rem; margin-bottom: 0.25rem;">
+                {block.data.text}
+              </h3>
+            );
+          }
+          return (
+            <h4 style="font-size: 1.05rem; font-weight: 600; color: #334155; margin-top: 0.75rem;">
+              {block.data.text}
+            </h4>
+          );
+        }
+
+        if (block.type === 'image') {
+          const imgSrc = (block.data.stream_url || block.data.url) as string;
+          const caption = (block.data.caption as string) || '';
+          return (
+            <figure style="margin: 1.5rem 0; text-align: center;">
+              <img
+                src={imgSrc}
+                alt={caption || post.title}
+                loading="lazy"
+                style="max-width: 100%; height: auto; border-radius: 0.5rem; border: 1px solid #e2e8f0;"
+              />
+              {caption && (
+                <figcaption style="font-size: 0.85rem; color: #64748b; margin-top: 0.5rem;">
+                  {caption}
+                </figcaption>
+              )}
+            </figure>
+          );
+        }
+
+        if (block.type === 'audio') {
+          const audioSrc = (block.data.stream_url || block.data.url) as string;
+          const caption = (block.data.caption as string) || '';
+          return (
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1.25rem; margin: 1.5rem 0;">
+              {caption && (
+                <div style="font-size: 0.95rem; font-weight: 600; color: #1e293b; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <span>🎧</span>
+                  <span>{caption}</span>
+                </div>
+              )}
+              <audio
+                controls
+                preload="metadata"
+                style="width: 100%; border-radius: 0.5rem;"
+              >
+                <source src={audioSrc} type="audio/mpeg" />
+                مرورگر شما از پخش مستقیم صوت پشتیبانی نمی‌کند.
+              </audio>
+            </div>
+          );
+        }
+
+        if (block.type === 'video') {
+          const videoSrc = (block.data.stream_url || block.data.url) as string;
+          const caption = (block.data.caption as string) || '';
+          return (
+            <div style="background: #0f172a; border-radius: 0.75rem; padding: 0.75rem; margin: 1.5rem 0;">
+              <video
+                controls
+                preload="metadata"
+                playsinline
+                style="width: 100%; max-height: 480px; border-radius: 0.5rem; background: #000000;"
+              >
+                <source src={videoSrc} type="video/mp4" />
+                مرورگر شما از پخش مستقیم ویدئو پشتیبانی نمی‌کند.
+              </video>
+              {caption && (
+                <div style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin-top: 0.5rem;">
+                  {caption}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        return null;
+      })}
+    </div>
+  </article>
+</BaseLayout>
