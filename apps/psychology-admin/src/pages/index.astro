@@ -1,47 +1,282 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
+import type { TenantMetricsReport } from '@psychology/api-client';
+
+const fallbackMetrics: TenantMetricsReport = {
+  tenant_id: 'default',
+  generated_at: new Date().toISOString(),
+  workshops: {
+    total_workshops: 2,
+    published_workshops: 2,
+    draft_workshops: 0,
+    closed_workshops: 0,
+    cancelled_workshops: 0,
+    total_registrations: 28,
+    confirmed_registrations: 25,
+    pending_registrations: 2,
+    cancelled_registrations: 1,
+  },
+  booking: {
+    active_therapists: 2,
+    total_slots: 36,
+    available_slots: 14,
+    booked_slots: 18,
+    held_slots: 4,
+    total_appointments: 22,
+    confirmed_appointments: 18,
+    pending_appointments: 3,
+    completed_appointments: 15,
+    cancelled_appointments: 1,
+  },
+  courses: {
+    total_courses: 2,
+    published_courses: 2,
+    draft_courses: 0,
+    archived_courses: 0,
+    total_lessons: 12,
+    total_entitlements: 34,
+    active_entitlements: 33,
+    revoked_entitlements: 1,
+    pending_entitlements: 0,
+  },
+  financial: {
+    total_purchases: 59,
+    completed_purchases: 56,
+    pending_purchases: 2,
+    failed_purchases: 1,
+    refund_required_purchases: 0,
+    refunded_purchases: 1,
+    gross_revenue_rials: 295000000,
+    total_refunded_rials: 5000000,
+    net_revenue_rials: 290000000,
+    workshop_revenue_rials: 125000000,
+    course_revenue_rials: 170000000,
+  },
+  payment_attempts: {
+    total_attempts: 62,
+    initiated_attempts: 62,
+    verified_attempts: 56,
+    failed_attempts: 6,
+  },
+  media: {
+    total_assets: 14,
+    total_bytes: 1610612736, // ~1.5 GiB
+    storage_quota_bytes: 10737418240, // 10 GiB
+    usage_percentage_permille: 150,
+    usage_percentage: 15,
+    public_bytes: 104857600,
+    course_private_bytes: 1505755136,
+    video_count: 8,
+    audio_count: 4,
+    image_count: 2,
+  },
+};
+
+let metrics: TenantMetricsReport = fallbackMetrics;
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const sessionToken = Astro.cookies.get('session_token')?.value;
+
+if (sessionToken) {
+  try {
+    const res = await fetch(`${apiBaseUrl}/admin/reports/metrics`, {
+      headers: {
+        'Cookie': `session_token=${sessionToken}`,
+        'X-Tenant-ID': Astro.cookies.get('tenant_id')?.value || '',
+      },
+    });
+    if (res.ok) {
+      metrics = await res.json();
+    }
+  } catch {
+    // Keep fallback metrics for preview
+  }
+}
+
+function formatPriceToman(priceRials: number) {
+  const toman = Math.floor(priceRials / 10);
+  return `${toman.toLocaleString('fa-IR')} تومان`;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes === 0) return '۰ بایت';
+  const k = 1024;
+  const sizes = ['بایت', 'کیلوبایت', 'مگابایت', 'گیگابایت'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const val = Math.round((bytes / Math.pow(k, i)) * 10) / 10;
+  return `${val.toLocaleString('fa-IR')} ${sizes[i]}`;
+}
 ---
 
-<AdminLayout title="داشبورد مدیریت کلینیک" currentNav="dashboard">
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-    <div class="card">
-      <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem;">کارگاه‌های فعال</div>
-      <div style="font-size: 1.75rem; font-weight: 800; color: #0284c7;">۲ کارگاه</div>
-      <div style="font-size: 0.85rem; color: #10b981; margin-top: 0.5rem;">ظرفیت تکمیل: ۷۵٪</div>
+<AdminLayout title="داشبورد و شاخص‌های کلینیک" currentNav="dashboard">
+  <!-- هدر آمار مالی و درآمد خالص -->
+  <div style="margin-bottom: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h2 style="font-size: 1.25rem; font-weight: 800; color: #0f172a;">
+        شاخص‌های کلان کلینیک (غیرشخصی)
+      </h2>
+      <span style="font-size: 0.85rem; color: #64748b; background: #f1f5f9; padding: 0.25rem 0.75rem; border-radius: 9999px;">
+        محافظت کامل از داده‌های فردی و پزشکی (Zero PII)
+      </span>
     </div>
 
-    <div class="card">
-      <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem;">ثبت‌نام‌های اخیر</div>
-      <div style="font-size: 1.75rem; font-weight: 800; color: #0f172a;">۲۸ نفر</div>
-      <div style="font-size: 0.85rem; color: #64748b; margin-top: 0.5rem;">در ۷ روز گذشته</div>
-    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem;">
+      <!-- فروش خالص -->
+      <div class="card" style="border-right: 4px solid #10b981;">
+        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.35rem;">درآمد خالص کلینیک</div>
+        <div style="font-size: 1.6rem; font-weight: 800; color: #0f172a;">
+          {formatPriceToman(metrics.financial.net_revenue_rials)}
+        </div>
+        <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.4rem;">
+          پس از کسر {formatPriceToman(metrics.financial.total_refunded_rials)} استرداد
+        </div>
+      </div>
 
-    <div class="card">
-      <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem;">مقالات منتشرشده</div>
-      <div style="font-size: 1.75rem; font-weight: 800; color: #0f172a;">۱۲ مطلب</div>
-      <div style="font-size: 0.85rem; color: #64748b; margin-top: 0.5rem;">همراه با ۲ پادکست صوتی</div>
-    </div>
+      <!-- تفکیک فروش کارگاه و دوره -->
+      <div class="card" style="border-right: 4px solid #0284c7;">
+        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.35rem;">فروش کارگاه‌ها و دوره‌ها</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: #0284c7;">
+          کارگاه: {formatPriceToman(metrics.financial.workshop_revenue_rials)}
+        </div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: #6366f1; margin-top: 0.35rem;">
+          دوره: {formatPriceToman(metrics.financial.course_revenue_rials)}
+        </div>
+      </div>
 
-    <div class="card">
-      <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem;">وضعیت پوسته و دامنه</div>
-      <div style="font-size: 1.1rem; font-weight: 700; color: #16a34a;">فعال و تأییدشده</div>
-      <div style="font-size: 0.85rem; color: #64748b; margin-top: 0.5rem;">dr-alavi.ir</div>
+      <!-- نوبت‌های حضوری -->
+      <div class="card" style="border-right: 4px solid #8b5cf6;">
+        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.35rem;">نوبت‌های حضوری</div>
+        <div style="font-size: 1.6rem; font-weight: 800; color: #0f172a;">
+          {metrics.booking.confirmed_appointments.toLocaleString('fa-IR')} نوبت تأییدشده
+        </div>
+        <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.4rem;">
+          {metrics.booking.active_therapists.toLocaleString('fa-IR')} درمانگر فعال · {metrics.booking.available_slots.toLocaleString('fa-IR')} سانس آزاد
+        </div>
+      </div>
+
+      <!-- مصرف رسانه و فضای ابری -->
+      <div class="card" style="border-right: 4px solid #f59e0b;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.35rem;">
+          <span style="font-size: 0.85rem; color: #64748b;">سهمیه رسانه و فایل</span>
+          <span style="font-size: 0.85rem; font-weight: 700; color: #d97706;">
+            {metrics.media.usage_percentage.toLocaleString('fa-IR')}٪ مصرف‌شده
+          </span>
+        </div>
+        <div style="font-size: 1.35rem; font-weight: 800; color: #0f172a;">
+          {formatBytes(metrics.media.total_bytes)}
+        </div>
+        <!-- Progress bar -->
+        <div style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; margin-top: 0.6rem;">
+          <div style={`width: ${Math.min(metrics.media.usage_percentage, 100)}%; height: 100%; background: #f59e0b; border-radius: 9999px;`}></div>
+        </div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.4rem;">
+          سقف مجاز: {formatBytes(metrics.media.storage_quota_bytes)}
+        </div>
+      </div>
     </div>
   </div>
 
+  <!-- کارت‌های تفصیلی و وضعیت شاخص‌ها -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+    <!-- وضعیت کارگاه‌ها و آموزش -->
+    <div class="card">
+      <h3 style="font-size: 1.05rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.5rem;">
+        کارگاه‌های حضوری و دوره‌های ضبط‌شده
+      </h3>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">کل کارگاه‌ها (منتشرشده / پیش‌نویس):</span>
+          <span style="font-weight: 700; color: #0f172a;">
+            {metrics.workshops.total_workshops.toLocaleString('fa-IR')} ({metrics.workshops.published_workshops.toLocaleString('fa-IR')} / {metrics.workshops.draft_workshops.toLocaleString('fa-IR')})
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">کل ثبت‌نام‌کنندگان کارگاه:</span>
+          <span style="font-weight: 700; color: #0f172a;">
+            {metrics.workshops.total_registrations.toLocaleString('fa-IR')} نفر ({metrics.workshops.confirmed_registrations.toLocaleString('fa-IR')} قطعی)
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">دوره‌های ضبط‌شده (منتشر / آرشیو):</span>
+          <span style="font-weight: 700; color: #0f172a;">
+            {metrics.courses.total_courses.toLocaleString('fa-IR')} ({metrics.courses.published_courses.toLocaleString('fa-IR')} / {metrics.courses.archived_courses.toLocaleString('fa-IR')})
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">کل جلسات آموزشی ویدیو و صوت:</span>
+          <span style="font-weight: 700; color: #0f172a;">
+            {metrics.courses.total_lessons.toLocaleString('fa-IR')} جلسه
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">خریداران با دسترسی فعال دوره:</span>
+          <span style="font-weight: 700; color: #16a34a;">
+            {metrics.courses.active_entitlements.toLocaleString('fa-IR')} دسترسی فعال
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- پایش تراکنش‌ها و سلامت سیستم -->
+    <div class="card">
+      <h3 style="font-size: 1.05rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.5rem;">
+        پایش درگاه پرداخت و وضعیت خطاها
+      </h3>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">تلاش‌های پرداخت موفق (تأییدشده):</span>
+          <span style="font-weight: 700; color: #16a34a;">
+            {metrics.payment_attempts.verified_attempts.toLocaleString('fa-IR')} از {metrics.payment_attempts.total_attempts.toLocaleString('fa-IR')}
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">تلاش‌های ناموفق درگاه بانک:</span>
+          <span style="font-weight: 700; color: #dc2626;">
+            {metrics.payment_attempts.failed_attempts.toLocaleString('fa-IR')}
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">خریدهای نیازمند بررسی استرداد:</span>
+          <span style="font-weight: 700; color: #d97706;">
+            {metrics.financial.refund_required_purchases.toLocaleString('fa-IR')} مورد
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">فایل‌های چندرسانه‌ای ذخیره‌شده:</span>
+          <span style="font-weight: 700; color: #0f172a;">
+            {metrics.media.total_assets.toLocaleString('fa-IR')} فایل ({metrics.media.video_count.toLocaleString('fa-IR')} ویدیو · {metrics.media.audio_count.toLocaleString('fa-IR')} پادکست)
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+          <span style="color: #64748b;">نوبت‌های لغوشده کلینیک:</span>
+          <span style="font-weight: 700; color: #64748b;">
+            {metrics.booking.cancelled_appointments.toLocaleString('fa-IR')} نوبت
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- دسترسی‌های سریع -->
   <div class="card">
     <h2 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem;">
-      دسترسی‌های سریع
+      دسترسی‌های سریع به بخش‌های پنل
     </h2>
     <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-      <a href="/settings" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
-        ویرایش مشخصات و رنگ مطب ←
-      </a>
       <a href="/workshops" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
-        تعریف کارگاه جدید ←
+        مدیریت کارگاه‌ها ←
       </a>
-      <a href="/blog" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
-        نوشتن مقاله جدید ←
+      <a href="/appointments" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
+        تقویم و نوبت‌ها ←
+      </a>
+      <a href="/courses" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
+        دوره‌ها و جلسات ضبط‌شده ←
+      </a>
+      <a href="/payments" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
+        تراکنش‌ها و استرداد وجه ←
+      </a>
+      <a href="/settings" style="padding: 0.65rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-weight: 500;">
+        تنظیمات و دامنه مطب ←
       </a>
     </div>
   </div>

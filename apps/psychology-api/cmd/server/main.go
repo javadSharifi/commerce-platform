@@ -8,12 +8,14 @@ import (
 
 	"psychology/api/internal/auth"
 	"psychology/api/internal/booking"
+	"psychology/api/internal/courses"
+	"psychology/api/internal/reports"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func setupRouter(authHandler *auth.Handler, bookingHandler *booking.Handler) http.Handler {
+func setupRouter(authHandler *auth.Handler, bookingHandler *booking.Handler, coursesHandler *courses.Handler, reportsHandler *reports.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -43,7 +45,18 @@ func setupRouter(authHandler *auth.Handler, bookingHandler *booking.Handler) htt
 		if bookingHandler != nil {
 			bookingHandler.MountRoutes(v1)
 		}
+		if coursesHandler != nil {
+			coursesHandler.MountRoutes(v1)
+		}
 	})
+
+	if coursesHandler != nil {
+		coursesHandler.MountRoutes(r)
+	}
+
+	if reportsHandler != nil {
+		reportsHandler.MountRoutes(r)
+	}
 
 	return r
 }
@@ -57,7 +70,7 @@ func main() {
 		port = "8080"
 	}
 
-	router := setupRouter(nil, nil)
+	router := setupRouter(nil, nil, nil, nil)
 
 	logger.Info("starting psychology API server", "port", port)
 	if err := http.ListenAndServe(":"+port, router); err != nil {

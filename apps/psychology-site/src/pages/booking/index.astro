@@ -1,6 +1,9 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
+// Edge CDN caching: therapists directory & booking profiles
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=1800, stale-while-revalidate=60');
+
 // Fallback therapists for SSR/preview when backend is offline
 const fallbackTherapists = [
   {

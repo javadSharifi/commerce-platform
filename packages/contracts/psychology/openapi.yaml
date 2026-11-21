@@ -1676,6 +1676,646 @@ paths:
                 items:
                   $ref: '#/components/schemas/AppointmentStatusHistoryItem'
 
+  # ----------------------------------------------------
+  # PUBLIC COURSES (Phase 3 - PSY-3.1)
+  # ----------------------------------------------------
+  /public/courses:
+    get:
+      tags:
+        - Public Courses
+      summary: List published courses
+      description: Returns active published courses for the current clinic domain.
+      operationId: listPublicCourses
+      responses:
+        '200':
+          description: List of published courses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicCourseItem'
+
+  /public/courses/{slug}:
+    get:
+      tags:
+        - Public Courses
+      summary: Get course detail and syllabus
+      description: Returns course details and public syllabus outline.
+      operationId: getPublicCourse
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Course details and syllabus
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCourseDetail'
+        '404':
+          description: Course not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /public/courses/{slug}/checkout:
+    post:
+      tags:
+        - Public Courses
+      summary: Initiate single-course checkout
+      description: Initiates a payment attempt for the authenticated buyer to purchase the single course. Snapshotting price and title on backend.
+      operationId: initiateCourseCheckout
+      security:
+        - BuyerAuth: []
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseCheckoutRequest'
+      responses:
+        '200':
+          description: Payment initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseCheckoutResponse'
+        '400':
+          description: Invalid request or course already purchased
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - Buyer login required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Course not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /public/courses/{slug}/lessons/{lessonId}/preview-stream:
+    get:
+      tags:
+        - Public Courses
+      summary: Get free preview lesson streaming URL
+      description: Returns short-lived streaming URL if the lesson is marked as is_free_preview=true.
+      operationId: getPublicLessonPreviewStream
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: lessonId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Streaming URL issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonStreamResponse'
+        '403':
+          description: Lesson is not available for free preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # BUYER AUTHENTICATION & ACCOUNT (Phase 3 - PSY-3.1 / PSY-3.2)
+  # ----------------------------------------------------
+  /account/auth/otp/send:
+    post:
+      tags:
+        - Buyer Auth
+      summary: Request OTP login code
+      description: Sends a short-lived verification code to the buyer mobile phone.
+      operationId: sendBuyerOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendOTPRequest'
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendOTPResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /account/auth/otp/verify:
+    post:
+      tags:
+        - Buyer Auth
+      summary: Verify OTP code and establish session
+      description: Validates OTP code, provisions or retrieves buyer account, and sets buyer_session cookie.
+      operationId: verifyBuyerOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOTPRequest'
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyOTPResponse'
+        '400':
+          description: Invalid or expired code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /account/auth/logout:
+    post:
+      tags:
+        - Buyer Auth
+      summary: Terminate buyer session
+      description: Logs out the current buyer and clears buyer_session.
+      operationId: logoutBuyer
+      security:
+        - BuyerAuth: []
+      responses:
+        '200':
+          description: Successfully logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /account/auth/me:
+    get:
+      tags:
+        - Buyer Auth
+      summary: Get current authenticated buyer
+      operationId: getBuyerMe
+      security:
+        - BuyerAuth: []
+      responses:
+        '200':
+          description: Current buyer identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerAccountMe'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /account/courses:
+    get:
+      tags:
+        - Buyer Courses
+      summary: List purchased / entitled courses (دوره‌های من)
+      description: Returns active course entitlements for the authenticated buyer.
+      operationId: listMyCourses
+      security:
+        - BuyerAuth: []
+      responses:
+        '200':
+          description: List of active entitlements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BuyerCourseEntitlementItem'
+
+  /account/courses/{courseId}/lessons/{lessonId}/stream:
+    get:
+      tags:
+        - Buyer Courses
+      summary: Get short-lived signed streaming URL for a lesson
+      description: Verifies buyer entitlement, lesson relation, and issues a 5-minute signed streaming URL.
+      operationId: getCourseLessonStreamUrl
+      security:
+        - BuyerAuth: []
+      parameters:
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: lessonId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Signed streaming URL issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonStreamResponse'
+        '403':
+          description: Entitlement missing or inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # ADMIN COURSES & LESSONS (Phase 3 - PSY-3.1)
+  # ----------------------------------------------------
+  /admin/courses:
+    get:
+      tags:
+        - Admin Courses
+      summary: List all courses in clinic
+      operationId: listAdminCourses
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [all, draft, published, archived]
+      responses:
+        '200':
+          description: List of courses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseItem'
+    post:
+      tags:
+        - Admin Courses
+      summary: Create a new course
+      operationId: createAdminCourse
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+      responses:
+        '201':
+          description: Course created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseItem'
+
+  /admin/courses/{id}:
+    get:
+      tags:
+        - Admin Courses
+      summary: Get course detail
+      operationId: getAdminCourse
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Course detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseItem'
+    put:
+      tags:
+        - Admin Courses
+      summary: Update course
+      operationId: updateAdminCourse
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+      responses:
+        '200':
+          description: Course updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseItem'
+    delete:
+      tags:
+        - Admin Courses
+      summary: Soft-delete course
+      operationId: deleteAdminCourse
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Course deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /admin/courses/{id}/publish:
+    post:
+      tags:
+        - Admin Courses
+      summary: Publish course
+      operationId: publishAdminCourse
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Course published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseItem'
+
+  /admin/courses/{id}/archive:
+    post:
+      tags:
+        - Admin Courses
+      summary: Archive course
+      operationId: archiveAdminCourse
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Course archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseItem'
+
+  /admin/courses/{id}/lessons:
+    get:
+      tags:
+        - Admin Courses
+      summary: List lessons of a course
+      operationId: listAdminCourseLessons
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of course lessons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminLessonItem'
+    post:
+      tags:
+        - Admin Courses
+      summary: Create lesson for course
+      operationId: createAdminCourseLesson
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLessonRequest'
+      responses:
+        '201':
+          description: Lesson created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonItem'
+
+  /admin/courses/{id}/lessons/{lessonId}:
+    get:
+      tags:
+        - Admin Courses
+      summary: Get lesson detail
+      operationId: getAdminCourseLesson
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: lessonId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lesson detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonItem'
+    put:
+      tags:
+        - Admin Courses
+      summary: Update lesson
+      operationId: updateAdminCourseLesson
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: lessonId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLessonRequest'
+      responses:
+        '200':
+          description: Lesson updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonItem'
+    delete:
+      tags:
+        - Admin Courses
+      summary: Delete lesson
+      operationId: deleteAdminCourseLesson
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: lessonId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lesson deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /admin/courses/{id}/entitlements:
+    get:
+      tags:
+        - Admin Courses
+      summary: List buyer entitlements for a course
+      operationId: listAdminCourseEntitlements
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of course entitlements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseEntitlementItem'
+
+  # ----------------------------------------------------
+  # ADMIN REPORTS & ANALYTICS (Phase 4 - PSY-4.1)
+  # ----------------------------------------------------
+  /admin/reports/metrics:
+    get:
+      tags:
+        - Admin Reports
+      summary: Get non-PII aggregated tenant metrics
+      description: Returns aggregate statistics for workshops, appointments, courses, financial revenue and media usage with zero PII.
+      operationId: getAdminReportsMetrics
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: Aggregated metrics report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMetricsReport'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (Only clinic owner role allowed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     SessionAuth:
@@ -3175,4 +3815,745 @@ components:
         created_at:
           type: string
           format: date-time
+
+    # ---------------- Courses & Lessons (Phase 3 - PSY-3.1) ----------------
+    PublicCourseItem:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - instructor_name
+        - price_rials
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        instructor_name:
+          type: string
+        price_rials:
+          type: integer
+          format: int64
+        cover_media_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [published]
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        total_lessons_count:
+          type: integer
+        total_duration_seconds:
+          type: integer
+
+    PublicCourseDetail:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - instructor_name
+        - price_rials
+        - status
+        - lessons
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        instructor_name:
+          type: string
+        price_rials:
+          type: integer
+          format: int64
+        cover_media_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [published, archived]
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        lessons:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicLessonItem'
+
+    PublicLessonItem:
+      type: object
+      required:
+        - id
+        - title
+        - display_order
+        - duration_seconds
+        - is_free_preview
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        duration_seconds:
+          type: integer
+        is_free_preview:
+          type: boolean
+
+    LessonStreamResponse:
+      type: object
+      required:
+        - stream_url
+        - expires_at
+      properties:
+        stream_url:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        expires_in_seconds:
+          type: integer
+        duration_seconds:
+          type: integer
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+
+    CourseCheckoutRequest:
+      type: object
+      required:
+        - idempotency_key
+        - callback_url
+      properties:
+        idempotency_key:
+          type: string
+          example: "chk_9a8b7c6d5e"
+        callback_url:
+          type: string
+          example: "https://clinic.example.com/callbacks/payments/zarinpal"
+
+    CourseCheckoutResponse:
+      type: object
+      required:
+        - payment_attempt_id
+        - purchase_id
+        - authority
+        - payment_url
+        - amount_rials
+        - status
+      properties:
+        payment_attempt_id:
+          type: string
+          format: uuid
+        purchase_id:
+          type: string
+          format: uuid
+        authority:
+          type: string
+        payment_url:
+          type: string
+        amount_rials:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [initiated]
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ---------------- Buyer Auth & Entitlements (Phase 3 - PSY-3.1) ----------------
+    SendOTPRequest:
+      type: object
+      required:
+        - phone
+      properties:
+        phone:
+          type: string
+          example: "09123456789"
+
+    SendOTPResponse:
+      type: object
+      required:
+        - message
+        - expires_in_seconds
+      properties:
+        message:
+          type: string
+        expires_in_seconds:
+          type: integer
+          example: 120
+
+    VerifyOTPRequest:
+      type: object
+      required:
+        - phone
+        - code
+      properties:
+        phone:
+          type: string
+          example: "09123456789"
+        code:
+          type: string
+          example: "12345"
+
+    VerifyOTPResponse:
+      type: object
+      required:
+        - buyer
+      properties:
+        buyer:
+          $ref: '#/components/schemas/BuyerAccountMe'
+
+    BuyerAccountMe:
+      type: object
+      required:
+        - id
+        - phone
+        - full_name
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+        full_name:
+          type: string
+        status:
+          type: string
+          enum: [active, blocked]
+
+    BuyerCourseEntitlementItem:
+      type: object
+      required:
+        - id
+        - course_id
+        - course_title_snapshot
+        - price_rials_snapshot
+        - status
+        - granted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        course_id:
+          type: string
+          format: uuid
+        course_slug:
+          type: string
+        course_title_snapshot:
+          type: string
+        price_rials_snapshot:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [active, revoked]
+        granted_at:
+          type: string
+          format: date-time
+
+    # ---------------- Admin Courses & Lessons (Phase 3 - PSY-3.1) ----------------
+    AdminCourseItem:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - instructor_name
+        - price_rials
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        instructor_name:
+          type: string
+        price_rials:
+          type: integer
+          format: int64
+        cover_media_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [draft, published, archived]
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateCourseRequest:
+      type: object
+      required:
+        - title
+        - slug
+        - instructor_name
+        - price_rials
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        instructor_name:
+          type: string
+        price_rials:
+          type: integer
+          format: int64
+        cover_media_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    UpdateCourseRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        instructor_name:
+          type: string
+        price_rials:
+          type: integer
+          format: int64
+        cover_media_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    AdminLessonItem:
+      type: object
+      required:
+        - id
+        - course_id
+        - title
+        - display_order
+        - media_asset_id
+        - duration_seconds
+        - is_free_preview
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        course_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        media_asset_id:
+          type: string
+          format: uuid
+        duration_seconds:
+          type: integer
+        is_free_preview:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateLessonRequest:
+      type: object
+      required:
+        - title
+        - media_asset_id
+        - display_order
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        media_asset_id:
+          type: string
+          format: uuid
+        duration_seconds:
+          type: integer
+        is_free_preview:
+          type: boolean
+
+    UpdateLessonRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        media_asset_id:
+          type: string
+          format: uuid
+        duration_seconds:
+          type: integer
+        is_free_preview:
+          type: boolean
+
+    AdminCourseEntitlementItem:
+      type: object
+      required:
+        - id
+        - buyer_id
+        - buyer_phone
+        - buyer_full_name
+        - course_title_snapshot
+        - price_rials_snapshot
+        - status
+        - granted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        buyer_id:
+          type: string
+          format: uuid
+        buyer_phone:
+          type: string
+        buyer_full_name:
+          type: string
+        status:
+          type: string
+          enum: [active, revoked]
+        course_title_snapshot:
+          type: string
+        price_rials_snapshot:
+          type: integer
+          format: int64
+        granted_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        revocation_reason:
+          type: string
+          nullable: true
+
+    WorkshopMetrics:
+      type: object
+      required:
+        - total_workshops
+        - published_workshops
+        - draft_workshops
+        - closed_workshops
+        - cancelled_workshops
+        - total_registrations
+        - confirmed_registrations
+        - pending_registrations
+        - cancelled_registrations
+      properties:
+        total_workshops:
+          type: integer
+          format: int64
+        published_workshops:
+          type: integer
+          format: int64
+        draft_workshops:
+          type: integer
+          format: int64
+        closed_workshops:
+          type: integer
+          format: int64
+        cancelled_workshops:
+          type: integer
+          format: int64
+        total_registrations:
+          type: integer
+          format: int64
+        confirmed_registrations:
+          type: integer
+          format: int64
+        pending_registrations:
+          type: integer
+          format: int64
+        cancelled_registrations:
+          type: integer
+          format: int64
+
+    BookingMetrics:
+      type: object
+      required:
+        - active_therapists
+        - total_slots
+        - available_slots
+        - booked_slots
+        - held_slots
+        - total_appointments
+        - confirmed_appointments
+        - pending_appointments
+        - completed_appointments
+        - cancelled_appointments
+      properties:
+        active_therapists:
+          type: integer
+          format: int64
+        total_slots:
+          type: integer
+          format: int64
+        available_slots:
+          type: integer
+          format: int64
+        booked_slots:
+          type: integer
+          format: int64
+        held_slots:
+          type: integer
+          format: int64
+        total_appointments:
+          type: integer
+          format: int64
+        confirmed_appointments:
+          type: integer
+          format: int64
+        pending_appointments:
+          type: integer
+          format: int64
+        completed_appointments:
+          type: integer
+          format: int64
+        cancelled_appointments:
+          type: integer
+          format: int64
+
+    CourseMetrics:
+      type: object
+      required:
+        - total_courses
+        - published_courses
+        - draft_courses
+        - archived_courses
+        - total_lessons
+        - total_entitlements
+        - active_entitlements
+        - revoked_entitlements
+        - pending_entitlements
+      properties:
+        total_courses:
+          type: integer
+          format: int64
+        published_courses:
+          type: integer
+          format: int64
+        draft_courses:
+          type: integer
+          format: int64
+        archived_courses:
+          type: integer
+          format: int64
+        total_lessons:
+          type: integer
+          format: int64
+        total_entitlements:
+          type: integer
+          format: int64
+        active_entitlements:
+          type: integer
+          format: int64
+        revoked_entitlements:
+          type: integer
+          format: int64
+        pending_entitlements:
+          type: integer
+          format: int64
+
+    FinancialMetrics:
+      type: object
+      required:
+        - total_purchases
+        - completed_purchases
+        - pending_purchases
+        - failed_purchases
+        - refund_required_purchases
+        - refunded_purchases
+        - gross_revenue_rials
+        - total_refunded_rials
+        - net_revenue_rials
+        - workshop_revenue_rials
+        - course_revenue_rials
+      properties:
+        total_purchases:
+          type: integer
+          format: int64
+        completed_purchases:
+          type: integer
+          format: int64
+        pending_purchases:
+          type: integer
+          format: int64
+        failed_purchases:
+          type: integer
+          format: int64
+        refund_required_purchases:
+          type: integer
+          format: int64
+        refunded_purchases:
+          type: integer
+          format: int64
+        gross_revenue_rials:
+          type: integer
+          format: int64
+        total_refunded_rials:
+          type: integer
+          format: int64
+        net_revenue_rials:
+          type: integer
+          format: int64
+        workshop_revenue_rials:
+          type: integer
+          format: int64
+        course_revenue_rials:
+          type: integer
+          format: int64
+
+    PaymentAttemptMetrics:
+      type: object
+      required:
+        - total_attempts
+        - initiated_attempts
+        - verified_attempts
+        - failed_attempts
+      properties:
+        total_attempts:
+          type: integer
+          format: int64
+        initiated_attempts:
+          type: integer
+          format: int64
+        verified_attempts:
+          type: integer
+          format: int64
+        failed_attempts:
+          type: integer
+          format: int64
+
+    MediaMetrics:
+      type: object
+      required:
+        - total_assets
+        - total_bytes
+        - storage_quota_bytes
+        - usage_percentage_permille
+        - usage_percentage
+        - public_bytes
+        - course_private_bytes
+        - video_count
+        - audio_count
+        - image_count
+      properties:
+        total_assets:
+          type: integer
+          format: int64
+        total_bytes:
+          type: integer
+          format: int64
+        storage_quota_bytes:
+          type: integer
+          format: int64
+        usage_percentage_permille:
+          type: integer
+          format: int64
+        usage_percentage:
+          type: integer
+          format: int64
+        public_bytes:
+          type: integer
+          format: int64
+        course_private_bytes:
+          type: integer
+          format: int64
+        video_count:
+          type: integer
+          format: int64
+        audio_count:
+          type: integer
+          format: int64
+        image_count:
+          type: integer
+          format: int64
+
+    TenantMetricsReport:
+      type: object
+      required:
+        - tenant_id
+        - generated_at
+        - workshops
+        - booking
+        - courses
+        - financial
+        - payment_attempts
+        - media
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        generated_at:
+          type: string
+          format: date-time
+        workshops:
+          $ref: '#/components/schemas/WorkshopMetrics'
+        booking:
+          $ref: '#/components/schemas/BookingMetrics'
+        courses:
+          $ref: '#/components/schemas/CourseMetrics'
+        financial:
+          $ref: '#/components/schemas/FinancialMetrics'
+        payment_attempts:
+          $ref: '#/components/schemas/PaymentAttemptMetrics'
+        media:
+          $ref: '#/components/schemas/MediaMetrics'
+
 

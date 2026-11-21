@@ -67,3 +67,83 @@ WHERE wr.id IN (
 
 	return tag.RowsAffected(), nil
 }
+
+// AnonymizeExpiredAppointmentData scrubs personal contact details (guest_name, guest_phone, guest_lookup_hash, notes)
+// for appointments whose scheduled slot started more than 90 days ago, or were cancelled more than 90 days ago.
+func (c *Cleaner) AnonymizeExpiredAppointmentData(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+
+	query := `
+UPDATE appointments a
+SET 
+    guest_name = 'مراجع',
+    guest_phone = '',
+    guest_lookup_hash = '',
+    notes = '',
+    updated_at = now()
+WHERE a.id IN (
+    SELECT app.id
+    FROM appointments app
+    JOIN appointment_slots s ON s.id = app.slot_id AND s.tenant_id = app.tenant_id
+    WHERE (
+        (s.starts_at < $1) OR (app.status = 'cancelled' AND app.cancelled_at < $1)
+    )
+    AND (app.guest_phone != '' OR app.guest_name != 'مراجع' OR app.guest_lookup_hash != '' OR app.notes != '')
+    LIMIT $2
+);`
+
+	tag, err := c.db.Exec(ctx, query, cutoff, limit)
+	if err != nil {
+		return 0, fmt.Errorf("failed to anonymize expired appointments: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// PurgeExpiredOTPs permanently deletes buyer OTP records that either expired before cutoff or were consumed before cutoff.
+func (c *Cleaner) PurgeExpiredOTPs(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+
+	query := `
+DELETE FROM buyer_otp_codes
+WHERE id IN (
+    SELECT id
+    FROM buyer_otp_codes
+    WHERE expires_at < $1 OR (consumed_at IS NOT NULL AND consumed_at < $1)
+    LIMIT $2
+);`
+
+	tag, err := c.db.Exec(ctx, query, cutoff, limit)
+	if err != nil {
+		return 0, fmt.Errorf("failed to purge expired buyer otps: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// PurgeExpiredBuyerSessions permanently deletes buyer session records that expired before cutoff.
+func (c *Cleaner) PurgeExpiredBuyerSessions(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+
+	query := `
+DELETE FROM buyer_sessions
+WHERE id IN (
+    SELECT id
+    FROM buyer_sessions
+    WHERE expires_at < $1
+    LIMIT $2
+);`
+
+	tag, err := c.db.Exec(ctx, query, cutoff, limit)
+	if err != nil {
+		return 0, fmt.Errorf("failed to purge expired buyer sessions: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}

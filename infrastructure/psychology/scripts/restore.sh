@@ -37,7 +37,16 @@ BEGIN
         SELECT tablename
         FROM pg_tables
         WHERE schemaname = 'public'
-          AND tablename IN ('workshops', 'workshop_registrations', 'purchases', 'payment_attempts', 'refunds', 'blog_posts', 'media_assets', 'media_uploads')
+          AND tablename IN (
+              'domains', 'site_settings', 'memberships',
+              'workshops', 'workshop_registrations', 'purchases', 'payment_attempts', 'refunds',
+              'blog_posts', 'media_assets', 'media_uploads',
+              'therapists', 'therapist_working_hours', 'therapist_schedule_exceptions',
+              'appointment_slots', 'appointments', 'appointment_status_history',
+              'buyer_accounts', 'buyer_sessions', 'buyer_otp_codes',
+              'courses', 'course_lessons', 'course_entitlements',
+              'outbox_events'
+          )
     ) LOOP
         IF NOT EXISTS (
             SELECT 1 FROM pg_class c

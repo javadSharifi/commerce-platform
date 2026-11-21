@@ -85,6 +85,9 @@ func TestCaddyfile_CachingAndSecurityHeaders(t *testing.T) {
 	if !strings.Contains(content, "no-store, no-cache, must-revalidate, private") {
 		t.Errorf("Caddyfile missing no-store cache-control for private/dynamic routes")
 	}
+	if !strings.Contains(content, "/account*") || !strings.Contains(content, "/appointments*") {
+		t.Errorf("Caddyfile @private block missing account or appointments paths")
+	}
 
 	// 3. Security headers
 	requiredHeaders := []string{
@@ -163,5 +166,20 @@ func TestBackupAndRestoreScripts_Integrity(t *testing.T) {
 	}
 	if !strings.Contains(contentRst, "relrowsecurity = true") || !strings.Contains(contentRst, "relforcerowsecurity = true") {
 		t.Errorf("restore.sh does not verify forced RLS enforcement post-restore")
+	}
+
+	requiredRLSTables := []string{
+		"'workshops'",
+		"'appointments'",
+		"'therapists'",
+		"'courses'",
+		"'course_entitlements'",
+		"'buyer_otp_codes'",
+		"'outbox_events'",
+	}
+	for _, tbl := range requiredRLSTables {
+		if !strings.Contains(contentRst, tbl) {
+			t.Errorf("restore.sh missing RLS verification for table %s", tbl)
+		}
 	}
 }

@@ -1,0 +1,588 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+
+// Strict private no-store header: buyer course streaming & lesson playback
+Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+
+const { id } = Astro.params;
+---
+
+<BaseLayout title="پخش جلسات دوره - پنل کاربری" description="پخش آنلاین و اختصاصی ویدیو و صوت جلسات دوره آموزشی">
+  <div style="margin-bottom: 1.5rem;">
+    <a href="/account/courses" style="font-size: 0.9rem; color: #64748b; display: inline-flex; align-items: center; gap: 0.35rem;">
+      <span>←</span> بازگشت به لیست دوره‌های من
+    </a>
+  </div>
+
+  <div id="course-viewer-root" data-course-id={id}>
+    <!-- Loading State -->
+    <div id="viewer-loading" style="text-align: center; padding: 4rem 2rem; color: #64748b;">
+      <div style="display: inline-block; width: 32px; height: 32px; border: 3px solid #cbd5e1; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 1rem;"></div>
+      <p style="font-size: 1rem;">در حال بررسی دسترسی و بارگذاری اطلاعات دوره...</p>
+    </div>
+
+    <!-- Error State (Not Entitled / Revoked / Unauthenticated) -->
+    <div id="viewer-error" style="display: none; background: #ffffff; border: 1px solid #fee2e2; border-radius: 1rem; padding: 2.5rem; max-width: 540px; margin: 2rem auto; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+      <div style="font-size: 3rem; margin-bottom: 1rem; color: #ef4444;">🔒</div>
+      <h2 id="viewer-error-title" style="font-size: 1.25rem; font-weight: 700; color: #991b1b; margin-bottom: 0.75rem;">
+        عدم دسترسی به این دوره
+      </h2>
+      <p id="viewer-error-desc" style="font-size: 0.95rem; color: #64748b; margin-bottom: 1.5rem; line-height: 1.6;">
+        دسترسی معتبری برای حساب شما در این دوره یافت نشد.
+      </p>
+      <div id="viewer-error-actions" style="display: flex; gap: 1rem; justify-content: center;">
+        <a href="/account/courses" class="btn" style="background: #475569; padding: 0.6rem 1.25rem;">
+          بازگشت به دوره‌های من
+        </a>
+        <a id="btn-public-course-link" href="/courses" class="btn" style="padding: 0.6rem 1.25rem; display: none;">
+          مشاهده صفحه دوره
+        </a>
+      </div>
+    </div>
+
+    <!-- Main Player & Syllabus Grid -->
+    <div id="viewer-content" style="display: none; grid-template-columns: 1fr; lg:grid-template-columns: 2.2fr 1fr; gap: 2rem; align-items: start;">
+      <!-- Left Column: Video/Audio Player & Active Lesson Info -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <!-- Unified Media Container -->
+        <div style="background: #0f172a; border-radius: 1rem; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); position: relative; min-height: 240px; display: flex; flex-direction: column; justify-content: center;">
+          <!-- 1. Video Player Element (for video/mp4) -->
+          <video
+            id="main-video-player"
+            controls
+            playsinline
+            preload="metadata"
+            style="width: 100%; max-height: 480px; display: block; background: #000000;"
+          >
+            مرورگر شما از پخش مستقیم ویدیو پشتیبانی نمی‌کند.
+          </video>
+
+          <!-- 2. Audio/Voice Player Element (for audio/mpeg) -->
+          <div id="audio-player-wrapper" style="display: none; padding: 2.5rem 1.5rem; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff;">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1.5rem;">
+              <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); display: flex; align-items: center; justify-content: center; font-size: 1.75rem; color: #38bdf8;">
+                🎙️
+              </div>
+              <div>
+                <span style="font-size: 0.8rem; color: #94a3b8; display: block;">فایل صوتی اختصاصی جلسه</span>
+                <div id="audio-title-display" style="font-size: 1.1rem; font-weight: 700; color: #f8fafc;">جلسه صوتی</div>
+              </div>
+            </div>
+
+            <!-- Native Audio Tag -->
+            <audio id="main-audio-player" preload="metadata" style="width: 100%; filter: invert(0.9) hue-rotate(180deg); margin-bottom: 1rem;"></audio>
+
+            <!-- Extra Audio Quick Controls for Mobile Seek & Speed -->
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+              <div style="display: flex; gap: 0.5rem;">
+                <button id="btn-audio-back10" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 0.35rem 0.65rem; border-radius: 0.375rem; font-size: 0.8rem; cursor: pointer;">
+                  ↺ ۱۰ ثانیه قبل
+                </button>
+                <button id="btn-audio-fwd10" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 0.35rem 0.65rem; border-radius: 0.375rem; font-size: 0.8rem; cursor: pointer;">
+                  ↻ ۱۰ ثانیه بعد
+                </button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <label style="font-size: 0.8rem; color: #94a3b8;">سرعت پخش:</label>
+                <select id="audio-speed-select" style="background: #1e293b; color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                  <option value="0.75">۰.۷۵x</option>
+                  <option value="1.0" selected>۱.۰x (طبیعی)</option>
+                  <option value="1.25">۱.۲۵x</option>
+                  <option value="1.5">۱.۵x</option>
+                  <option value="2.0">۲.۰x</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading overlay when fetching / renewing stream URL -->
+          <div id="player-loading-overlay" style="display: none; position: absolute; inset: 0; background: rgba(15, 23, 42, 0.88); color: #ffffff; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; z-index: 10;">
+            <div style="width: 38px; height: 38px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+            <span id="player-loading-text" style="font-size: 0.9rem;">در حال صدور لینک امن و بهینه‌سازی پخش...</span>
+          </div>
+
+          <!-- Mobile buffering spinner -->
+          <div id="player-buffering-overlay" style="display: none; position: absolute; top: 1rem; left: 1rem; background: rgba(0,0,0,0.7); color: #e2e8f0; padding: 0.35rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; z-index: 5; align-items: center; gap: 0.5rem;">
+            <div style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.6s linear infinite;"></div>
+            <span>در حال دریافت داده شبکه...</span>
+          </div>
+        </div>
+
+        <!-- Lesson Meta Card -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+            <div>
+              <span id="media-type-badge" style="background: #f1f5f9; color: #475569; padding: 0.15rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.35rem; display: inline-block;">
+                ویدیو آموزشی
+              </span>
+              <h1 id="active-lesson-title" style="font-size: 1.35rem; font-weight: 800; color: #0f172a; line-height: 1.4;">
+                عنوان جلسه
+              </h1>
+            </div>
+            <span id="stream-ttl-badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 0.25rem 0.65rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600; white-space: nowrap;">
+              🔒 لینک امن فعال (اعتبار ۵ دقیقه با تمدید خودکار)
+            </span>
+          </div>
+          <p id="active-lesson-desc" style="font-size: 0.95rem; color: #475569; line-height: 1.7; margin-bottom: 1rem;">
+            توضیحات جلسه در این قسمت نمایش داده می‌شود.
+          </p>
+          <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #f1f5f9; padding-top: 1rem; font-size: 0.85rem; color: #64748b; flex-wrap: wrap; gap: 0.5rem;">
+            <span id="active-course-title">دوره: -</span>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span id="seek-status-label" style="font-size: 0.8rem; color: #10b981; display: none;">موقعیت بازنشانی شد ✓</span>
+              <button id="btn-renew-stream" style="background: none; border: 1px solid #cbd5e1; border-radius: 0.375rem; padding: 0.35rem 0.75rem; color: #475569; font-size: 0.8rem; cursor: pointer;">
+                🔄 تمدید لینک پخش
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Playlist / Lessons Outline -->
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <h2 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem;">
+          جلسات دوره
+        </h2>
+        <div id="lessons-playlist" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 520px; overflow-y: auto;">
+        </div>
+      </div>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .lesson-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #f1f5f9;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .lesson-item:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+  }
+  .lesson-item.active {
+    background: #e0f2fe;
+    border-color: #7dd3fc;
+    color: #0369a1;
+  }
+</style>
+
+<script>
+  interface LessonItem {
+    id: string;
+    title: string;
+    description?: string;
+    display_order: number;
+    duration_seconds: number;
+    is_free_preview: boolean;
+  }
+
+  interface CourseDetail {
+    id: string;
+    title: string;
+    slug: string;
+    description: string;
+    instructor_name: string;
+    status: string;
+    lessons: LessonItem[];
+  }
+
+  interface CourseEntitlement {
+    id: string;
+    course_id: string;
+    course_slug?: string;
+    course_title_snapshot: string;
+    status: 'active' | 'revoked';
+  }
+
+  const rootEl = document.getElementById('course-viewer-root');
+  const courseIdParam = rootEl?.getAttribute('data-course-id') || '';
+
+  const loadingEl = document.getElementById('viewer-loading');
+  const errorEl = document.getElementById('viewer-error');
+  const errorTitle = document.getElementById('viewer-error-title');
+  const errorDesc = document.getElementById('viewer-error-desc');
+  const publicCourseLink = document.getElementById('btn-public-course-link');
+
+  const contentEl = document.getElementById('viewer-content');
+  const videoPlayer = document.getElementById('main-video-player') as HTMLVideoElement;
+  const audioWrapper = document.getElementById('audio-player-wrapper');
+  const audioPlayer = document.getElementById('main-audio-player') as HTMLAudioElement;
+  const audioTitleDisplay = document.getElementById('audio-title-display');
+  const mediaTypeBadge = document.getElementById('media-type-badge');
+
+  const playerOverlay = document.getElementById('player-loading-overlay');
+  const playerLoadingText = document.getElementById('player-loading-text');
+  const bufferingOverlay = document.getElementById('player-buffering-overlay');
+
+  const activeTitle = document.getElementById('active-lesson-title');
+  const activeDesc = document.getElementById('active-lesson-desc');
+  const activeCourseTitle = document.getElementById('active-course-title');
+  const ttlBadge = document.getElementById('stream-ttl-badge');
+  const btnRenew = document.getElementById('btn-renew-stream');
+  const seekStatusLabel = document.getElementById('seek-status-label');
+  const playlistEl = document.getElementById('lessons-playlist');
+
+  const btnAudioBack10 = document.getElementById('btn-audio-back10');
+  const btnAudioFwd10 = document.getElementById('btn-audio-fwd10');
+  const audioSpeedSelect = document.getElementById('audio-speed-select') as HTMLSelectElement;
+
+  let currentCourse: CourseDetail | null = null;
+  let activeLesson: LessonItem | null = null;
+  let currentCourseId = courseIdParam;
+
+  let activePlayerElement: HTMLMediaElement = videoPlayer;
+  let savedPlaybackTime = 0;
+  let renewalTimeoutId: any = null;
+  let currentStreamExpiresAt = 0;
+
+  function showError(title: string, desc: string, publicSlug?: string) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (contentEl) contentEl.style.display = 'none';
+    if (errorEl) {
+      errorEl.style.display = 'block';
+      if (errorTitle) errorTitle.textContent = title;
+      if (errorDesc) errorDesc.textContent = desc;
+      if (publicCourseLink && publicSlug) {
+        publicCourseLink.style.display = 'inline-block';
+        publicCourseLink.setAttribute('href', `/courses/${encodeURIComponent(publicSlug)}`);
+      }
+    }
+  }
+
+  function formatDuration(seconds: number): string {
+    const mins = Math.round(seconds / 60);
+    return `${mins} دقیقه`;
+  }
+
+  function showBuffering(show: boolean) {
+    if (bufferingOverlay) {
+      bufferingOverlay.style.display = show ? 'flex' : 'none';
+    }
+  }
+
+  function flashSeekStatus(text: string) {
+    if (!seekStatusLabel) return;
+    seekStatusLabel.textContent = text;
+    seekStatusLabel.style.display = 'inline-block';
+    setTimeout(() => {
+      seekStatusLabel.style.display = 'none';
+    }, 2500);
+  }
+
+  // Setup buffering and progress events on both players
+  [videoPlayer, audioPlayer].forEach((player) => {
+    player.addEventListener('waiting', () => showBuffering(true));
+    player.addEventListener('playing', () => showBuffering(false));
+    player.addEventListener('canplay', () => showBuffering(false));
+    player.addEventListener('timeupdate', () => {
+      if (player.currentTime > 0) {
+        savedPlaybackTime = player.currentTime;
+      }
+    });
+
+    // Handle token expiration during playback or seek
+    player.addEventListener('error', async () => {
+      showBuffering(false);
+      if (activeLesson) {
+        console.warn('Media playback error encountered. Attempting stream renewal with Range preserve...');
+        await renewStreamUrl(true);
+      }
+    });
+  });
+
+  // Audio specific helper buttons
+  btnAudioBack10?.addEventListener('click', () => {
+    if (audioPlayer) {
+      audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 10);
+    }
+  });
+  btnAudioFwd10?.addEventListener('click', () => {
+    if (audioPlayer) {
+      audioPlayer.currentTime = Math.min(audioPlayer.duration || 99999, audioPlayer.currentTime + 10);
+    }
+  });
+  audioSpeedSelect?.addEventListener('change', () => {
+    if (audioPlayer) {
+      audioPlayer.playbackRate = parseFloat(audioSpeedSelect.value) || 1.0;
+    }
+  });
+
+  async function init() {
+    try {
+      // 1. Verify buyer session & check entitlement
+      const authRes = await fetch('/account/auth/me');
+      if (!authRes.ok) {
+        showError('ابتدا وارد حساب کاربری شوید', 'برای مشاهده جلسات این دوره، لطفاً ابتدا وارد حساب کاربری خود شوید.');
+        return;
+      }
+
+      const entRes = await fetch('/account/courses');
+      if (!entRes.ok) {
+        showError('عدم دسترسی به دوره', 'خطا در بررسی سوابق خرید دوره‌ها.');
+        return;
+      }
+
+      const entitlements: CourseEntitlement[] = await entRes.json();
+      const entitlement = entitlements.find(
+        (e) => e.course_id === courseIdParam || e.course_slug === courseIdParam
+      );
+
+      if (!entitlement) {
+        showError(
+          'دوره خریداری نشده است',
+          'شما هنوز در این دوره ثبت‌نام نکرده‌اید یا دسترسی برای این حساب صادر نشده است.',
+          courseIdParam
+        );
+        return;
+      }
+
+      if (entitlement.status === 'revoked') {
+        showError(
+          'دسترسی غیرفعال شده است',
+          'دسترسی شما به این دوره به دلیل بازپرداخت وجه یا لغو دسترسی توسط مدیر سیستم، متوقف شده است.'
+        );
+        return;
+      }
+
+      currentCourseId = entitlement.course_id;
+
+      // 2. Fetch course syllabus
+      let courseData: CourseDetail | null = null;
+      if (entitlement.course_slug) {
+        const cRes = await fetch(`/public/courses/${encodeURIComponent(entitlement.course_slug)}`);
+        if (cRes.ok) {
+          courseData = await cRes.json();
+        }
+      }
+
+      if (!courseData) {
+        courseData = {
+          id: entitlement.course_id,
+          title: entitlement.course_title_snapshot,
+          slug: entitlement.course_slug || '',
+          description: 'جلسات ضبط‌شده دوره آموزشی',
+          instructor_name: 'مدرس دوره',
+          status: 'published',
+          lessons: [],
+        };
+      }
+
+      currentCourse = courseData;
+
+      if (activeCourseTitle) {
+        activeCourseTitle.textContent = `دوره: ${currentCourse.title}`;
+      }
+
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (contentEl) contentEl.style.display = 'grid';
+
+      renderPlaylist(currentCourse.lessons);
+
+      if (currentCourse.lessons.length > 0) {
+        playLesson(currentCourse.lessons[0]);
+      }
+    } catch {
+      showError('خطا در بارگذاری دوره', 'خطا در برقراری ارتباط با سرور.');
+    }
+  }
+
+  function renderPlaylist(lessons: LessonItem[]) {
+    if (!playlistEl) return;
+    playlistEl.innerHTML = '';
+
+    if (lessons.length === 0) {
+      playlistEl.innerHTML = '<div style="color: #94a3b8; font-size: 0.9rem; text-align: center; padding: 1rem 0;">جلسه‌ای برای این دوره ثبت نشده است.</div>';
+      return;
+    }
+
+    lessons.forEach((lesson) => {
+      const el = document.createElement('div');
+      el.className = 'lesson-item';
+      el.id = `lesson-item-${lesson.id}`;
+      el.innerHTML = `
+        <span style="font-size: 0.8rem; font-weight: 700; width: 24px; height: 24px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          ${lesson.display_order}
+        </span>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 0.9rem; font-weight: 600; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${lesson.title}
+          </div>
+          <div style="font-size: 0.75rem; color: #64748b;">
+            ${formatDuration(lesson.duration_seconds)}
+          </div>
+        </div>
+      `;
+
+      el.addEventListener('click', () => {
+        savedPlaybackTime = 0;
+        playLesson(lesson);
+      });
+
+      playlistEl.appendChild(el);
+    });
+  }
+
+  async function playLesson(lesson: LessonItem) {
+    activeLesson = lesson;
+
+    if (renewalTimeoutId) {
+      clearTimeout(renewalTimeoutId);
+      renewalTimeoutId = null;
+    }
+
+    document.querySelectorAll('.lesson-item').forEach((el) => el.classList.remove('active'));
+    document.getElementById(`lesson-item-${lesson.id}`)?.classList.add('active');
+
+    if (activeTitle) activeTitle.textContent = lesson.title;
+    if (activeDesc) activeDesc.textContent = lesson.description || 'جلسه آموزشی دوره';
+    if (audioTitleDisplay) audioTitleDisplay.textContent = lesson.title;
+
+    if (playerOverlay) {
+      playerOverlay.style.display = 'flex';
+      if (playerLoadingText) playerLoadingText.textContent = 'در حال صدور لینک امن و آماده‌سازی پخش...';
+    }
+
+    try {
+      const res = await fetch(`/account/courses/${encodeURIComponent(currentCourseId)}/lessons/${encodeURIComponent(lesson.id)}/stream`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        if (errData.code === 'ENTITLEMENT_REVOKED') {
+          showError('دسترسی لغو شده است', 'دسترسی شما به این دوره لغو شده است.');
+          return;
+        }
+        if (errData.code === 'NOT_PURCHASED') {
+          showError('عدم دسترسی', 'این دوره خریداری نشده است.');
+          return;
+        }
+        throw new Error(errData.message || 'خطا در دریافت لینک پخش');
+      }
+
+      const streamData = await res.json();
+      const streamUrl = streamData.stream_url;
+      const mimeType = (streamData.mime_type || '').toLowerCase();
+      const isAudio = mimeType.startsWith('audio/') || (!mimeType && lesson.title.includes('صوت'));
+
+      if (isAudio) {
+        if (videoPlayer) {
+          videoPlayer.pause();
+          videoPlayer.style.display = 'none';
+        }
+        if (audioWrapper) audioWrapper.style.display = 'block';
+        if (mediaTypeBadge) mediaTypeBadge.textContent = '🎙️ فایل صوتی (پادکست/ویس)';
+        activePlayerElement = audioPlayer;
+      } else {
+        if (audioWrapper) {
+          audioPlayer.pause();
+          audioWrapper.style.display = 'none';
+        }
+        if (videoPlayer) videoPlayer.style.display = 'block';
+        if (mediaTypeBadge) mediaTypeBadge.textContent = '🎬 ویدیو آموزشی';
+        activePlayerElement = videoPlayer;
+      }
+
+      if (activePlayerElement && streamUrl) {
+        activePlayerElement.src = streamUrl;
+        activePlayerElement.load();
+
+        if (savedPlaybackTime > 0) {
+          activePlayerElement.currentTime = savedPlaybackTime;
+        }
+
+        activePlayerElement.play().catch(() => {
+          // Autoplay policy
+        });
+      }
+
+      currentStreamExpiresAt = new Date(streamData.expires_at).getTime() || (Date.now() + 300 * 1000);
+
+      if (ttlBadge) {
+        ttlBadge.textContent = '🔒 لینک امن فعال (اعتبار ۵ دقیقه با تمدید خودکار)';
+        ttlBadge.style.color = '#166534';
+        ttlBadge.style.background = '#f0fdf4';
+      }
+
+      scheduleRenewal(currentStreamExpiresAt);
+    } catch (err: any) {
+      if (ttlBadge) {
+        ttlBadge.textContent = '⚠️ خطا در صدور لینک پخش';
+        ttlBadge.style.color = '#dc2626';
+        ttlBadge.style.background = '#fee2e2';
+      }
+    } finally {
+      if (playerOverlay) playerOverlay.style.display = 'none';
+    }
+  }
+
+  function scheduleRenewal(expiresAtMs: number) {
+    if (renewalTimeoutId) {
+      clearTimeout(renewalTimeoutId);
+    }
+    const msUntilExpiry = expiresAtMs - Date.now();
+    const renewInMs = Math.max(10000, msUntilExpiry - 45 * 1000);
+
+    renewalTimeoutId = setTimeout(() => {
+      renewStreamUrl(false);
+    }, renewInMs);
+  }
+
+  async function renewStreamUrl(isImmediateRecovery = false) {
+    if (!activeLesson || !currentCourseId) return;
+
+    if (isImmediateRecovery && playerOverlay) {
+      playerOverlay.style.display = 'flex';
+      if (playerLoadingText) playerLoadingText.textContent = 'در حال تمدید لینک و بازنشانی موقعیت پخش...';
+    }
+
+    try {
+      const targetTime = activePlayerElement ? activePlayerElement.currentTime : savedPlaybackTime;
+      const isPlaying = activePlayerElement ? !activePlayerElement.paused : false;
+
+      const res = await fetch(`/account/courses/${encodeURIComponent(currentCourseId)}/lessons/${encodeURIComponent(activeLesson.id)}/stream`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (!data.stream_url) return;
+
+      if (activePlayerElement) {
+        activePlayerElement.src = data.stream_url;
+        activePlayerElement.currentTime = targetTime;
+        if (isPlaying) {
+          activePlayerElement.play().catch(() => {});
+        }
+      }
+
+      currentStreamExpiresAt = new Date(data.expires_at).getTime() || (Date.now() + 300 * 1000);
+      scheduleRenewal(currentStreamExpiresAt);
+
+      if (ttlBadge) {
+        ttlBadge.textContent = '🔒 لینک پخش تمدید شد (اعتبار ۵ دقیقه)';
+        ttlBadge.style.color = '#166534';
+        ttlBadge.style.background = '#f0fdf4';
+      }
+
+      if (targetTime > 0) {
+        flashSeekStatus(`موقعیت در ثانیه ${Math.round(targetTime)} حفظ شد ✓`);
+      }
+    } catch (e) {
+      console.error('Failed to renew stream URL:', e);
+    } finally {
+      if (playerOverlay) playerOverlay.style.display = 'none';
+    }
+  }
+
+  btnRenew?.addEventListener('click', () => {
+    renewStreamUrl(true);
+  });
+
+  init();
+</script>

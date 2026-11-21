@@ -117,6 +117,77 @@ func TestAppointmentTablesRLSAndConstraints(t *testing.T) {
 	}
 }
 
+func TestCourseTablesRLSAndConstraints(t *testing.T) {
+	upContentBytes, err := os.ReadFile("000006_create_courses.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000006_create_courses.up.sql: %v", err)
+	}
+	upContent := string(upContentBytes)
+
+	requiredTables := []string{
+		"buyer_accounts",
+		"buyer_sessions",
+		"buyer_otp_codes",
+		"courses",
+		"course_lessons",
+		"course_entitlements",
+	}
+
+	for _, tbl := range requiredTables {
+		if !strings.Contains(upContent, "CREATE TABLE "+tbl) {
+			t.Errorf("expected 000006 to create table %s", tbl)
+		}
+		if !strings.Contains(upContent, "ALTER TABLE "+tbl+" ENABLE ROW LEVEL SECURITY;") {
+			t.Errorf("table %s missing ENABLE ROW LEVEL SECURITY", tbl)
+		}
+		if !strings.Contains(upContent, "ALTER TABLE "+tbl+" FORCE  ROW LEVEL SECURITY;") &&
+			!strings.Contains(upContent, "ALTER TABLE "+tbl+" FORCE ROW LEVEL SECURITY;") {
+			t.Errorf("table %s missing FORCE ROW LEVEL SECURITY", tbl)
+		}
+	}
+
+	// Composite FKs
+	expectedFKs := []string{
+		"FOREIGN KEY (tenant_id, buyer_id) REFERENCES buyer_accounts(tenant_id, id)",
+		"FOREIGN KEY (tenant_id, course_id) REFERENCES courses(tenant_id, id)",
+	}
+
+	for _, fk := range expectedFKs {
+		if !strings.Contains(upContent, fk) {
+			t.Errorf("missing composite foreign key: %s", fk)
+		}
+	}
+
+	// Active entitlement uniqueness
+	if !strings.Contains(upContent, "course_entitlements_active_uq") {
+		t.Errorf("missing course_entitlements_active_uq index")
+	}
+}
+
+func TestOutboxEventsTableRLSAndConstraints(t *testing.T) {
+	upContentBytes, err := os.ReadFile("000007_create_outbox_events.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000007_create_outbox_events.up.sql: %v", err)
+	}
+	upContent := string(upContentBytes)
+
+	if !strings.Contains(upContent, "CREATE TABLE IF NOT EXISTS outbox_events") {
+		t.Errorf("expected 000007 to create table outbox_events")
+	}
+	if !strings.Contains(upContent, "ALTER TABLE outbox_events ENABLE ROW LEVEL SECURITY;") {
+		t.Errorf("table outbox_events missing ENABLE ROW LEVEL SECURITY")
+	}
+	if !strings.Contains(upContent, "ALTER TABLE outbox_events FORCE ROW LEVEL SECURITY;") {
+		t.Errorf("table outbox_events missing FORCE ROW LEVEL SECURITY")
+	}
+	if !strings.Contains(upContent, "current_setting('app.tenant_id', true)") {
+		t.Errorf("table outbox_events missing current_setting('app.tenant_id', true)")
+	}
+	if !strings.Contains(upContent, "idx_outbox_events_pending") {
+		t.Errorf("table outbox_events missing idx_outbox_events_pending")
+	}
+}
+
 func TestMigrationUpDownUpLive(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {

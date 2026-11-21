@@ -94,6 +94,9 @@ func (h *Handler) handleZarinpalCallback(w http.ResponseWriter, r *http.Request)
 	}
 
 	redirectURL := "/workshops/registrations/" + res.RegistrationID.String() + "?payment_status=" + res.Status
+	if res.CourseID != uuid.Nil {
+		redirectURL = "/account/courses?payment_status=" + res.Status + "&purchase_id=" + res.PurchaseID.String()
+	}
 	if res.RefID != "" {
 		redirectURL += "&ref_id=" + res.RefID
 	}

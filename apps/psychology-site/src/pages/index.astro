@@ -1,6 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 
+// Edge CDN and reverse proxy caching: public canonical homepage
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
+
 // In SSR mode, this can fetch from /v1/public/site; providing clean fallback data here:
 const clinic = {
   name: 'کلینیک روان‌شناسی و مشاوره مهر',

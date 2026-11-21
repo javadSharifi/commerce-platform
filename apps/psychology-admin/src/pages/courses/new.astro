@@ -1,0 +1,168 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="تعریف دوره جدید" currentNav="courses">
+  <div style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Header with Back Link -->
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #0f172a;">ایجاد پیش‌نویس دوره آموزشی جدید</h2>
+        <p style="font-size: 0.85rem; color: #64748b; margin-top: 0.25rem;">
+          اطلاعات عمومی دوره را وارد کنید. پس از ثبت می‌توانید جلسات ویدئویی یا صوتی را بارگذاری کنید.
+        </p>
+      </div>
+      <a href="/courses" style="font-size: 0.9rem; color: #64748b; text-decoration: none; display: flex; align-items: center; gap: 0.25rem;">
+        ← بازگشت به لیست دوره‌ها
+      </a>
+    </div>
+
+    <!-- Course Form Card -->
+    <div class="card">
+      <form id="create-course-form" style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <div>
+          <label class="form-label" for="title">عنوان دوره <span style="color: #ef4444;">*</span></label>
+          <input type="text" id="title" name="title" required placeholder="مثال: مدیریت جامع استرس و اضطراب" class="form-input" />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div>
+            <label class="form-label" for="slug">نامک انگلیسی (Slug) <span style="color: #ef4444;">*</span></label>
+            <input type="text" id="slug" name="slug" required placeholder="stress-management" class="form-input" dir="ltr" />
+            <span style="font-size: 0.75rem; color: #64748b;">در آدرس عمومی دوره در وب‌سایت استفاده می‌شود.</span>
+          </div>
+
+          <div>
+            <label class="form-label" for="instructor_name">نام مدرس دوره <span style="color: #ef4444;">*</span></label>
+            <input type="text" id="instructor_name" name="instructor_name" required placeholder="مثال: دکتر مریم علوی" class="form-input" />
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label" for="price_tomans">مبلغ دوره (تومان) <span style="color: #ef4444;">*</span></label>
+          <input type="number" id="price_tomans" name="price_tomans" required min="0" step="1000" placeholder="۱,۵۰۰,۰۰۰" class="form-input" />
+          <span style="font-size: 0.75rem; color: #64748b;">مبلغ در سیستم با دقت کامل ریالی ذخیره می‌شود. برای دوره‌های رایگان عدد ۰ وارد کنید.</span>
+        </div>
+
+        <div>
+          <label class="form-label" for="description">توضیحات و اهداف آموزشی دوره</label>
+          <textarea id="description" name="description" rows="5" placeholder="سرفصل‌ها، مخاطبان هدف، دستاوردها و پیش‌نیازهای دوره..." class="form-input"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
+          <a href="/courses" class="btn-secondary">انصراف</a>
+          <button type="submit" class="btn-primary" id="submit-btn">
+            ذخیره پیش‌نویس و ادامه به جلسات ➔
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <style>
+    .form-label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 0.4rem;
+    }
+    .form-input {
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.5rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+      color: #0f172a;
+      box-sizing: border-box;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: #0284c7;
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
+    }
+    .btn-primary {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 0.6rem 1.4rem;
+      border: none;
+      border-radius: 0.5rem;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .btn-primary:hover {
+      background: #0369a1;
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+      padding: 0.6rem 1.2rem;
+      border-radius: 0.5rem;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .btn-secondary:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+  </style>
+
+  <script>
+    const form = document.getElementById('create-course-form') as HTMLFormElement;
+    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'در حال ثبت...';
+
+      const formData = new FormData(form);
+      const title = String(formData.get('title') || '').trim();
+      const slug = String(formData.get('slug') || '').trim();
+      const instructor_name = String(formData.get('instructor_name') || '').trim();
+      const priceTomans = Number(formData.get('price_tomans') || 0);
+      const description = String(formData.get('description') || '').trim();
+
+      const priceRials = priceTomans * 10;
+
+      try {
+        const res = await fetch('/admin/courses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title,
+            slug,
+            instructor_name,
+            price_rials: priceRials,
+            description,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          window.location.href = `/courses/${data.id}/lessons`;
+        } else {
+          const err = await res.json();
+          alert('خطا در ثبت دوره: ' + (err.message || 'خطای نامشخص'));
+          submitBtn.disabled = false;
+          submitBtn.innerText = 'ذخیره پیش‌نویس و ادامه به جلسات ➔';
+        }
+      } catch {
+        alert('خطای ارتباط با سرور.');
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'ذخیره پیش‌نویس و ادامه به جلسات ➔';
+      }
+    });
+  </script>
+</AdminLayout>

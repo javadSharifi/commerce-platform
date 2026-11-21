@@ -26,6 +26,7 @@ var (
 	ErrDuplicateRefundReference       = errors.New("payments: refund reference number already exists")
 	ErrPurchaseAlreadyRefunded        = errors.New("payments: purchase is already refunded")
 	ErrInvalidPurchaseStatusForRefund = errors.New("payments: purchase is not in refund_required status")
+	ErrCourseAlreadyEntitled          = errors.New("payments: شما قبلاً در این دوره ثبت‌نام کرده‌اید و دسترسی شما فعال است")
 )
 
 // PaymentRequest contains parameters for initiating a payment transaction.

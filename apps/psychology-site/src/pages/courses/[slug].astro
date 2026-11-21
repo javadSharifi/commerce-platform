@@ -1,0 +1,374 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const { slug } = Astro.params;
+
+// Fallback demo course for SSR preview
+const fallbackCourse = {
+  id: 'c-demo-1',
+  title: 'دوره جامع مدیریت استرس و اضطراب فراگیر',
+  slug: slug || 'anxiety-management',
+  description: 'در این دوره تخصصی، به صورت کاربردی و گام‌به‌گام با ریشه‌های روانی و فیزیولوژیک استرس آشنا شده و تکنیک‌های استاندارد درمان شناختی رفتاری (CBT) و ذهن‌آگاهی را برای مدیریت موقعیت‌های تنش‌زا فرا می‌گیرید.',
+  instructor_name: 'دکتر مریم علوی',
+  price_rials: 12500000, // 1,250,000 Tomans
+  status: 'published',
+  lessons: [
+    {
+      id: 'l-demo-1',
+      title: 'جلسه اول: آشنایی با مکانیسم زیستی استرس و تمایز آن با اضطراب',
+      description: 'بررسی محور HPA و پاسخ جنگ یا گریز و نشانه‌های بالینی.',
+      display_order: 1,
+      duration_seconds: 1800,
+      is_free_preview: true,
+    },
+    {
+      id: 'l-demo-2',
+      title: 'جلسه دوم: شناسایی خطاهای شناختی و افکار خودکار منفی',
+      description: 'فنون ثبت روزانه افکار و به چالش کشیدن سوگیری‌های فکری.',
+      display_order: 2,
+      duration_seconds: 2400,
+      is_free_preview: false,
+    },
+    {
+      id: 'l-demo-3',
+      title: 'جلسه سوم: تکنیک‌های آرام‌سازی عضلانی پیشرونده و تنفس دیافراگمی',
+      description: 'تمرین‌های عملی هدایت‌شده برای فعال‌سازی سیستم پاراسمپاتیک.',
+      display_order: 3,
+      duration_seconds: 2100,
+      is_free_preview: false,
+    },
+  ],
+};
+
+let course = fallbackCourse;
+
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+try {
+  const host = Astro.request.headers.get('host') || 'localhost:3000';
+  const res = await fetch(`${apiBase}/public/courses/${slug}`, {
+    headers: { 'Host': host },
+    signal: AbortSignal.timeout(1000),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    if (data && data.title) {
+      course = data;
+    }
+  }
+} catch {
+  // Graceful fallback to demo data
+}
+
+function formatPriceTomans(rials: number): string {
+  if (rials <= 0) return 'رایگان';
+  const tomans = Math.floor(rials / 10);
+  return tomans.toLocaleString('fa-IR') + ' تومان';
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.round(seconds / 60);
+  return `${mins} دقیقه`;
+}
+---
+
+<BaseLayout title={course.title} description={course.description}>
+  <div style="margin-bottom: 1.5rem;">
+    <a href="/courses" style="font-size: 0.9rem; color: #64748b; display: inline-flex; align-items: center; gap: 0.35rem;">
+      <span>←</span> بازگشت به لیست دوره‌ها
+    </a>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr; lg:grid-template-columns: 2fr 1fr; gap: 2rem; align-items: start;">
+    <div style="display: flex; flex-direction: column; gap: 2rem;">
+      <!-- Hero card -->
+      <section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display: inline-block; padding: 0.25rem 0.75rem; background: #e0f2fe; color: var(--primary); border-radius: 9999px; font-size: 0.85rem; font-weight: 600; margin-bottom: 1rem;">
+          دوره آموزشی ضبط‌شده
+        </div>
+        <h1 style="font-size: 1.85rem; font-weight: 800; color: #0f172a; margin-bottom: 1rem; line-height: 1.35;">
+          {course.title}
+        </h1>
+        <div style="font-size: 1rem; color: #64748b; margin-bottom: 1.5rem;">
+          مدرس و روان‌درمانگر: <strong style="color: #1e293b;">{course.instructor_name}</strong>
+        </div>
+        <p style="font-size: 1.05rem; color: #475569; line-height: 1.8; white-space: pre-line;">
+          {course.description}
+        </p>
+      </section>
+
+      <!-- Syllabus / Lessons Outline -->
+      <section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #0f172a; margin-bottom: 1.25rem;">
+          سرفصل‌ها و جلسات دوره ({course.lessons.length} جلسه)
+        </h2>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          {course.lessons.map((lesson) => (
+            <div style="border: 1px solid #f1f5f9; background: #f8fafc; border-radius: 0.75rem; padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span style="background: #e2e8f0; color: #475569; font-weight: 700; font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  {lesson.display_order}
+                </span>
+                <div>
+                  <h3 style="font-size: 1rem; font-weight: 600; color: #1e293b; margin-bottom: 0.2rem;">
+                    {lesson.title}
+                  </h3>
+                  {lesson.description && (
+                    <p style="font-size: 0.85rem; color: #64748b;">{lesson.description}</p>
+                  )}
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
+                <span style="font-size: 0.85rem; color: #64748b;">
+                  {formatDuration(lesson.duration_seconds)}
+                </span>
+                {lesson.is_free_preview ? (
+                  <span style="background: #dcfce7; color: #15803d; padding: 0.2rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600;">
+                    پیش‌نمایش رایگان
+                  </span>
+                ) : (
+                  <span style="background: #f1f5f9; color: #94a3b8; padding: 0.2rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem;">
+                    🔒 قفل
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+
+    <!-- Sticky Checkout Sidebar -->
+    <aside style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); position: sticky; top: 1.5rem;">
+      <div style="margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid #f1f5f9;">
+        <span style="font-size: 0.9rem; color: #64748b; display: block; margin-bottom: 0.25rem;">
+          شهریه ثبت‌نام و دریافت آنی:
+        </span>
+        <div style="font-size: 1.6rem; font-weight: 800; color: #0284c7;">
+          {formatPriceTomans(course.price_rials)}
+        </div>
+        <span style="font-size: 0.8rem; color: #94a3b8; display: block; margin-top: 0.25rem;">
+          مبلغ بر حسب ریال: {course.price_rials.toLocaleString('fa-IR')} ریال
+        </span>
+      </div>
+
+      <!-- Checkout Container handled by Client JS -->
+      <div id="checkout-root" data-slug={course.slug} data-price-rials={course.price_rials}>
+        <div id="checkout-auth-checking" style="text-align: center; color: #64748b; font-size: 0.9rem; padding: 1rem 0;">
+          در حال بررسی وضعیت کاربری...
+        </div>
+
+        <!-- Authenticated State -->
+        <div id="checkout-authed" style="display: none;">
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem; padding: 0.75rem; font-size: 0.85rem; color: #166534; margin-bottom: 1.25rem;">
+            ورود با حساب: <strong id="buyer-phone-display"></strong>
+          </div>
+          <button id="btn-start-checkout" class="btn" style="width: 100%; font-size: 1rem; padding: 0.75rem; font-weight: 700;">
+            خرید و ثبت‌نام در دوره
+          </button>
+        </div>
+
+        <!-- Unauthenticated OTP Login Form -->
+        <div id="checkout-unauthed" style="display: none;">
+          <p style="font-size: 0.9rem; color: #475569; margin-bottom: 1rem;">
+            برای خرید دوره و فعال‌سازی دسترسی، شماره موبایل خود را وارد نمایید:
+          </p>
+          <div id="otp-step-phone">
+            <div style="margin-bottom: 1rem;">
+              <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+                شماره موبایل
+              </label>
+              <input
+                type="tel"
+                id="buyer-phone-input"
+                placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                dir="ltr"
+                style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 1rem;"
+              />
+            </div>
+            <button id="btn-send-otp" class="btn" style="width: 100%; padding: 0.65rem;">
+              دریافت کد تأیید ورود
+            </button>
+          </div>
+
+          <div id="otp-step-verify" style="display: none;">
+            <div style="margin-bottom: 1rem;">
+              <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+                کد ۵ رقمی ارسال‌شده
+              </label>
+              <input
+                type="text"
+                id="buyer-code-input"
+                placeholder="کد یک‌بارمصرف"
+                dir="ltr"
+                maxlength="6"
+                style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 1.1rem; text-align: center; letter-spacing: 0.25rem;"
+              />
+            </div>
+            <button id="btn-verify-otp" class="btn" style="width: 100%; padding: 0.65rem;">
+              تأیید و ادامه خرید
+            </button>
+          </div>
+        </div>
+
+        <div id="checkout-msg" style="margin-top: 1rem; font-size: 0.85rem; display: none;"></div>
+      </div>
+
+      <!-- Value Props -->
+      <div style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid #f1f5f9; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.85rem; color: #64748b;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="color: #10b981;">✓</span> دسترسی مادام‌العمر به جلسات و آپدیت‌ها
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="color: #10b981;">✓</span> فعال‌سازی خودکار و آنی دسترسی پس از پرداخت
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="color: #10b981;">✓</span> درگاه پرداخت امن بانکی شاپرک (زرین‌پال)
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="color: #10b981;">✓</span> گارانتی بازگشت وجه طبق قوانین کلینیک
+        </div>
+      </div>
+    </aside>
+  </div>
+</BaseLayout>
+
+<script>
+  const root = document.getElementById('checkout-root');
+  if (root) {
+    const slug = root.getAttribute('data-slug');
+    const checkingEl = document.getElementById('checkout-auth-checking');
+    const authedEl = document.getElementById('checkout-authed');
+    const unauthedEl = document.getElementById('checkout-unauthed');
+    const phoneDisplay = document.getElementById('buyer-phone-display');
+    const msgEl = document.getElementById('checkout-msg');
+
+    const phoneInput = document.getElementById('buyer-phone-input') as HTMLInputElement;
+    const btnSendOtp = document.getElementById('btn-send-otp') as HTMLButtonElement;
+    const stepPhone = document.getElementById('otp-step-phone');
+
+    const codeInput = document.getElementById('buyer-code-input') as HTMLInputElement;
+    const btnVerifyOtp = document.getElementById('btn-verify-otp') as HTMLButtonElement;
+    const stepVerify = document.getElementById('otp-step-verify');
+
+    const btnStartCheckout = document.getElementById('btn-start-checkout') as HTMLButtonElement;
+
+    function showMessage(text: string, isError = true) {
+      if (!msgEl) return;
+      msgEl.style.display = 'block';
+      msgEl.style.color = isError ? '#dc2626' : '#16a34a';
+      msgEl.textContent = text;
+    }
+
+    async function checkBuyerSession() {
+      try {
+        const res = await fetch('/account/auth/me');
+        if (res.ok) {
+          const buyer = await res.json();
+          if (checkingEl) checkingEl.style.display = 'none';
+          if (authedEl) authedEl.style.display = 'block';
+          if (unauthedEl) unauthedEl.style.display = 'none';
+          if (phoneDisplay) phoneDisplay.textContent = buyer.phone;
+          return;
+        }
+      } catch {
+        // Not logged in
+      }
+      if (checkingEl) checkingEl.style.display = 'none';
+      if (authedEl) authedEl.style.display = 'none';
+      if (unauthedEl) unauthedEl.style.display = 'block';
+    }
+
+    checkBuyerSession();
+
+    btnSendOtp?.addEventListener('click', async () => {
+      const phone = phoneInput?.value.trim();
+      if (!phone) {
+        showMessage('لطفاً شماره موبایل را وارد نمایید.');
+        return;
+      }
+      btnSendOtp.disabled = true;
+      btnSendOtp.textContent = 'در حال ارسال...';
+      try {
+        const res = await fetch('/account/auth/otp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showMessage('کد تأیید به شماره شما پیامک شد.', false);
+          if (stepPhone) stepPhone.style.display = 'none';
+          if (stepVerify) stepVerify.style.display = 'block';
+        } else {
+          showMessage(data.message || 'خطا در ارسال کد تأیید.');
+          btnSendOtp.disabled = false;
+          btnSendOtp.textContent = 'دریافت کد تأیید ورود';
+        }
+      } catch {
+        showMessage('خطا در برقراری ارتباط با سرور.');
+        btnSendOtp.disabled = false;
+        btnSendOtp.textContent = 'دریافت کد تأیید ورود';
+      }
+    });
+
+    btnVerifyOtp?.addEventListener('click', async () => {
+      const phone = phoneInput?.value.trim();
+      const code = codeInput?.value.trim();
+      if (!code) {
+        showMessage('لطفاً کد تأیید را وارد نمایید.');
+        return;
+      }
+      btnVerifyOtp.disabled = true;
+      btnVerifyOtp.textContent = 'در حال تأیید...';
+      try {
+        const res = await fetch('/account/auth/otp/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, code }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showMessage('ورود با موفقیت انجام شد.', false);
+          await checkBuyerSession();
+        } else {
+          showMessage(data.message || 'کد وارد شده نامعتبر است.');
+          btnVerifyOtp.disabled = false;
+          btnVerifyOtp.textContent = 'تأیید و ادامه خرید';
+        }
+      } catch {
+        showMessage('خطا در برقراری ارتباط با سرور.');
+        btnVerifyOtp.disabled = false;
+        btnVerifyOtp.textContent = 'تأیید و ادامه خرید';
+      }
+    });
+
+    btnStartCheckout?.addEventListener('click', async () => {
+      btnStartCheckout.disabled = true;
+      btnStartCheckout.textContent = 'در حال اتصال به درگاه پرداخت...';
+      try {
+        const idempotencyKey = 'chk_' + Math.random().toString(36).substring(2, 12);
+        const res = await fetch(`/public/courses/${slug}/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idempotency_key: idempotencyKey,
+            callback_url: window.location.origin + '/callbacks/payments/zarinpal',
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.payment_url) {
+          window.location.href = data.payment_url;
+        } else {
+          showMessage(data.message || 'خطا در شروع فرایند پرداخت.');
+          btnStartCheckout.disabled = false;
+          btnStartCheckout.textContent = 'خرید و ثبت‌نام در دوره';
+        }
+      } catch {
+        showMessage('خطا در برقراری ارتباط با سرور پرداخت.');
+        btnStartCheckout.disabled = false;
+        btnStartCheckout.textContent = 'خرید و ثبت‌نام در دوره';
+      }
+    });
+  }
+</script>

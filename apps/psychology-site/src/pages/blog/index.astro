@@ -1,6 +1,9 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
+// Edge CDN caching: public blog listing
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
+
 // Fallback sample posts for dev/preview when API is offline
 const fallbackPosts = [
   {

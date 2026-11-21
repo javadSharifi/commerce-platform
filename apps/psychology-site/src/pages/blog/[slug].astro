@@ -2,6 +2,9 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import type { ContentBlock } from '@psychology/api-client';
 
+// Edge CDN caching: published public blog post
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
+
 const { slug } = Astro.params;
 const host = Astro.request.headers.get('host') || 'localhost:3000';
 const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';

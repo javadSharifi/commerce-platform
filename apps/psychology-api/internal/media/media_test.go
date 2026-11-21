@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -901,3 +904,365 @@ func TestAdminMediaEndpointsAndRoles(t *testing.T) {
 		t.Errorf("expected 1048576 used bytes, got %d", listRes.QuotaUsedBytes)
 	}
 }
+
+// PSY-3.6: Test rejection of playlists (m3u8, mpd, pls) and incompatible video/audio containers
+func TestPlaylistAndIncompatibleContainerRejection(t *testing.T) {
+	tests := []struct {
+		name         string
+		accessClass  string
+		originalName string
+		mimeType     string
+		sizeBytes    int64
+		wantErr      error
+	}{
+		{
+			name:         "Reject HLS m3u8 playlist extension",
+			accessClass:  "course_private",
+			originalName: "lesson_stream.m3u8",
+			mimeType:     "video/mp4",
+			sizeBytes:    1024 * 1024,
+			wantErr:      ErrDisallowedPlaylist,
+		},
+		{
+			name:         "Reject DASH mpd manifest",
+			accessClass:  "course_private",
+			originalName: "manifest.mpd",
+			mimeType:     "video/mp4",
+			sizeBytes:    1024 * 1024,
+			wantErr:      ErrDisallowedPlaylist,
+		},
+		{
+			name:         "Reject M3U audio playlist",
+			accessClass:  "course_private",
+			originalName: "playlist.m3u",
+			mimeType:     "audio/mpeg",
+			sizeBytes:    512 * 1024,
+			wantErr:      ErrDisallowedPlaylist,
+		},
+		{
+			name:         "Reject PLS audio playlist",
+			accessClass:  "course_private",
+			originalName: "radio.pls",
+			mimeType:     "audio/mpeg",
+			sizeBytes:    512 * 1024,
+			wantErr:      ErrDisallowedPlaylist,
+		},
+		{
+			name:         "Reject Transport Stream segment",
+			accessClass:  "course_private",
+			originalName: "segment_001.ts",
+			mimeType:     "video/mp4",
+			sizeBytes:    1024 * 1024,
+			wantErr:      ErrDisallowedPlaylist,
+		},
+		{
+			name:         "Reject playlist mime type x-mpegurl",
+			accessClass:  "course_private",
+			originalName: "stream.bin",
+			mimeType:     "application/x-mpegURL",
+			sizeBytes:    1024 * 1024,
+			wantErr:      ErrDisallowedPlaylist,
+		},
+		{
+			name:         "Reject playlist mime type vnd.apple.mpegurl",
+			accessClass:  "course_private",
+			originalName: "stream.bin",
+			mimeType:     "application/vnd.apple.mpegurl",
+			sizeBytes:    1024 * 1024,
+			wantErr:      ErrDisallowedPlaylist,
+		},
+		{
+			name:         "Reject incompatible MKV video container",
+			accessClass:  "course_private",
+			originalName: "recorded_session.mkv",
+			mimeType:     "video/mp4",
+			sizeBytes:    50 * 1024 * 1024,
+			wantErr:      ErrIncompatibleMediaContainer,
+		},
+		{
+			name:         "Reject incompatible AVI video container",
+			accessClass:  "course_private",
+			originalName: "lecture.avi",
+			mimeType:     "video/mp4",
+			sizeBytes:    50 * 1024 * 1024,
+			wantErr:      ErrIncompatibleMediaContainer,
+		},
+		{
+			name:         "Reject incompatible FLV video container",
+			accessClass:  "course_private",
+			originalName: "video.flv",
+			mimeType:     "video/mp4",
+			sizeBytes:    20 * 1024 * 1024,
+			wantErr:      ErrIncompatibleMediaContainer,
+		},
+		{
+			name:         "Reject incompatible WMV video container",
+			accessClass:  "course_private",
+			originalName: "clip.wmv",
+			mimeType:     "video/mp4",
+			sizeBytes:    20 * 1024 * 1024,
+			wantErr:      ErrIncompatibleMediaContainer,
+		},
+		{
+			name:         "Reject incompatible WAV audio container (only MP3 allowed)",
+			accessClass:  "course_private",
+			originalName: "voice_note.wav",
+			mimeType:     "audio/mpeg",
+			sizeBytes:    10 * 1024 * 1024,
+			wantErr:      ErrIncompatibleMediaContainer,
+		},
+		{
+			name:         "Reject incompatible OGG audio container",
+			accessClass:  "course_private",
+			originalName: "audio.ogg",
+			mimeType:     "audio/mpeg",
+			sizeBytes:    10 * 1024 * 1024,
+			wantErr:      ErrIncompatibleMediaContainer,
+		},
+		{
+			name:         "Reject executable extension",
+			accessClass:  "public",
+			originalName: "malicious.exe",
+			mimeType:     "image/png",
+			sizeBytes:    1024,
+			wantErr:      ErrInvalidMimeType,
+		},
+		{
+			name:         "Accept valid MP4 video for course",
+			accessClass:  "course_private",
+			originalName: "session_01_cbt.mp4",
+			mimeType:     "video/mp4",
+			sizeBytes:    150 * 1024 * 1024,
+			wantErr:      nil,
+		},
+		{
+			name:         "Accept valid MP3 audio for course voice",
+			accessClass:  "course_private",
+			originalName: "guided_meditation.mp3",
+			mimeType:     "audio/mpeg",
+			sizeBytes:    25 * 1024 * 1024,
+			wantErr:      nil,
+		},
+		{
+			name:         "Accept valid JPEG image for public blog",
+			accessClass:  "public",
+			originalName: "cover_art.jpg",
+			mimeType:     "image/jpeg",
+			sizeBytes:    2 * 1024 * 1024,
+			wantErr:      nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateMediaFile(tt.accessClass, tt.originalName, tt.mimeType, tt.sizeBytes)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected error %v, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+// PSY-3.6: Test HTTP Range request handling and seek support on target bucket storage
+func TestPresignedGetURL_RangeAndSeekSupport(t *testing.T) {
+	// 1. Verify S3StorageProvider sets SignedHeaders to 'host' only
+	// (so that browser Range headers during seeking do not invalidate AWS SigV4)
+	s3Provider := NewS3StorageProvider(S3Config{
+		Endpoint:        "https://s3.ir-tbz-sh1.arvanstorage.ir",
+		Bucket:          "psychology-media",
+		Region:          "ir-tbz-sh1",
+		AccessKeyID:     "test-access-key",
+		SecretAccessKey: "test-secret-key",
+	})
+
+	presignedURL, err := s3Provider.PresignGetURL(context.Background(), "assets/tenant1/lesson.mp4", 300*time.Second)
+	if err != nil {
+		t.Fatalf("PresignGetURL failed: %v", err)
+	}
+
+	parsed, err := url.Parse(presignedURL)
+	if err != nil {
+		t.Fatalf("failed to parse presigned url: %v", err)
+	}
+
+	signedHeaders := parsed.Query().Get("X-Amz-SignedHeaders")
+	if signedHeaders != "host" {
+		t.Fatalf("expected X-Amz-SignedHeaders='host', got '%s'", signedHeaders)
+	}
+
+	// 2. Simulate S3 target bucket handling Range requests (as in Parspack / S3 bucket)
+	const totalSize = 100000 // 100 KB test media content
+	fileData := make([]byte, totalSize)
+	for i := range fileData {
+		fileData[i] = byte(i % 256)
+	}
+
+	// Create a mock S3 server that implements standard RFC 7233 HTTP Range requests
+	s3Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Type", "video/mp4")
+
+		rangeHeader := r.Header.Get("Range")
+		if rangeHeader == "" {
+			// Full content request
+			w.Header().Set("Content-Length", strconv.Itoa(totalSize))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(fileData)
+			return
+		}
+
+		// Parse Range: bytes=start-end
+		if !strings.HasPrefix(rangeHeader, "bytes=") {
+			http.Error(w, "invalid range", http.StatusBadRequest)
+			return
+		}
+
+		rangeSpec := strings.TrimPrefix(rangeHeader, "bytes=")
+		parts := strings.Split(rangeSpec, "-")
+		if len(parts) != 2 {
+			http.Error(w, "invalid range", http.StatusBadRequest)
+			return
+		}
+
+		start, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil || start < 0 || start >= totalSize {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", totalSize))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+
+		end := int64(totalSize - 1)
+		if parts[1] != "" {
+			parsedEnd, err := strconv.ParseInt(parts[1], 10, 64)
+			if err == nil && parsedEnd >= start && parsedEnd < totalSize {
+				end = parsedEnd
+			}
+		}
+
+		contentLength := end - start + 1
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, totalSize))
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(fileData[start : end+1])
+	}))
+	defer s3Server.Close()
+
+	// Test A: Full request without Range
+	resFull, err := http.Get(s3Server.URL + "/assets/test.mp4")
+	if err != nil {
+		t.Fatalf("full request failed: %v", err)
+	}
+	defer resFull.Body.Close()
+	if resFull.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 OK for full request, got %d", resFull.StatusCode)
+	}
+	if resFull.Header.Get("Accept-Ranges") != "bytes" {
+		t.Errorf("expected Accept-Ranges: bytes, got %s", resFull.Header.Get("Accept-Ranges"))
+	}
+
+	// Test B: Initial mobile playback chunk (Range: bytes=0-1023)
+	reqChunk, _ := http.NewRequest(http.MethodGet, s3Server.URL+"/assets/test.mp4", nil)
+	reqChunk.Header.Set("Range", "bytes=0-1023")
+	resChunk, err := http.DefaultClient.Do(reqChunk)
+	if err != nil {
+		t.Fatalf("chunk request failed: %v", err)
+	}
+	defer resChunk.Body.Close()
+
+	if resChunk.StatusCode != http.StatusPartialContent {
+		t.Fatalf("expected 206 Partial Content, got %d", resChunk.StatusCode)
+	}
+	if resChunk.Header.Get("Content-Range") != "bytes 0-1023/100000" {
+		t.Errorf("expected Content-Range 'bytes 0-1023/100000', got '%s'", resChunk.Header.Get("Content-Range"))
+	}
+	bodyChunk := make([]byte, 1024)
+	n, _ := resChunk.Body.Read(bodyChunk)
+	if n != 1024 {
+		t.Errorf("expected 1024 bytes read, got %d", n)
+	}
+
+	// Test C: Seek request (Range: bytes=50000-74999) - user seeks to 50%
+	reqSeek, _ := http.NewRequest(http.MethodGet, s3Server.URL+"/assets/test.mp4", nil)
+	reqSeek.Header.Set("Range", "bytes=50000-74999")
+	resSeek, err := http.DefaultClient.Do(reqSeek)
+	if err != nil {
+		t.Fatalf("seek request failed: %v", err)
+	}
+	defer resSeek.Body.Close()
+
+	if resSeek.StatusCode != http.StatusPartialContent {
+		t.Fatalf("expected 206 Partial Content on seek, got %d", resSeek.StatusCode)
+	}
+	if resSeek.Header.Get("Content-Range") != "bytes 50000-74999/100000" {
+		t.Errorf("expected Content-Range 'bytes 50000-74999/100000', got '%s'", resSeek.Header.Get("Content-Range"))
+	}
+	if resSeek.Header.Get("Content-Length") != "25000" {
+		t.Errorf("expected Content-Length '25000', got '%s'", resSeek.Header.Get("Content-Length"))
+	}
+
+	// Test D: Invalid Range beyond file bounds -> 416 Range Not Satisfiable
+	reqInvalid, _ := http.NewRequest(http.MethodGet, s3Server.URL+"/assets/test.mp4", nil)
+	reqInvalid.Header.Set("Range", "bytes=200000-300000")
+	resInvalid, err := http.DefaultClient.Do(reqInvalid)
+	if err != nil {
+		t.Fatalf("invalid range request failed: %v", err)
+	}
+	defer resInvalid.Body.Close()
+
+	if resInvalid.StatusCode != http.StatusRequestedRangeNotSatisfiable {
+		t.Fatalf("expected 416 Requested Range Not Satisfiable, got %d", resInvalid.StatusCode)
+	}
+}
+
+// PSY-3.6: Test stream output includes MIME type and size bytes for mobile audio/video player mode selection
+func TestMediaStreamingOutputMimeAndSize(t *testing.T) {
+	db := newMockMediaQuerier()
+	storage := NewMockStorageProvider()
+	svc := NewService(db, storage)
+
+	tenantID := uuid.New()
+	assetID := uuid.New()
+	storageKey := fmt.Sprintf("assets/%s/%s_lesson.mp3", tenantID.String(), assetID.String())
+
+	var tid pgtype.UUID
+	_ = tid.Scan(tenantID.String())
+	var aid pgtype.UUID
+	_ = aid.Scan(assetID.String())
+
+	key := fmt.Sprintf("%s:%s", tenantID.String(), assetID.String())
+	db.assets[key] = mediadb.MediaAsset{
+		ID:               aid,
+		TenantID:         tid,
+		StorageKey:       storageKey,
+		OriginalName:     "guided_meditation.mp3",
+		MimeType:         "audio/mpeg",
+		SizeBytes:        15 * 1024 * 1024,
+		AccessClass:      "course_private",
+		ValidationStatus: "verified",
+	}
+
+	storage.PutMockObject(storageKey, &ObjectMeta{
+		Key:         storageKey,
+		Size:        15 * 1024 * 1024,
+		ContentType: "audio/mpeg",
+	})
+
+	out, err := svc.GetCoursePrivateStreamURL(context.Background(), tenantID, assetID)
+	if err != nil {
+		t.Fatalf("GetCoursePrivateStreamURL failed: %v", err)
+	}
+
+	if out.MimeType != "audio/mpeg" {
+		t.Errorf("expected MimeType 'audio/mpeg', got '%s'", out.MimeType)
+	}
+	if out.SizeBytes != 15*1024*1024 {
+		t.Errorf("expected SizeBytes 15728640, got %d", out.SizeBytes)
+	}
+	if out.ExpiresInSeconds != 300 {
+		t.Errorf("expected ExpiresInSeconds 300, got %d", out.ExpiresInSeconds)
+	}
+	if !strings.Contains(out.StreamURL, "ttl=300") {
+		t.Errorf("expected stream url to include ttl=300, got %s", out.StreamURL)
+	}
+}
+

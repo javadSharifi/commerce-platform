@@ -64,6 +64,83 @@ type BlogPost struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type BuyerAccount struct {
+	ID        pgtype.UUID
+	TenantID  pgtype.UUID
+	Phone     string
+	FullName  string
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type BuyerOtpCode struct {
+	ID         pgtype.UUID
+	TenantID   pgtype.UUID
+	Phone      string
+	CodeHash   string
+	ExpiresAt  pgtype.Timestamptz
+	ConsumedAt pgtype.Timestamptz
+	Attempts   int32
+	CreatedAt  pgtype.Timestamptz
+}
+
+type BuyerSession struct {
+	ID        pgtype.UUID
+	TenantID  pgtype.UUID
+	BuyerID   pgtype.UUID
+	TokenHash string
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+type Course struct {
+	ID             pgtype.UUID
+	TenantID       pgtype.UUID
+	Title          string
+	Slug           string
+	Description    string
+	InstructorName string
+	PriceRials     int64
+	CoverMediaID   pgtype.UUID
+	Status         string
+	PublishedAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
+type CourseEntitlement struct {
+	ID                  pgtype.UUID
+	TenantID            pgtype.UUID
+	BuyerID             pgtype.UUID
+	CourseID            pgtype.UUID
+	PurchaseID          pgtype.UUID
+	Status              string
+	CourseTitleSnapshot string
+	PriceRialsSnapshot  int64
+	GrantedAt           pgtype.Timestamptz
+	RevokedAt           pgtype.Timestamptz
+	RevocationReason    pgtype.Text
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+}
+
+type CourseLesson struct {
+	ID              pgtype.UUID
+	TenantID        pgtype.UUID
+	CourseID        pgtype.UUID
+	Title           string
+	Description     string
+	DisplayOrder    int32
+	MediaAssetID    pgtype.UUID
+	DurationSeconds int32
+	IsFreePreview   bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
 type Domain struct {
 	ID         pgtype.UUID
 	TenantID   pgtype.UUID

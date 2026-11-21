@@ -1,0 +1,391 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import type { AdminCourseItem, AdminLessonItem } from '@psychology/api-client';
+
+const { id } = Astro.params;
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const tenantId = Astro.cookies.get('tenant_id')?.value || '4f3b7b51-7890-4e12-b345-67890abcdef1';
+const sessionToken = Astro.cookies.get('session_token')?.value || '';
+
+// Fallback demo course & lessons
+let course: AdminCourseItem = {
+  id: id || 'c1111111-1111-1111-1111-111111111111',
+  title: 'مدیریت جامع اضطراب و نشخوار فکری',
+  slug: 'anxiety-management',
+  description: 'مهارت‌های شناختی-رفتاری برای مهار استرس روزمره',
+  instructor_name: 'دکتر مریم علوی',
+  price_rials: 15000000,
+  status: 'published',
+  lessons_count: 3,
+  published_at: '2026-11-10T10:00:00Z',
+  created_at: '2026-11-10T10:00:00Z',
+  updated_at: '2026-11-10T10:00:00Z',
+};
+
+let lessons: AdminLessonItem[] = [
+  {
+    id: 'l1111111-1111-1111-1111-111111111111',
+    tenant_id: tenantId,
+    course_id: id || 'c111',
+    title: 'درس اول: فیزیولوژی اضطراب و سیستم عصبی',
+    description: 'بررسی ریشه‌های تکاملی و جسمانی برانگیختگی هیجانی',
+    display_order: 1,
+    media_asset_id: 'm1111111-1111-1111-1111-111111111111',
+    duration_seconds: 1200,
+    is_free_preview: true,
+    created_at: '2026-11-10T10:00:00Z',
+    updated_at: '2026-11-10T10:00:00Z',
+  },
+  {
+    id: 'l2222222-2222-2222-2222-222222222222',
+    tenant_id: tenantId,
+    course_id: id || 'c111',
+    title: 'درس دوم: تکنیک‌های فوری آرام‌سازی و تنفس دیافراگمی',
+    description: 'تمرین‌های تنفسی ۴-۷-۸ و تنظیم تپش قلب در مواقع تنش',
+    display_order: 2,
+    media_asset_id: 'm2222222-2222-2222-2222-222222222222',
+    duration_seconds: 1800,
+    is_free_preview: false,
+    created_at: '2026-11-11T12:00:00Z',
+    updated_at: '2026-11-11T12:00:00Z',
+  },
+  {
+    id: 'l3333333-3333-3333-3333-333333333333',
+    tenant_id: tenantId,
+    course_id: id || 'c111',
+    title: 'درس سوم: بازسازی شناختی و چالش با خطاهای فکری',
+    description: 'شناسایی فاجعه‌سازی و ذهن‌خوانی در افکار خودآیند منفی',
+    display_order: 3,
+    media_asset_id: 'm3333333-3333-3333-3333-333333333333',
+    duration_seconds: 2400,
+    is_free_preview: false,
+    created_at: '2026-11-12T15:00:00Z',
+    updated_at: '2026-11-12T15:00:00Z',
+  },
+];
+
+try {
+  // Fetch course detail
+  const cRes = await fetch(`${apiBase}/admin/courses/${id}`, {
+    headers: {
+      'X-Tenant-ID': tenantId,
+      'Authorization': `Bearer ${sessionToken}`,
+    },
+    signal: AbortSignal.timeout(1000),
+  });
+  if (cRes.ok) {
+    const data = await cRes.json();
+    if (data && data.id) course = data;
+  }
+
+  // Fetch lessons list
+  const lRes = await fetch(`${apiBase}/admin/courses/${id}/lessons`, {
+    headers: {
+      'X-Tenant-ID': tenantId,
+      'Authorization': `Bearer ${sessionToken}`,
+    },
+    signal: AbortSignal.timeout(1000),
+  });
+  if (lRes.ok) {
+    const lData = await lRes.json();
+    if (Array.isArray(lData)) lessons = lData;
+  }
+} catch {
+  // Use fallback preview
+}
+
+function formatDuration(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+---
+
+<AdminLayout title={`مدیریت جلسات دوره: ${course.title}`} currentNav="courses">
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #0f172a;">جلسات دوره: {course.title}</h2>
+        <p style="font-size: 0.85rem; color: #64748b; margin-top: 0.25rem;">
+          مدرس: {course.instructor_name} · وضعیت: {course.status === 'published' ? 'منتشرشده' : course.status === 'archived' ? 'بایگانی‌شده' : 'پیش‌نویس'}
+        </p>
+      </div>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <a href={`/courses/${course.id}/edit`} class="btn-secondary">
+          ✏️ ویرایش مشخصات دوره
+        </a>
+        <a href="/courses" style="font-size: 0.9rem; color: #64748b; text-decoration: none; display: flex; align-items: center; gap: 0.25rem; margin-right: 0.5rem;">
+          ← لیست دوره‌ها
+        </a>
+      </div>
+    </div>
+
+    <!-- Security & Storage Separation Alert -->
+    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem; padding: 1rem 1.25rem; display: flex; gap: 0.75rem; align-items: flex-start;">
+      <span style="font-size: 1.25rem;">🔒</span>
+      <div style="font-size: 0.85rem; color: #166534; line-height: 1.6;">
+        <strong>جداسازی رسانه‌های دوره و سهمیه ذخیره‌سازی:</strong>
+        طبق الزامات سخت امنیتی، فایل‌های ویدیویی و صوتی دروس در کلاس دسترسی خصوصی <code>course_private</code> نگه‌داری می‌شوند (سقف ۵۱۲ مگابایت ویدیو و ۱۲۸ مگابایت صوت). رسانه‌های عمومی بلاگ یا فایل‌های تأییدنشده مجاز به اتصال به دروس نیستند و فقط با احراز دسترسی خرید قابل استریم خواهند بود.
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; align-items: flex-start;">
+      <!-- Lessons Table -->
+      <div class="card" style="padding: 0; overflow-x: auto;">
+        <div style="padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="font-size: 1rem; font-weight: 700; color: #0f172a;">فهرست جلسات دوره ({lessons.length} جلسه)</h3>
+          <span style="font-size: 0.8rem; color: #64748b;">مرتب‌شده بر اساس ترتیب نمایش</span>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+          <thead>
+            <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569;">
+              <th style="padding: 0.85rem 1rem; width: 60px;">ترتیب</th>
+              <th style="padding: 0.85rem 1rem;">عنوان و شرح جلسه</th>
+              <th style="padding: 0.85rem 1rem;">نوع دسترسی</th>
+              <th style="padding: 0.85rem 1rem;">مدت زمان</th>
+              <th style="padding: 0.85rem 1rem; text-align: left;">عملیات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lessons.length === 0 ? (
+              <tr>
+                <td colspan="5" style="padding: 3rem; text-align: center; color: #64748b;">
+                  هنوز هیچ جلسه‌ای برای این دوره ثبت نشده است. از فرم روبرو اولین جلسه را اضافه کنید.
+                </td>
+              </tr>
+            ) : (
+              lessons.map((lesson) => (
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                  <td style="padding: 0.85rem 1rem; font-weight: 700; color: #0284c7; text-align: center;">
+                    {lesson.display_order}
+                  </td>
+                  <td style="padding: 0.85rem 1rem;">
+                    <div style="font-weight: 600; color: #0f172a;">{lesson.title}</div>
+                    {lesson.description && (
+                      <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.2rem;">{lesson.description}</div>
+                    )}
+                    <div style="font-size: 0.75rem; color: #94a3b8; font-family: monospace; margin-top: 0.25rem;">
+                      شناسه رسانه: {lesson.media_asset_id}
+                    </div>
+                  </td>
+                  <td style="padding: 0.85rem 1rem;">
+                    {lesson.is_free_preview ? (
+                      <span style="background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; padding: 0.2rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600;">
+                        پیش‌نمایش رایگان
+                      </span>
+                    ) : (
+                      <span style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; padding: 0.2rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600;">
+                        خریداران دوره
+                      </span>
+                    )}
+                  </td>
+                  <td style="padding: 0.85rem 1rem; font-family: monospace; color: #334155;">
+                    {formatDuration(lesson.duration_seconds)}
+                  </td>
+                  <td style="padding: 0.85rem 1rem; text-align: left;">
+                    <button
+                      type="button"
+                      class="btn-delete-lesson"
+                      data-id={lesson.id}
+                      data-title={lesson.title}
+                      style="background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; padding: 0.3rem 0.6rem; border-radius: 0.375rem; font-size: 0.8rem; cursor: pointer;"
+                    >
+                      حذف
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Add Lesson Form Card -->
+      <div class="card" style="display: flex; flex-direction: column; gap: 1rem;">
+        <h3 style="font-size: 1rem; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem;">
+          ➕ افزودن جلسه جدید
+        </h3>
+
+        <form id="add-lesson-form" style="display: flex; flex-direction: column; gap: 1rem;" data-course-id={course.id}>
+          <div>
+            <label class="form-label" for="lesson_title">عنوان جلسه <span style="color: #ef4444;">*</span></label>
+            <input type="text" id="lesson_title" name="title" required placeholder="مثال: درس اول: مقدمات" class="form-input" />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div>
+              <label class="form-label" for="display_order">ترتیب <span style="color: #ef4444;">*</span></label>
+              <input type="number" id="display_order" name="display_order" required min="1" value={lessons.length + 1} class="form-input" />
+            </div>
+
+            <div>
+              <label class="form-label" for="duration_minutes">مدت (دقیقه) <span style="color: #ef4444;">*</span></label>
+              <input type="number" id="duration_minutes" name="duration_minutes" required min="1" placeholder="مثال: ۲۵" class="form-input" />
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" for="media_asset_id">شناسه رسانه اختصاصی (course_private) <span style="color: #ef4444;">*</span></label>
+            <input type="text" id="media_asset_id" name="media_asset_id" required placeholder="شناسه UUID رسانه بارگذاری‌شده" class="form-input" dir="ltr" />
+            <span style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; display: block;">
+              شناسه فایل ویدیویی یا صوتی خصوصی از منوی <a href="/media" target="_blank" style="color: #0284c7; text-decoration: underline;">رسانه‌ها</a>.
+            </span>
+          </div>
+
+          <div>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #334155; cursor: pointer;">
+              <input type="checkbox" id="is_free_preview" name="is_free_preview" value="true" />
+              <span>پیش‌نمایش رایگان (بدون نیاز به خرید دوره)</span>
+            </label>
+          </div>
+
+          <div>
+            <label class="form-label" for="lesson_desc">توضیحات کوتاه جلسه</label>
+            <textarea id="lesson_desc" name="description" rows="3" placeholder="توضیحات اختیاری..." class="form-input"></textarea>
+          </div>
+
+          <button type="submit" class="btn-primary" id="add-lesson-btn" style="width: 100%; justify-content: center; margin-top: 0.5rem;">
+            ثبت جلسه
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 0.35rem;
+    }
+    .form-input {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-size: 0.85rem;
+      color: #0f172a;
+      box-sizing: border-box;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: #0284c7;
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.1);
+    }
+    .btn-primary {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 0.55rem 1.2rem;
+      border: none;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .btn-primary:hover {
+      background: #0369a1;
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #e2e8f0;
+    }
+    .btn-secondary:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+  </style>
+
+  <script>
+    const form = document.getElementById('add-lesson-form') as HTMLFormElement;
+    const addBtn = document.getElementById('add-lesson-btn') as HTMLButtonElement;
+    const courseId = form?.dataset.courseId;
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      addBtn.disabled = true;
+      addBtn.innerText = 'در حال ثبت...';
+
+      const formData = new FormData(form);
+      const title = String(formData.get('title') || '').trim();
+      const display_order = Number(formData.get('display_order') || 1);
+      const duration_minutes = Number(formData.get('duration_minutes') || 0);
+      const duration_seconds = duration_minutes * 60;
+      const media_asset_id = String(formData.get('media_asset_id') || '').trim();
+      const is_free_preview = formData.get('is_free_preview') === 'true';
+      const description = String(formData.get('description') || '').trim();
+
+      try {
+        const res = await fetch(`/admin/courses/${courseId}/lessons`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            display_order,
+            duration_seconds,
+            media_asset_id,
+            is_free_preview,
+            description,
+          }),
+        });
+
+        if (res.ok) {
+          alert('جلسه جدید با موفقیت اضافه شد.');
+          window.location.reload();
+        } else {
+          const err = await res.json();
+          alert('خطا در ثبت جلسه: ' + (err.message || 'خطا در اعتبارسنجی رسانه'));
+          addBtn.disabled = false;
+          addBtn.innerText = 'ثبت جلسه';
+        }
+      } catch {
+        alert('خطای ارتباط با سرور.');
+        addBtn.disabled = false;
+        addBtn.innerText = 'ثبت جلسه';
+      }
+    });
+
+    document.querySelectorAll('.btn-delete-lesson').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const lessonId = target.dataset.id;
+        const title = target.dataset.title;
+        if (!confirm(`آیا از حذف جلسه "${title}" اطمینان دارید؟`)) return;
+
+        try {
+          const res = await fetch(`/admin/courses/${courseId}/lessons/${lessonId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+          });
+
+          if (res.ok) {
+            alert('جلسه حذف شد.');
+            window.location.reload();
+          } else {
+            const err = await res.json();
+            alert('خطا در حذف جلسه: ' + (err.message || 'خطا'));
+          }
+        } catch {
+          alert('خطای ارتباط با سرور.');
+        }
+      });
+    });
+  </script>
+</AdminLayout>

@@ -1,0 +1,353 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import type { AdminCourseItem, CourseStatus } from '@psychology/api-client';
+
+const statusFilter = Astro.url.searchParams.get('status') as CourseStatus | null;
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const tenantId = Astro.cookies.get('tenant_id')?.value || '4f3b7b51-7890-4e12-b345-67890abcdef1';
+const sessionToken = Astro.cookies.get('session_token')?.value || '';
+
+// Fallback demo courses for dev/preview
+const fallbackCourses: AdminCourseItem[] = [
+  {
+    id: 'c1111111-1111-1111-1111-111111111111',
+    title: 'مدیریت جامع اضطراب و نشخوار فکری',
+    slug: 'anxiety-management',
+    description: 'مهارت‌های شناختی-رفتاری (CBT) برای مهار استرس روزمره و حملات پانیک',
+    instructor_name: 'دکتر مریم علوی',
+    price_rials: 15000000,
+    status: 'published',
+    lessons_count: 8,
+    published_at: '2026-11-10T10:00:00Z',
+    created_at: '2026-11-08T08:00:00Z',
+    updated_at: '2026-11-10T10:00:00Z',
+  },
+  {
+    id: 'c2222222-2222-2222-2222-222222222222',
+    title: 'مهارت‌های تنظیم هیجان و ذهن‌آگاهی',
+    slug: 'emotion-regulation',
+    description: 'تمرین‌های کاربردی مبتنی بر درمان مبتنی بر پذیرش و تعهد (ACT)',
+    instructor_name: 'دکتر کامران راد',
+    price_rials: 22000000,
+    status: 'draft',
+    lessons_count: 2,
+    published_at: null,
+    created_at: '2026-11-18T14:30:00Z',
+    updated_at: '2026-11-18T14:30:00Z',
+  },
+  {
+    id: 'c3333333-3333-3333-3333-333333333333',
+    title: 'ارتباط موثر در روابط زناشویی',
+    slug: 'couple-communication',
+    description: 'اصول حل تعارض و بازسازی صمیمیت در زندگی مشترک',
+    instructor_name: 'دکتر سارا شمس',
+    price_rials: 18000000,
+    status: 'archived',
+    lessons_count: 6,
+    published_at: '2026-10-01T09:00:00Z',
+    created_at: '2026-09-25T11:00:00Z',
+    updated_at: '2026-11-15T12:00:00Z',
+  },
+];
+
+let courses = fallbackCourses;
+
+try {
+  const query = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : '';
+  const res = await fetch(`${apiBase}/admin/courses${query}`, {
+    headers: {
+      'X-Tenant-ID': tenantId,
+      'Authorization': `Bearer ${sessionToken}`,
+    },
+    signal: AbortSignal.timeout(1000),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      courses = data;
+    }
+  }
+} catch {
+  // Graceful fallback to preview data
+}
+
+if (statusFilter) {
+  courses = courses.filter((c) => c.status === statusFilter);
+}
+
+function formatTomans(rials: number) {
+  const tomans = Math.floor(rials / 10);
+  return tomans.toLocaleString('fa-IR') + ' تومان';
+}
+
+function formatDatePersian(dateStr?: string | null) {
+  if (!dateStr) return '—';
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Asia/Tehran',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+function getStatusBadge(status: string) {
+  switch (status) {
+    case 'published':
+      return { text: 'منتشرشده', bg: '#dcfce7', color: '#166534', border: '#bbf7d0' };
+    case 'draft':
+      return { text: 'پیش‌نویس', bg: '#fef3c7', color: '#92400e', border: '#fde68a' };
+    case 'archived':
+      return { text: 'بایگانی‌شده', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
+    default:
+      return { text: status, bg: '#f3f4f6', color: '#374151', border: '#e5e7eb' };
+  }
+}
+
+const stats = {
+  total: fallbackCourses.length,
+  published: fallbackCourses.filter((c) => c.status === 'published').length,
+  draft: fallbackCourses.filter((c) => c.status === 'draft').length,
+  archived: fallbackCourses.filter((c) => c.status === 'archived').length,
+};
+---
+
+<AdminLayout title="مدیریت دوره‌های ضبط‌شده" currentNav="courses">
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Stat Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+      <div class="card" style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <span style="font-size: 0.85rem; color: #64748b; font-weight: 600;">کل دوره‌ها</span>
+        <span style="font-size: 1.75rem; font-weight: 700; color: #0f172a;">{stats.total.toLocaleString('fa-IR')}</span>
+      </div>
+      <div class="card" style="display: flex; flex-direction: column; gap: 0.5rem; border-right: 4px solid #16a34a;">
+        <span style="font-size: 0.85rem; color: #166534; font-weight: 600;">دوره‌های فعال و منتشرشده</span>
+        <span style="font-size: 1.75rem; font-weight: 700; color: #166534;">{stats.published.toLocaleString('fa-IR')}</span>
+      </div>
+      <div class="card" style="display: flex; flex-direction: column; gap: 0.5rem; border-right: 4px solid #d97706;">
+        <span style="font-size: 0.85rem; color: #92400e; font-weight: 600;">دوره‌های پیش‌نویس</span>
+        <span style="font-size: 1.75rem; font-weight: 700; color: #92400e;">{stats.draft.toLocaleString('fa-IR')}</span>
+      </div>
+      <div class="card" style="display: flex; flex-direction: column; gap: 0.5rem; border-right: 4px solid #64748b;">
+        <span style="font-size: 0.85rem; color: #475569; font-weight: 600;">دوره‌های بایگانی‌شده</span>
+        <span style="font-size: 1.75rem; font-weight: 700; color: #475569;">{stats.archived.toLocaleString('fa-IR')}</span>
+      </div>
+    </div>
+
+    <!-- Action Bar & Filters -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <span style="font-weight: 600; font-size: 0.95rem; color: #475569;">فیلتر وضعیت:</span>
+        <a href="/courses" class={`filter-pill ${!statusFilter ? 'active' : ''}`}>همه</a>
+        <a href="/courses?status=published" class={`filter-pill ${statusFilter === 'published' ? 'active' : ''}`}>منتشرشده</a>
+        <a href="/courses?status=draft" class={`filter-pill ${statusFilter === 'draft' ? 'active' : ''}`}>پیش‌نویس</a>
+        <a href="/courses?status=archived" class={`filter-pill ${statusFilter === 'archived' ? 'active' : ''}`}>بایگانی‌شده</a>
+      </div>
+
+      <a href="/courses/new" class="btn-primary">
+        ➕ تعریف دوره جدید
+      </a>
+    </div>
+
+    <!-- Courses Table -->
+    <div class="card" style="padding: 0; overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+        <thead>
+          <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569;">
+            <th style="padding: 1rem 1.25rem;">عنوان دوره و مدرس</th>
+            <th style="padding: 1rem 1.25rem;">نامک (Slug)</th>
+            <th style="padding: 1rem 1.25rem;">مبلغ دوره</th>
+            <th style="padding: 1rem 1.25rem;">جلسات</th>
+            <th style="padding: 1rem 1.25rem;">وضعیت</th>
+            <th style="padding: 1rem 1.25rem;">تاریخ انتشار</th>
+            <th style="padding: 1rem 1.25rem; text-align: left;">عملیات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {courses.length === 0 ? (
+            <tr>
+              <td colspan="7" style="padding: 3rem; text-align: center; color: #64748b;">
+                هیچ دوره‌ای در این دسته‌بندی یافت نشد.
+              </td>
+            </tr>
+          ) : (
+            courses.map((course) => {
+              const badge = getStatusBadge(course.status);
+              return (
+                <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.1s ease;">
+                  <td style="padding: 1rem 1.25rem;">
+                    <div style="font-weight: 600; color: #0f172a; margin-bottom: 0.25rem;">{course.title}</div>
+                    <div style="font-size: 0.8rem; color: #64748b;">مدرس: {course.instructor_name}</div>
+                  </td>
+                  <td style="padding: 1rem 1.25rem; font-family: monospace; color: #64748b; direction: ltr; text-align: right;">
+                    {course.slug}
+                  </td>
+                  <td style="padding: 1rem 1.25rem; font-weight: 600; color: #0f172a;">
+                    {formatTomans(course.price_rials)}
+                  </td>
+                  <td style="padding: 1rem 1.25rem;">
+                    <span style="background: #f1f5f9; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; color: #334155;">
+                      {(course.lessons_count || 0).toLocaleString('fa-IR')} جلسه
+                    </span>
+                  </td>
+                  <td style="padding: 1rem 1.25rem;">
+                    <span style={`background: ${badge.bg}; color: ${badge.color}; border: 1px solid ${badge.border}; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600;`}>
+                      {badge.text}
+                    </span>
+                  </td>
+                  <td style="padding: 1rem 1.25rem; color: #64748b; font-size: 0.85rem;">
+                    {formatDatePersian(course.published_at)}
+                  </td>
+                  <td style="padding: 1rem 1.25rem; text-align: left;">
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                      <a href={`/courses/${course.id}/lessons`} class="btn-action" title="مدیریت جلسات و ویدئوها">
+                        🎬 جلسات
+                      </a>
+                      <a href={`/courses/${course.id}/edit`} class="btn-action" title="ویرایش دوره">
+                        ✏️ ویرایش
+                      </a>
+                      {course.status === 'draft' && (
+                        <button
+                          type="button"
+                          class="btn-action btn-publish"
+                          data-id={course.id}
+                          title="انتشار عمومی دوره"
+                        >
+                          🚀 انتشار
+                        </button>
+                      )}
+                      {course.status === 'published' && (
+                        <button
+                          type="button"
+                          class="btn-action btn-archive"
+                          data-id={course.id}
+                          title="بایگانی دوره (توقف فروش تازه)"
+                        >
+                          📦 بایگانی
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <style>
+    .filter-pill {
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .filter-pill:hover {
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .filter-pill.active {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #0284c7;
+      font-weight: 600;
+    }
+    .btn-primary {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 0.5rem 1.2rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      box-shadow: 0 1px 2px rgba(2, 132, 199, 0.2);
+      transition: background 0.15s ease;
+    }
+    .btn-primary:hover {
+      background: #0369a1;
+    }
+    .btn-action {
+      padding: 0.35rem 0.65rem;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.375rem;
+      font-size: 0.8rem;
+      color: #334155;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      transition: all 0.1s ease;
+    }
+    .btn-action:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    .btn-publish:hover {
+      background: #dcfce7;
+      color: #166534;
+      border-color: #bbf7d0;
+    }
+    .btn-archive:hover {
+      background: #fee2e2;
+      color: #991b1b;
+      border-color: #fecaca;
+    }
+  </style>
+
+  <script>
+    document.querySelectorAll('.btn-publish').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        if (!confirm('آیا از انتشار عمومی این دوره اطمینان دارید؟ دوره باید حداقل ۱ جلسه آماده داشته باشد.')) return;
+        try {
+          const res = await fetch(`/admin/courses/${id}/publish`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (res.ok) {
+            alert('دوره با موفقیت منتشر شد.');
+            window.location.reload();
+          } else {
+            const err = await res.json();
+            alert('خطا در انتشار دوره: ' + (err.message || 'حداقل ۱ جلسه مورد نیاز است'));
+          }
+        } catch {
+          alert('خطای ارتباط با سرور.');
+        }
+      });
+    });
+
+    document.querySelectorAll('.btn-archive').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        if (!confirm('آیا از بایگانی این دوره اطمینان دارید؟ فروش جدید متوقف می‌شود ولی خریداران قبلی به جلسات دسترسی خواهند داشت.')) return;
+        try {
+          const res = await fetch(`/admin/courses/${id}/archive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (res.ok) {
+            alert('دوره بایگانی شد.');
+            window.location.reload();
+          } else {
+            const err = await res.json();
+            alert('خطا در بایگانی دوره: ' + (err.message || 'خطا'));
+          }
+        } catch {
+          alert('خطای ارتباط با سرور.');
+        }
+      });
+    });
+  </script>
+</AdminLayout>

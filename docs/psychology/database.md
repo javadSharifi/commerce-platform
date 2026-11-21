@@ -957,10 +957,159 @@ CREATE POLICY tenant_isolation ON appointment_status_history
 
 ---
 
+## ۷.۵ اسکیما و جداول دوره‌های ضبط‌شده و هویت خریداران (فاز ۳ · PSY-3.1)
+
+### ۱. جدول `buyer_accounts` (هویت خریداران/دانشجویان کلینیک)
+حساب‌های کاربری خریداران محتوای آموزشی، مقید به هر کلینیک (`tenant_id`).
+```sql
+CREATE TABLE buyer_accounts (
+    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id  uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    phone      text        NOT NULL,
+    full_name  text        NOT NULL DEFAULT '',
+    status     text        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'blocked')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT buyer_accounts_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT buyer_accounts_tenant_phone_uq UNIQUE (tenant_id, phone)
+);
+```
+
+### ۲. جدول `buyer_sessions` (نشست‌های خریداران)
+مدیریت توکن‌های ورود و نشست مستقل خریداران.
+```sql
+CREATE TABLE buyer_sessions (
+    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id  uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    buyer_id   uuid        NOT NULL,
+    token_hash text        NOT NULL UNIQUE,
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT buyer_sessions_tenant_buyer_fk FOREIGN KEY (tenant_id, buyer_id) REFERENCES buyer_accounts(tenant_id, id) ON DELETE CASCADE
+);
+```
+
+### ۳. جدول `buyer_otp_codes` (کدهای ورود یک‌بارمصرف)
+کدهای ورود ۵ تا ۶ رقمی با زمان انقضای ۲ دقیقه‌ای و سقف تلاش.
+```sql
+CREATE TABLE buyer_otp_codes (
+    id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    phone       text        NOT NULL,
+    code_hash   text        NOT NULL,
+    expires_at  timestamptz NOT NULL,
+    consumed_at timestamptz,
+    attempts    int         NOT NULL DEFAULT 0,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+```
+
+### ۴. جدول `courses` (کاتالوگ دوره‌های ضبط‌شده)
+```sql
+CREATE TABLE courses (
+    id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    title           text        NOT NULL,
+    slug            text        NOT NULL,
+    description     text        NOT NULL DEFAULT '',
+    instructor_name text        NOT NULL,
+    price_rials     bigint      NOT NULL CHECK (price_rials >= 0),
+    cover_media_id  uuid,
+    status          text        NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
+    published_at    timestamptz,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    deleted_at      timestamptz,
+    CONSTRAINT courses_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT courses_tenant_slug_uq UNIQUE (tenant_id, slug)
+);
+```
+
+### ۵. جدول `course_lessons` (جلسات و سرفصل‌های دوره)
+هر جلسه به یک رسانه ویدیویی یا صوتی در کلاس دسترسی خصوصی دوره متصل است.
+```sql
+CREATE TABLE course_lessons (
+    id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id        uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    course_id        uuid        NOT NULL,
+    title            text        NOT NULL,
+    description      text        NOT NULL DEFAULT '',
+    display_order    int         NOT NULL DEFAULT 1,
+    media_asset_id   uuid        NOT NULL,
+    duration_seconds int         NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
+    is_free_preview  boolean     NOT NULL DEFAULT false,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    deleted_at       timestamptz,
+    CONSTRAINT course_lessons_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT course_lessons_tenant_course_fk FOREIGN KEY (tenant_id, course_id) REFERENCES courses(tenant_id, id) ON DELETE CASCADE
+);
+```
+
+### ۶. جدول `course_entitlements` (دسترسی خریداران به دوره‌ها)
+حاوی اسنپ‌شات قطعی عنوان و مبلغ ریالی در لحظه خرید، همراه با قید یکتایی فعال.
+```sql
+CREATE TABLE course_entitlements (
+    id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id             uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    buyer_id              uuid        NOT NULL,
+    course_id             uuid        NOT NULL,
+    purchase_id           uuid,
+    status                text        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
+    course_title_snapshot text        NOT NULL,
+    price_rials_snapshot  bigint      NOT NULL CHECK (price_rials_snapshot >= 0),
+    granted_at            timestamptz NOT NULL DEFAULT now(),
+    revoked_at            timestamptz,
+    revocation_reason     text,
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    updated_at            timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT course_entitlements_tenant_buyer_fk FOREIGN KEY (tenant_id, buyer_id) REFERENCES buyer_accounts(tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT course_entitlements_tenant_course_fk FOREIGN KEY (tenant_id, course_id) REFERENCES courses(tenant_id, id) ON DELETE RESTRICT
+);
+
+-- تضمین قطعی یکتایی دسترسی فعال: یک خریدار برای یک دوره در هر کلینیک حداکثر یک دسترسی فعال دارد
+CREATE UNIQUE INDEX course_entitlements_active_uq ON course_entitlements (tenant_id, buyer_id, course_id) WHERE (status = 'active');
+```
+
+---
+
 ## ۸. نقشهٔ راه تکمیل افزایشی جداول در فازهای بعدی
 
 | فاز | جداول جدید | شرح و قیدهای کلیدی |
 | --- | --- | --- |
 | **`PSY-2` (نوبت‌دهی)** | `therapists`<br>`therapist_working_hours`<br>`therapist_schedule_exceptions`<br>`appointment_slots`<br>`appointments`<br>`appointment_status_history` | • تکمیل شد در `PSY-2.1` |
-| **`PSY-3` (دوره‌ها)** | `buyer_accounts`<br>`buyer_sessions`<br>`courses`<br>`course_lessons`<br>`course_entitlements` | • حساب مجزای خریدار مقید به Tenant<br>• دسترسی فعال به دوره با پیوند به خرید موفق<br>• عدم دسترسی به لینک‌های ویدیو بدون خرید |
-| **`PSY-4` (بهره‌برداری)** | `outbox_events` (در صورت نیاز به CDN purge) | • رویدادهای پاک‌سازی کش در همان تراکنش تغییر داده |
+| **`PSY-3` (دوره‌ها)** | `buyer_accounts`<br>`buyer_sessions`<br>`buyer_otp_codes`<br>`courses`<br>`course_lessons`<br>`course_entitlements` | • تکمیل شد در `PSY-3.1` (اسنپ‌شات ریالی و ایندکس یکتایی دسترسی فعال) |
+| **`PSY-4` (بهره‌برداری)** | `outbox_events` | • تکمیل شد در `PSY-4.3` (رویدادهای پاک‌سازی کش در همان تراکنش تغییر داده) |
+
+---
+
+## ۹. ساختار جدول رویدادهای Outbox و ابطال کش (`outbox_events`) — PSY-4.3
+
+جدول `outbox_events` رویدادهای ناهمگام ابطال کش CDN و پیام‌های خروجی را در همان تراکنش تغییر داده (AP-11) ذخیره می‌کند.
+
+```sql
+CREATE TABLE outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, completed, failed
+    retry_count INT NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processed_at TIMESTAMPTZ,
+    CONSTRAINT chk_outbox_status CHECK (status IN ('pending', 'processing', 'completed', 'failed'))
+);
+
+CREATE INDEX idx_outbox_events_pending ON outbox_events(status, created_at) WHERE status = 'pending';
+CREATE INDEX idx_outbox_events_tenant ON outbox_events(tenant_id, status);
+
+ALTER TABLE outbox_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE outbox_events FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_outbox_events ON outbox_events
+    FOR ALL
+    TO public
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+```
+

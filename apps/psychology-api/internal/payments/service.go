@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"psychology/api/internal/courses/coursesdb"
 	"psychology/api/internal/payments/paymentsdb"
 	"psychology/api/internal/workshops/workshopsdb"
 
@@ -44,18 +45,39 @@ type WorkshopQuerier interface {
 	ExpirePendingRegistrations(ctx context.Context) (int64, error)
 }
 
+type CoursePaymentQuerier interface {
+	GetCourseByID(ctx context.Context, arg coursesdb.GetCourseByIDParams) (coursesdb.Course, error)
+	GetCourseByIDForUpdate(ctx context.Context, arg coursesdb.GetCourseByIDForUpdateParams) (coursesdb.Course, error)
+	GetCourseBySlug(ctx context.Context, arg coursesdb.GetCourseBySlugParams) (coursesdb.Course, error)
+	GetActiveCourseEntitlement(ctx context.Context, arg coursesdb.GetActiveCourseEntitlementParams) (coursesdb.CourseEntitlement, error)
+	GetCourseEntitlementByPurchaseID(ctx context.Context, arg coursesdb.GetCourseEntitlementByPurchaseIDParams) (coursesdb.CourseEntitlement, error)
+	CreateCourseEntitlement(ctx context.Context, arg coursesdb.CreateCourseEntitlementParams) (coursesdb.CourseEntitlement, error)
+	ActivateCourseEntitlement(ctx context.Context, arg coursesdb.ActivateCourseEntitlementParams) (coursesdb.CourseEntitlement, error)
+	RevokeCourseEntitlementByPurchaseID(ctx context.Context, arg coursesdb.RevokeCourseEntitlementByPurchaseIDParams) (coursesdb.CourseEntitlement, error)
+	GetBuyerAccountByID(ctx context.Context, arg coursesdb.GetBuyerAccountByIDParams) (coursesdb.BuyerAccount, error)
+}
+
 type Service struct {
 	queries         Querier
 	provider        PaymentProvider
 	workshopQueries WorkshopQuerier
+	courseQueries   CoursePaymentQuerier
 }
 
-func NewService(q Querier, provider PaymentProvider, wq WorkshopQuerier) *Service {
-	return &Service{
+func NewService(q Querier, provider PaymentProvider, wq WorkshopQuerier, cq ...CoursePaymentQuerier) *Service {
+	s := &Service{
 		queries:         q,
 		provider:        provider,
 		workshopQueries: wq,
 	}
+	if len(cq) > 0 {
+		s.courseQueries = cq[0]
+	}
+	return s
+}
+
+func (s *Service) SetCourseQueries(cq CoursePaymentQuerier) {
+	s.courseQueries = cq
 }
 
 func toPgUUID(u uuid.UUID) pgtype.UUID {
@@ -285,10 +307,203 @@ func (s *Service) InitiateWorkshopPayment(ctx context.Context, p InitiateWorksho
 	}, nil
 }
 
+type InitiateCoursePaymentParams struct {
+	TenantID       uuid.UUID
+	BuyerID        uuid.UUID
+	CourseID       uuid.UUID
+	IdempotencyKey string
+	CallbackURL    string
+	Now            time.Time
+}
+
+// InitiateCoursePayment initiates a payment for purchasing a single course.
+// Enforces:
+// 1. Snapshotting current price and title in Backend.
+// 2. Rejecting fresh payment initiation if the buyer already holds an active entitlement.
+// 3. Network calls to the payment gateway are strictly kept outside any database transactions.
+func (s *Service) InitiateCoursePayment(ctx context.Context, p InitiateCoursePaymentParams) (*InitiatePaymentResult, error) {
+	if p.TenantID == uuid.Nil {
+		return nil, errors.New("payments: tenant_id cannot be nil")
+	}
+	if p.BuyerID == uuid.Nil {
+		return nil, errors.New("payments: buyer_id cannot be nil")
+	}
+	if p.CourseID == uuid.Nil {
+		return nil, errors.New("payments: course_id cannot be nil")
+	}
+	if s.courseQueries == nil {
+		return nil, errors.New("payments: course querier not initialized")
+	}
+	idempotencyKey := strings.TrimSpace(p.IdempotencyKey)
+	if idempotencyKey == "" {
+		return nil, ErrInvalidIdempotencyKey
+	}
+	callbackURL := strings.TrimSpace(p.CallbackURL)
+	if callbackURL == "" {
+		return nil, errors.New("payments: callback_url cannot be empty")
+	}
+
+	now := p.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+
+	// 1. Idempotency Check: if this exact idempotency key was already processed, return clean idempotent response
+	existingAttempt, err := s.queries.GetPaymentAttemptByIdempotencyKey(ctx, paymentsdb.GetPaymentAttemptByIdempotencyKeyParams{
+		TenantID:       toPgUUID(p.TenantID),
+		IdempotencyKey: idempotencyKey,
+	})
+	if err == nil {
+		if existingAttempt.Status == "initiated" {
+			purchase, err := s.queries.GetPurchaseByID(ctx, paymentsdb.GetPurchaseByIDParams{
+				TenantID: toPgUUID(p.TenantID),
+				ID:       existingAttempt.PurchaseID,
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			paymentURL := "https://payment.zarinpal.com/pg/StartPay/" + existingAttempt.Authority
+			if s.provider != nil && s.provider.Name() == "mock" {
+				paymentURL = "https://test-pay.example.com/mock-gateway?authority=" + existingAttempt.Authority
+			}
+
+			return &InitiatePaymentResult{
+				PaymentAttemptID: fromPgUUID(existingAttempt.ID),
+				PurchaseID:       fromPgUUID(existingAttempt.PurchaseID),
+				Authority:        existingAttempt.Authority,
+				PaymentURL:       paymentURL,
+				AmountRials:      purchase.AmountRials,
+				Status:           existingAttempt.Status,
+			}, nil
+		}
+		if existingAttempt.Status == "verified" {
+			return nil, ErrPaymentAlreadyVerified
+		}
+		return nil, errors.New("payments: payment attempt previously failed")
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
+	// 2. Validate buyer account
+	buyer, err := s.courseQueries.GetBuyerAccountByID(ctx, coursesdb.GetBuyerAccountByIDParams{
+		TenantID: toPgUUID(p.TenantID),
+		ID:       toPgUUID(p.BuyerID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("payments: حساب کاربری خریدار یافت نشد")
+		}
+		return nil, err
+	}
+	if buyer.Status != "active" {
+		return nil, errors.New("payments: حساب کاربری شما مسدود شده است")
+	}
+
+	// 3. Validate course
+	course, err := s.courseQueries.GetCourseByID(ctx, coursesdb.GetCourseByIDParams{
+		TenantID: toPgUUID(p.TenantID),
+		ID:       toPgUUID(p.CourseID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("payments: دوره آموزشی یافت نشد")
+		}
+		return nil, err
+	}
+	if course.Status != "published" {
+		return nil, errors.New("payments: دوره مورد نظر در وضعیت انتشار قرار ندارد")
+	}
+	if course.PriceRials <= 0 {
+		return nil, errors.New("payments: مبلغ دوره نامعتبر است")
+	}
+
+	// 4. Check if buyer already holds an active entitlement for this course
+	_, err = s.courseQueries.GetActiveCourseEntitlement(ctx, coursesdb.GetActiveCourseEntitlementParams{
+		TenantID: toPgUUID(p.TenantID),
+		BuyerID:  toPgUUID(p.BuyerID),
+		CourseID: toPgUUID(p.CourseID),
+	})
+	if err == nil {
+		return nil, ErrCourseAlreadyEntitled
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
+	// 5. Create Purchase record (snapshots course title and price in Rials)
+	purchase, err := s.queries.CreatePurchase(ctx, paymentsdb.CreatePurchaseParams{
+		TenantID:      toPgUUID(p.TenantID),
+		ItemType:      "course",
+		ItemID:        course.ID,
+		AmountRials:   course.PriceRials,
+		TitleSnapshot: course.Title,
+		Status:        "initiated",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 6. Create pending Course Entitlement record linked to purchase
+	_, err = s.courseQueries.CreateCourseEntitlement(ctx, coursesdb.CreateCourseEntitlementParams{
+		TenantID:            toPgUUID(p.TenantID),
+		BuyerID:             toPgUUID(p.BuyerID),
+		CourseID:            course.ID,
+		PurchaseID:          purchase.ID,
+		Status:              "pending",
+		CourseTitleSnapshot: course.Title,
+		PriceRialsSnapshot:  course.PriceRials,
+		GrantedAt:           pgtype.Timestamptz{Valid: false},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 7. EXTERNAL NETWORK CALL OUTSIDE DATABASE TRANSACTION:
+	paymentResp, err := s.provider.RequestPayment(ctx, PaymentRequest{
+		AmountRials: course.PriceRials,
+		Description: "خرید دوره: " + course.Title,
+		CallbackURL: callbackURL,
+	})
+	if err != nil {
+		_, _ = s.queries.UpdatePurchaseStatus(ctx, paymentsdb.UpdatePurchaseStatusParams{
+			TenantID: toPgUUID(p.TenantID),
+			ID:       purchase.ID,
+			Status:   "failed",
+		})
+		return nil, err
+	}
+
+	// 8. Record payment attempt
+	expiresAt := now.Add(15 * time.Minute)
+	attempt, err := s.queries.CreatePaymentAttempt(ctx, paymentsdb.CreatePaymentAttemptParams{
+		TenantID:       toPgUUID(p.TenantID),
+		PurchaseID:     purchase.ID,
+		Provider:       s.provider.Name(),
+		Authority:      paymentResp.Authority,
+		AmountRials:    course.PriceRials,
+		Status:         "initiated",
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &InitiatePaymentResult{
+		PaymentAttemptID: fromPgUUID(attempt.ID),
+		PurchaseID:       fromPgUUID(purchase.ID),
+		Authority:        paymentResp.Authority,
+		PaymentURL:       paymentResp.PaymentURL,
+		AmountRials:      purchase.AmountRials,
+		Status:           attempt.Status,
+		ExpiresAt:        &expiresAt,
+	}, nil
+}
+
 type CallbackResult struct {
 	Status         string    `json:"status"` // "confirmed", "refund_required", "failed"
-	RegistrationID uuid.UUID `json:"registration_id"`
-	WorkshopID     uuid.UUID `json:"workshop_id"`
+	RegistrationID uuid.UUID `json:"registration_id,omitempty"`
+	WorkshopID     uuid.UUID `json:"workshop_id,omitempty"`
+	CourseID       uuid.UUID `json:"course_id,omitempty"`
 	PurchaseID     uuid.UUID `json:"purchase_id"`
 	AmountRials    int64     `json:"amount_rials"`
 	RefID          string    `json:"ref_id,omitempty"`
@@ -330,6 +545,10 @@ func (s *Service) HandleCallbackAndVerify(ctx context.Context, tenantID uuid.UUI
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if purchase.ItemType == "course" {
+		return s.handleCourseCallbackAndVerify(ctx, tenantID, authority, statusParam, attempt, purchase, now)
 	}
 
 	// Fetch registration linked to purchase
@@ -553,6 +772,217 @@ func (s *Service) HandleCallbackAndVerify(ctx context.Context, tenantID uuid.UUI
 		AmountRials:    attempt.AmountRials,
 		RefID:          refID,
 		TrackingCode:   refID,
+	}, nil
+}
+
+func (s *Service) handleCourseCallbackAndVerify(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	authority, statusParam string,
+	attempt paymentsdb.PaymentAttempt,
+	purchase paymentsdb.Purchase,
+	now time.Time,
+) (*CallbackResult, error) {
+	purchaseID := fromPgUUID(purchase.ID)
+	courseID := fromPgUUID(purchase.ItemID)
+
+	if s.courseQueries == nil {
+		return nil, errors.New("payments: course querier not initialized")
+	}
+
+	// 1. Idempotency Check: if callback is retried on an already verified attempt
+	// "Callback تکراری و اجرای مجدد Worker تنها یک پرداخت و اثر تجاری ثبت می‌کنند."
+	if attempt.Status == "verified" {
+		refID := ""
+		if attempt.GatewayRefID.Valid {
+			refID = attempt.GatewayRefID.String
+		}
+		status := "confirmed"
+		if purchase.Status == "refund_required" {
+			status = "refund_required"
+		}
+		return &CallbackResult{
+			Status:       status,
+			CourseID:     courseID,
+			PurchaseID:   purchaseID,
+			AmountRials:  attempt.AmountRials,
+			RefID:        refID,
+			TrackingCode: refID,
+		}, nil
+	}
+
+	if attempt.Status == "failed" {
+		return &CallbackResult{
+			Status:      "failed",
+			CourseID:    courseID,
+			PurchaseID:  purchaseID,
+			AmountRials: attempt.AmountRials,
+		}, nil
+	}
+
+	// 2. User canceled on gateway (Status != "OK")
+	if strings.ToUpper(strings.TrimSpace(statusParam)) != "OK" {
+		_, _ = s.queries.UpdatePaymentAttemptStatus(ctx, paymentsdb.UpdatePaymentAttemptStatusParams{
+			TenantID:     toPgUUID(tenantID),
+			ID:           attempt.ID,
+			Status:       "failed",
+			ErrorMessage: pgtype.Text{String: "canceled by user on payment gateway", Valid: true},
+		})
+		_, _ = s.queries.UpdatePurchaseStatus(ctx, paymentsdb.UpdatePurchaseStatusParams{
+			TenantID: toPgUUID(tenantID),
+			ID:       attempt.PurchaseID,
+			Status:   "failed",
+		})
+		return &CallbackResult{
+			Status:      "failed",
+			CourseID:    courseID,
+			PurchaseID:  purchaseID,
+			AmountRials: attempt.AmountRials,
+		}, nil
+	}
+
+	// 3. Mismatch check: verify amount in attempt matches purchase
+	if attempt.AmountRials != purchase.AmountRials {
+		_, _ = s.queries.UpdatePaymentAttemptStatus(ctx, paymentsdb.UpdatePaymentAttemptStatusParams{
+			TenantID:     toPgUUID(tenantID),
+			ID:           attempt.ID,
+			Status:       "failed",
+			ErrorMessage: pgtype.Text{String: "amount mismatch between attempt and purchase", Valid: true},
+		})
+		return nil, ErrAmountMismatch
+	}
+
+	// 4. EXTERNAL NETWORK CALL OUTSIDE DATABASE TRANSACTION: Verify with payment gateway
+	verifyResp, err := s.provider.VerifyPayment(ctx, VerifyRequest{
+		Authority:   authority,
+		AmountRials: attempt.AmountRials,
+	})
+	if err != nil {
+		if errors.Is(err, ErrGatewayTimeout) || errors.Is(err, ErrGatewayUnavailable) {
+			return nil, err
+		}
+		_, _ = s.queries.UpdatePaymentAttemptStatus(ctx, paymentsdb.UpdatePaymentAttemptStatusParams{
+			TenantID:     toPgUUID(tenantID),
+			ID:           attempt.ID,
+			Status:       "failed",
+			ErrorMessage: pgtype.Text{String: err.Error(), Valid: true},
+		})
+		_, _ = s.queries.UpdatePurchaseStatus(ctx, paymentsdb.UpdatePurchaseStatusParams{
+			TenantID: toPgUUID(tenantID),
+			ID:       attempt.PurchaseID,
+			Status:   "failed",
+		})
+		return &CallbackResult{
+			Status:      "failed",
+			CourseID:    courseID,
+			PurchaseID:  purchaseID,
+			AmountRials: attempt.AmountRials,
+		}, nil
+	}
+
+	refID := verifyResp.RefID
+
+	// 5. ATOMIC DATABASE RECONCILIATION & STRICT HIERARCHY:
+	// Course -> Entitlement -> Purchase / PaymentAttempt
+	lockedCourse, err := s.courseQueries.GetCourseByIDForUpdate(ctx, coursesdb.GetCourseByIDForUpdateParams{
+		TenantID: toPgUUID(tenantID),
+		ID:       purchase.ItemID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ent, err := s.courseQueries.GetCourseEntitlementByPurchaseID(ctx, coursesdb.GetCourseEntitlementByPurchaseIDParams{
+		TenantID:   toPgUUID(tenantID),
+		PurchaseID: attempt.PurchaseID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if buyer ALREADY holds another active entitlement for this course (concurrent duplicate payment)
+	existingActive, err := s.courseQueries.GetActiveCourseEntitlement(ctx, coursesdb.GetActiveCourseEntitlementParams{
+		TenantID: toPgUUID(tenantID),
+		BuyerID:  ent.BuyerID,
+		CourseID: ent.CourseID,
+	})
+	hasDuplicateActive := (err == nil && fromPgUUID(existingActive.ID) != fromPgUUID(ent.ID))
+
+	isCourseActive := (lockedCourse.Status == "published")
+
+	if isCourseActive && !hasDuplicateActive {
+		// SUCCESSFUL CONFIRMATION:
+		// Transition entitlement to active in the SAME atomic transaction
+		_, err = s.courseQueries.ActivateCourseEntitlement(ctx, coursesdb.ActivateCourseEntitlementParams{
+			TenantID:  toPgUUID(tenantID),
+			ID:        ent.ID,
+			GrantedAt: toPgTimestamptz(now),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = s.queries.UpdatePurchaseStatus(ctx, paymentsdb.UpdatePurchaseStatusParams{
+			TenantID: toPgUUID(tenantID),
+			ID:       attempt.PurchaseID,
+			Status:   "completed",
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = s.queries.UpdatePaymentAttemptStatus(ctx, paymentsdb.UpdatePaymentAttemptStatusParams{
+			TenantID:     toPgUUID(tenantID),
+			ID:           attempt.ID,
+			Status:       "verified",
+			GatewayRefID: pgtype.Text{String: refID, Valid: true},
+			TrackingCode: pgtype.Text{String: refID, Valid: true},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return &CallbackResult{
+			Status:       "confirmed",
+			CourseID:     courseID,
+			PurchaseID:   purchaseID,
+			AmountRials:  attempt.AmountRials,
+			RefID:        refID,
+			TrackingCode: refID,
+		}, nil
+	}
+
+	// DUPLICATE PAYMENT OR UNPUBLISHED COURSE:
+	// Customer paid on gateway, but already has active entitlement or course is no longer published.
+	// Transition to refund_required and DO NOT activate entitlement!
+	// "تست پرداخت تکراری (پرداخت دوم هم‌زمان به refund_required می‌رود و entitlement تکراری ساخته نمی‌شود)"
+	_, err = s.queries.UpdatePurchaseStatus(ctx, paymentsdb.UpdatePurchaseStatusParams{
+		TenantID: toPgUUID(tenantID),
+		ID:       attempt.PurchaseID,
+		Status:   "refund_required",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = s.queries.UpdatePaymentAttemptStatus(ctx, paymentsdb.UpdatePaymentAttemptStatusParams{
+		TenantID:     toPgUUID(tenantID),
+		ID:           attempt.ID,
+		Status:       "verified",
+		GatewayRefID: pgtype.Text{String: refID, Valid: true},
+		TrackingCode: pgtype.Text{String: refID, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &CallbackResult{
+		Status:       "refund_required",
+		CourseID:     courseID,
+		PurchaseID:   purchaseID,
+		AmountRials:  attempt.AmountRials,
+		RefID:        refID,
+		TrackingCode: refID,
 	}, nil
 }
 
@@ -783,8 +1213,14 @@ func (s *Service) RecordRefund(ctx context.Context, p RecordRefundParams) (*Refu
 		return nil, ErrPurchaseAlreadyRefunded
 	}
 
-	if purchase.Status != "refund_required" {
-		return nil, ErrInvalidPurchaseStatusForRefund
+	if purchase.ItemType == "course" {
+		if purchase.Status != "refund_required" && purchase.Status != "completed" {
+			return nil, ErrInvalidPurchaseStatusForRefund
+		}
+	} else {
+		if purchase.Status != "refund_required" {
+			return nil, ErrInvalidPurchaseStatusForRefund
+		}
 	}
 
 	if p.AmountRials != purchase.AmountRials {
@@ -835,6 +1271,17 @@ func (s *Service) RecordRefund(ctx context.Context, p RecordRefundParams) (*Refu
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// 7. If course purchase: revoke entitlement
+	// "بازپرداخت ثبت‌شده entitlement همان خرید را لغو می‌کند."
+	if purchase.ItemType == "course" && s.courseQueries != nil {
+		_, _ = s.courseQueries.RevokeCourseEntitlementByPurchaseID(ctx, coursesdb.RevokeCourseEntitlementByPurchaseIDParams{
+			TenantID:         toPgUUID(p.TenantID),
+			PurchaseID:       purchase.ID,
+			RevokedAt:        toPgTimestamptz(now),
+			RevocationReason: pgtype.Text{String: reason, Valid: true},
+		})
 	}
 
 	return &RefundResponse{

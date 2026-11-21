@@ -25,9 +25,9 @@
     }
 
     # ---------------- Private & Dynamic No-Store Policy ----------------
-    # Private admin data, streams, registration tracking, and callbacks MUST NOT enter shared/CDN caches
+    # Private admin data, account, checkout, appointments, streams, and callbacks MUST NOT enter shared/CDN caches
     @private {
-        path /admin* /public/media/*/stream* /public/media/*/stream-url /callbacks* /public/workshops/registrations/*
+        path /admin* /account* /buyer* /appointments* /checkout* /public/media/*/stream* /public/media/*/stream-url /callbacks* /public/workshops/registrations/*
     }
     header @private {
         Cache-Control "no-store, no-cache, must-revalidate, private"

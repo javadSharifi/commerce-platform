@@ -36,9 +36,12 @@ var (
 	ErrUploadNotReserved   = errors.New("media upload is not in reserved state")
 	ErrMediaNotFound       = errors.New("media asset not found")
 	ErrMediaNotPublic      = errors.New("media asset is not public")
+	ErrMediaNotCoursePrivate = errors.New("media asset is not course_private")
 	ErrMediaNotVerified    = errors.New("media asset is not verified")
 	ErrStorageMimeMismatch = errors.New("uploaded file MIME type does not match reservation")
 	ErrStorageSizeMismatch = errors.New("uploaded file size exceeds reservation")
+	ErrDisallowedPlaylist         = errors.New("playlists (m3u8, mpd, pls, ts) are not allowed; upload standalone MP4 or MP3")
+	ErrIncompatibleMediaContainer = errors.New("incompatible media container; only MP4 (H.264/AAC) and MP3 are supported")
 )
 
 type MediaQuerier interface {
@@ -105,6 +108,63 @@ type MediaListOutput struct {
 type StreamURLOutput struct {
 	StreamURL        string `json:"stream_url"`
 	ExpiresInSeconds int    `json:"expires_in_seconds"`
+	MimeType         string `json:"mime_type,omitempty"`
+	SizeBytes        int64  `json:"size_bytes,omitempty"`
+}
+
+// ValidateMediaFile validates original filename, extension, MIME type, and file size against the access class and type limits,
+// and rejects playlists (.m3u8, .mpd) or incompatible containers (.mkv, .avi, etc.).
+func ValidateMediaFile(accessClass string, originalName string, mimeType string, sizeBytes int64) error {
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(originalName)))
+
+	// Explicit rejection of playlists and segmented streaming manifests
+	switch ext {
+	case ".m3u8", ".m3u", ".pls", ".mpd", ".ts":
+		return ErrDisallowedPlaylist
+	}
+
+	mimeLower := strings.ToLower(strings.TrimSpace(mimeType))
+	if strings.Contains(mimeLower, "mpegurl") || strings.Contains(mimeLower, "dash") || strings.Contains(mimeLower, "playlist") {
+		return ErrDisallowedPlaylist
+	}
+
+	// Explicit rejection of incompatible video/audio containers
+	switch ext {
+	case ".mkv", ".avi", ".flv", ".wmv", ".mov", ".webm", ".rmvb", ".vob", ".mpg", ".mpeg", ".3gp", ".wav", ".aac", ".ogg", ".flac", ".wma":
+		return ErrIncompatibleMediaContainer
+	case ".exe", ".sh", ".bat", ".php", ".py", ".js", ".html", ".htm", ".zip", ".tar", ".gz", ".rar":
+		return ErrInvalidMimeType
+	}
+
+	if err := ValidateFileSpecs(accessClass, mimeType, sizeBytes); err != nil {
+		return err
+	}
+
+	// Verify extension matches approved mime types
+	switch mimeLower {
+	case "video/mp4":
+		if ext != "" && ext != ".mp4" && ext != ".m4v" {
+			return ErrIncompatibleMediaContainer
+		}
+	case "audio/mpeg":
+		if ext != "" && ext != ".mp3" {
+			return ErrIncompatibleMediaContainer
+		}
+	case "image/jpeg":
+		if ext != "" && ext != ".jpg" && ext != ".jpeg" {
+			return ErrInvalidMimeType
+		}
+	case "image/png":
+		if ext != "" && ext != ".png" {
+			return ErrInvalidMimeType
+		}
+	case "image/webp":
+		if ext != "" && ext != ".webp" {
+			return ErrInvalidMimeType
+		}
+	}
+
+	return nil
 }
 
 // ValidateFileSpecs validates the MIME type and file size against the access class and type limits.
@@ -165,7 +225,7 @@ func sanitizeFilename(name string) string {
 }
 
 func (s *Service) RequestStagingUpload(ctx context.Context, tenantID, userID uuid.UUID, input RequestUploadInput) (*RequestUploadOutput, error) {
-	if err := ValidateFileSpecs(input.AccessClass, input.MimeType, input.SizeBytes); err != nil {
+	if err := ValidateMediaFile(input.AccessClass, input.OriginalName, input.MimeType, input.SizeBytes); err != nil {
 		return nil, err
 	}
 
@@ -358,6 +418,44 @@ func (s *Service) GetPublicStreamURL(ctx context.Context, tenantID, assetID uuid
 	return &StreamURLOutput{
 		StreamURL:        streamURL,
 		ExpiresInSeconds: int(StreamURLTTL.Seconds()),
+		MimeType:         asset.MimeType,
+		SizeBytes:        asset.SizeBytes,
+	}, nil
+}
+
+func (s *Service) GetCoursePrivateStreamURL(ctx context.Context, tenantID, assetID uuid.UUID) (*StreamURLOutput, error) {
+	var tid pgtype.UUID
+	_ = tid.Scan(tenantID.String())
+
+	var aid pgtype.UUID
+	_ = aid.Scan(assetID.String())
+
+	asset, err := s.db.GetMediaAssetByID(ctx, mediadb.GetMediaAssetByIDParams{
+		TenantID: tid,
+		ID:       aid,
+	})
+	if err != nil {
+		return nil, ErrMediaNotFound
+	}
+
+	if asset.ValidationStatus != "verified" {
+		return nil, ErrMediaNotVerified
+	}
+
+	if asset.AccessClass != "course_private" {
+		return nil, ErrMediaNotCoursePrivate
+	}
+
+	streamURL, err := s.storage.PresignGetURL(ctx, asset.StorageKey, StreamURLTTL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate course stream url: %w", err)
+	}
+
+	return &StreamURLOutput{
+		StreamURL:        streamURL,
+		ExpiresInSeconds: int(StreamURLTTL.Seconds()),
+		MimeType:         asset.MimeType,
+		SizeBytes:        asset.SizeBytes,
 	}, nil
 }
 

@@ -509,3 +509,264 @@ export interface AppointmentStatusHistoryItem {
   created_at: string;
 }
 
+// ------------------------------------------------------------------------------------------------
+// Phase 3: Recorded Courses & Lessons Types (PSY-3.1)
+// ------------------------------------------------------------------------------------------------
+
+export type CourseStatus = 'draft' | 'published' | 'archived';
+
+export interface PublicCourseItem {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  instructor_name: string;
+  price_rials: number;
+  cover_media_id?: string | null;
+  status: 'published';
+  published_at?: string | null;
+  total_lessons_count?: number;
+  total_duration_seconds?: number;
+}
+
+export interface PublicLessonItem {
+  id: string;
+  title: string;
+  description: string;
+  display_order: number;
+  duration_seconds: number;
+  is_free_preview: boolean;
+}
+
+export interface PublicCourseDetail {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  instructor_name: string;
+  price_rials: number;
+  cover_media_id?: string | null;
+  status: CourseStatus;
+  published_at?: string | null;
+  lessons: PublicLessonItem[];
+}
+
+export interface LessonStreamResponse {
+  stream_url: string;
+  expires_at: string;
+  expires_in_seconds?: number;
+  duration_seconds?: number;
+  mime_type?: string;
+  size_bytes?: number;
+}
+
+export interface CourseCheckoutRequest {
+  idempotency_key: string;
+  callback_url: string;
+}
+
+export interface CourseCheckoutResponse {
+  payment_attempt_id: string;
+  purchase_id: string;
+  authority: string;
+  payment_url: string;
+  amount_rials: number;
+  status: 'initiated';
+  expires_at?: string | null;
+}
+
+export interface SendOTPRequest {
+  phone: string;
+}
+
+export interface SendOTPResponse {
+  message: string;
+  expires_in_seconds: number;
+}
+
+export interface VerifyOTPRequest {
+  phone: string;
+  code: string;
+}
+
+export interface BuyerAccountMe {
+  id: string;
+  phone: string;
+  full_name?: string | null;
+  status: 'active' | 'blocked';
+}
+
+export interface VerifyOTPResponse {
+  buyer: BuyerAccountMe;
+}
+
+export interface BuyerCourseEntitlementItem {
+  id: string;
+  course_id: string;
+  course_slug?: string;
+  course_title_snapshot: string;
+  price_rials_snapshot: number;
+  status: 'active' | 'revoked';
+  granted_at: string;
+}
+
+export interface AdminCourseItem {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  instructor_name: string;
+  price_rials: number;
+  cover_media_id?: string | null;
+  status: CourseStatus;
+  published_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCourseRequest {
+  title: string;
+  slug: string;
+  description?: string;
+  instructor_name: string;
+  price_rials: number;
+  cover_media_id?: string | null;
+}
+
+export interface UpdateCourseRequest {
+  title?: string;
+  slug?: string;
+  description?: string;
+  instructor_name?: string;
+  price_rials?: number;
+  cover_media_id?: string | null;
+}
+
+export interface AdminLessonItem {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string;
+  display_order: number;
+  media_asset_id: string;
+  duration_seconds: number;
+  is_free_preview: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CreateLessonRequest {
+  title: string;
+  description?: string;
+  display_order: number;
+  media_asset_id: string;
+  duration_seconds?: number;
+  is_free_preview?: boolean;
+}
+
+export interface UpdateLessonRequest {
+  title?: string;
+  description?: string;
+  display_order?: number;
+  media_asset_id?: string;
+  duration_seconds?: number;
+  is_free_preview?: boolean;
+}
+
+export interface AdminCourseEntitlementItem {
+  id: string;
+  buyer_id: string;
+  buyer_phone: string;
+  buyer_full_name: string;
+  status: 'active' | 'revoked';
+  course_title_snapshot: string;
+  price_rials_snapshot: number;
+  granted_at: string;
+  revoked_at?: string | null;
+  revocation_reason?: string | null;
+}
+
+export interface WorkshopMetrics {
+  total_workshops: number;
+  published_workshops: number;
+  draft_workshops: number;
+  closed_workshops: number;
+  cancelled_workshops: number;
+  total_registrations: number;
+  confirmed_registrations: number;
+  pending_registrations: number;
+  cancelled_registrations: number;
+}
+
+export interface BookingMetrics {
+  active_therapists: number;
+  total_slots: number;
+  available_slots: number;
+  booked_slots: number;
+  held_slots: number;
+  total_appointments: number;
+  confirmed_appointments: number;
+  pending_appointments: number;
+  completed_appointments: number;
+  cancelled_appointments: number;
+}
+
+export interface CourseMetrics {
+  total_courses: number;
+  published_courses: number;
+  draft_courses: number;
+  archived_courses: number;
+  total_lessons: number;
+  total_entitlements: number;
+  active_entitlements: number;
+  revoked_entitlements: number;
+  pending_entitlements: number;
+}
+
+export interface FinancialMetrics {
+  total_purchases: number;
+  completed_purchases: number;
+  pending_purchases: number;
+  failed_purchases: number;
+  refund_required_purchases: number;
+  refunded_purchases: number;
+  gross_revenue_rials: number;
+  total_refunded_rials: number;
+  net_revenue_rials: number;
+  workshop_revenue_rials: number;
+  course_revenue_rials: number;
+}
+
+export interface PaymentAttemptMetrics {
+  total_attempts: number;
+  initiated_attempts: number;
+  verified_attempts: number;
+  failed_attempts: number;
+}
+
+export interface MediaMetrics {
+  total_assets: number;
+  total_bytes: number;
+  storage_quota_bytes: number;
+  usage_percentage_permille: number;
+  usage_percentage: number;
+  public_bytes: number;
+  course_private_bytes: number;
+  video_count: number;
+  audio_count: number;
+  image_count: number;
+}
+
+export interface TenantMetricsReport {
+  tenant_id: string;
+  generated_at: string;
+  workshops: WorkshopMetrics;
+  booking: BookingMetrics;
+  courses: CourseMetrics;
+  financial: FinancialMetrics;
+  payment_attempts: PaymentAttemptMetrics;
+  media: MediaMetrics;
+}
+
+
+

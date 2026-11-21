@@ -54,6 +54,27 @@ import type {
   RescheduleAppointmentRequest,
   AppointmentStatusHistoryItem,
   AppointmentStatus,
+  CourseStatus,
+  PublicCourseItem,
+  PublicCourseDetail,
+  PublicLessonItem,
+  LessonStreamResponse,
+  CourseCheckoutRequest,
+  CourseCheckoutResponse,
+  SendOTPRequest,
+  SendOTPResponse,
+  VerifyOTPRequest,
+  VerifyOTPResponse,
+  BuyerAccountMe,
+  BuyerCourseEntitlementItem,
+  AdminCourseItem,
+  CreateCourseRequest,
+  UpdateCourseRequest,
+  AdminLessonItem,
+  CreateLessonRequest,
+  UpdateLessonRequest,
+  AdminCourseEntitlementItem,
+  TenantMetricsReport,
 } from './types.js';
 
 export * from './types.js';
@@ -485,5 +506,137 @@ export class PsychologyApiClient {
 
   async getAdminAppointmentHistory(id: string): Promise<AppointmentStatusHistoryItem[]> {
     return this.request<AppointmentStatusHistoryItem[]>(`/admin/appointments/${id}/history`);
+  }
+
+  // ---------------- Public Courses (Phase 3 - PSY-3.1) ----------------
+  async listPublicCourses(): Promise<PublicCourseItem[]> {
+    return this.request<PublicCourseItem[]>('/public/courses');
+  }
+
+  async getPublicCourse(slug: string): Promise<PublicCourseDetail> {
+    return this.request<PublicCourseDetail>(`/public/courses/${slug}`);
+  }
+
+  async getPublicLessonPreviewStream(slug: string, lessonId: string): Promise<LessonStreamResponse> {
+    return this.request<LessonStreamResponse>(`/public/courses/${slug}/lessons/${lessonId}/preview-stream`);
+  }
+
+  async initiateCourseCheckout(slug: string, data: CourseCheckoutRequest): Promise<CourseCheckoutResponse> {
+    return this.request<CourseCheckoutResponse>(`/public/courses/${slug}/checkout`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ---------------- Buyer Auth & Account (Phase 3 - PSY-3.1) ----------------
+  async sendBuyerOTP(data: SendOTPRequest): Promise<SendOTPResponse> {
+    return this.request<SendOTPResponse>('/account/auth/otp/send', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async verifyBuyerOTP(data: VerifyOTPRequest): Promise<VerifyOTPResponse> {
+    return this.request<VerifyOTPResponse>('/account/auth/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async logoutBuyer(): Promise<MessageResponse> {
+    return this.request<MessageResponse>('/account/auth/logout', {
+      method: 'POST',
+    });
+  }
+
+  async getBuyerMe(): Promise<BuyerAccountMe> {
+    return this.request<BuyerAccountMe>('/account/auth/me');
+  }
+
+  async listMyCourses(): Promise<BuyerCourseEntitlementItem[]> {
+    return this.request<BuyerCourseEntitlementItem[]>('/account/courses');
+  }
+
+  async getCourseLessonStreamUrl(courseId: string, lessonId: string): Promise<LessonStreamResponse> {
+    return this.request<LessonStreamResponse>(`/account/courses/${courseId}/lessons/${lessonId}/stream`);
+  }
+
+  // ---------------- Admin Courses & Lessons (Phase 3 - PSY-3.1) ----------------
+  async listAdminCourses(status?: CourseStatus): Promise<AdminCourseItem[]> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return this.request<AdminCourseItem[]>(`/admin/courses${query}`);
+  }
+
+  async createAdminCourse(data: CreateCourseRequest): Promise<AdminCourseItem> {
+    return this.request<AdminCourseItem>('/admin/courses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAdminCourse(id: string): Promise<AdminCourseItem> {
+    return this.request<AdminCourseItem>(`/admin/courses/${id}`);
+  }
+
+  async updateAdminCourse(id: string, data: UpdateCourseRequest): Promise<AdminCourseItem> {
+    return this.request<AdminCourseItem>(`/admin/courses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAdminCourse(id: string): Promise<MessageResponse> {
+    return this.request<MessageResponse>(`/admin/courses/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async publishAdminCourse(id: string): Promise<AdminCourseItem> {
+    return this.request<AdminCourseItem>(`/admin/courses/${id}/publish`, {
+      method: 'POST',
+    });
+  }
+
+  async archiveAdminCourse(id: string): Promise<AdminCourseItem> {
+    return this.request<AdminCourseItem>(`/admin/courses/${id}/archive`, {
+      method: 'POST',
+    });
+  }
+
+  async listAdminCourseLessons(courseId: string): Promise<AdminLessonItem[]> {
+    return this.request<AdminLessonItem[]>(`/admin/courses/${courseId}/lessons`);
+  }
+
+  async createAdminCourseLesson(courseId: string, data: CreateLessonRequest): Promise<AdminLessonItem> {
+    return this.request<AdminLessonItem>(`/admin/courses/${courseId}/lessons`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAdminCourseLesson(courseId: string, lessonId: string): Promise<AdminLessonItem> {
+    return this.request<AdminLessonItem>(`/admin/courses/${courseId}/lessons/${lessonId}`);
+  }
+
+  async updateAdminCourseLesson(courseId: string, lessonId: string, data: UpdateLessonRequest): Promise<AdminLessonItem> {
+    return this.request<AdminLessonItem>(`/admin/courses/${courseId}/lessons/${lessonId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAdminCourseLesson(courseId: string, lessonId: string): Promise<MessageResponse> {
+    return this.request<MessageResponse>(`/admin/courses/${courseId}/lessons/${lessonId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listAdminCourseEntitlements(courseId: string): Promise<AdminCourseEntitlementItem[]> {
+    return this.request<AdminCourseEntitlementItem[]>(`/admin/courses/${courseId}/entitlements`);
+  }
+
+  // ---------------- Admin Reports & Analytics (Phase 4 - PSY-4.1) ----------------
+  async getAdminReportsMetrics(): Promise<TenantMetricsReport> {
+    return this.request<TenantMetricsReport>('/admin/reports/metrics');
   }
 }

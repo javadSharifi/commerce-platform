@@ -508,3 +508,465 @@ describe('PsychologyApiClient - Booking & Therapist Endpoints (PSY-2.1)', () => 
     assert.strictEqual(logs[1].action, 'rescheduled');
   });
 });
+
+describe('PsychologyApiClient - Courses & Buyer Endpoints (Phase 3 - PSY-3.1)', () => {
+  test('public courses listing, detail, and free preview stream', async () => {
+    const mockCourses = [
+      {
+        id: 'c-1',
+        title: 'مدیریت اضطراب فراگیر',
+        slug: 'anxiety-management',
+        description: 'دوره جامع مهارت‌های کنترل اضطراب',
+        instructor_name: 'دکتر علوی',
+        price_rials: 15000000,
+        status: 'published',
+        published_at: '2026-11-20T10:00:00Z',
+        total_lessons_count: 5,
+        total_duration_seconds: 3600,
+      },
+    ];
+
+    const mockDetail = {
+      ...mockCourses[0],
+      lessons: [
+        {
+          id: 'l-1',
+          title: 'درس اول: شناخت نشانه‌ها',
+          description: 'مقدمه‌ای بر فیزیولوژی اضطراب',
+          display_order: 1,
+          duration_seconds: 600,
+          is_free_preview: true,
+        },
+        {
+          id: 'l-2',
+          title: 'درس دوم: فنون تنفس',
+          description: 'تکنیک‌های عملی آرام‌سازی',
+          display_order: 2,
+          duration_seconds: 900,
+          is_free_preview: false,
+        },
+      ],
+    };
+
+    const client = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      fetch: async (url, init) => {
+        const u = url.toString();
+        if (u.endsWith('/public/courses')) {
+          return new Response(JSON.stringify(mockCourses), { status: 200 });
+        }
+        if (u.endsWith('/public/courses/anxiety-management')) {
+          return new Response(JSON.stringify(mockDetail), { status: 200 });
+        }
+        if (u.endsWith('/preview-stream')) {
+          return new Response(
+            JSON.stringify({
+              stream_url: 'https://storage.parspack.com/preview/l-1.mp4?X-Amz-Expires=300',
+              expires_at: '2026-11-20T10:05:00Z',
+              duration_seconds: 600,
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'یافت نشد' }), { status: 404 });
+      },
+    });
+
+    const courses = await client.listPublicCourses();
+    assert.strictEqual(courses.length, 1);
+    assert.strictEqual(courses[0].slug, 'anxiety-management');
+
+    const detail = await client.getPublicCourse('anxiety-management');
+    assert.strictEqual(detail.lessons.length, 2);
+    assert.strictEqual(detail.lessons[0].is_free_preview, true);
+
+    const stream = await client.getPublicLessonPreviewStream('anxiety-management', 'l-1');
+    assert.ok(stream.stream_url.includes('l-1.mp4'));
+    assert.strictEqual(stream.duration_seconds, 600);
+  });
+
+  test('buyer OTP auth, entitlements, and private lesson stream', async () => {
+    let verifiedSessionToken = '';
+
+    const mockFetch = async (url, init) => {
+      const u = url.toString();
+      const headers = init?.headers || {};
+
+      if (u.endsWith('/account/auth/otp/send')) {
+        const body = JSON.parse(init.body);
+        assert.strictEqual(body.phone, '09123456789');
+        return new Response(
+          JSON.stringify({
+            phone: body.phone,
+            expires_in_seconds: 120,
+            message: 'کد تایید ارسال شد',
+          }),
+          { status: 200 }
+        );
+      }
+
+      if (u.endsWith('/account/auth/otp/verify')) {
+        const body = JSON.parse(init.body);
+        assert.strictEqual(body.code, '123456');
+        verifiedSessionToken = 'buyer-sess-token-xyz';
+        return new Response(
+          JSON.stringify({
+            session_token: verifiedSessionToken,
+            expires_at: '2026-11-27T10:00:00Z',
+            account: {
+              id: 'buyer-1',
+              phone: '09123456789',
+              full_name: 'سارا رضایی',
+              status: 'active',
+            },
+          }),
+          { status: 200 }
+        );
+      }
+
+      if (u.endsWith('/account/courses')) {
+        assert.strictEqual(headers['Authorization'], 'Bearer buyer-sess-token-xyz');
+        return new Response(
+          JSON.stringify([
+            {
+              id: 'ent-1',
+              course_id: 'c-1',
+              course_title_snapshot: 'مدیریت اضطراب فراگیر',
+              price_rials_snapshot: 15000000,
+              status: 'active',
+              granted_at: '2026-11-21T09:00:00Z',
+            },
+          ]),
+          { status: 200 }
+        );
+      }
+
+      if (u.endsWith('/lessons/l-2/stream')) {
+        assert.strictEqual(headers['Authorization'], 'Bearer buyer-sess-token-xyz');
+        return new Response(
+          JSON.stringify({
+            stream_url: 'https://storage.parspack.com/courses/private/l-2.mp4?signed=true',
+            expires_at: '2026-11-21T09:05:00Z',
+            duration_seconds: 900,
+          }),
+          { status: 200 }
+        );
+      }
+
+      return new Response(JSON.stringify({ code: 'UNAUTHORIZED' }), { status: 401 });
+    };
+
+    const client = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      fetch: mockFetch,
+    });
+
+    // 1. Send OTP
+    const otpRes = await client.sendBuyerOTP({ phone: '09123456789' });
+    assert.strictEqual(otpRes.expires_in_seconds, 120);
+
+    // 2. Verify OTP
+    const verifyRes = await client.verifyBuyerOTP({ phone: '09123456789', code: '123456' });
+    assert.strictEqual(verifyRes.session_token, 'buyer-sess-token-xyz');
+    assert.strictEqual(verifyRes.account.full_name, 'سارا رضایی');
+
+    // 3. Buyer Client with token
+    const buyerClient = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      headers: {
+        Authorization: `Bearer ${verifyRes.session_token}`,
+      },
+      fetch: mockFetch,
+    });
+
+    const myCourses = await buyerClient.listMyCourses();
+    assert.strictEqual(myCourses.length, 1);
+    assert.strictEqual(myCourses[0].course_title_snapshot, 'مدیریت اضطراب فراگیر');
+
+    const stream = await buyerClient.getCourseLessonStreamUrl('c-1', 'l-2');
+    assert.ok(stream.stream_url.includes('courses/private/l-2.mp4'));
+  });
+
+  test('admin courses and lessons management lifecycle', async () => {
+    let courseStatus = 'draft';
+    const lessonsList = [];
+
+    const client = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      headers: {
+        Authorization: 'Bearer admin-token',
+      },
+      fetch: async (url, init) => {
+        const u = url.toString();
+        const method = init?.method || 'GET';
+
+        if (u.endsWith('/admin/courses') && method === 'POST') {
+          const body = JSON.parse(init.body);
+          return new Response(
+            JSON.stringify({
+              id: 'c-100',
+              title: body.title,
+              slug: body.slug,
+              description: body.description,
+              instructor_name: body.instructor_name,
+              price_rials: body.price_rials,
+              status: courseStatus,
+              lessons_count: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }),
+            { status: 201 }
+          );
+        }
+
+        if (u.endsWith('/admin/courses/c-100/publish') && method === 'POST') {
+          courseStatus = 'published';
+          return new Response(
+            JSON.stringify({
+              id: 'c-100',
+              title: 'دوره جدید',
+              status: courseStatus,
+              published_at: new Date().toISOString(),
+            }),
+            { status: 200 }
+          );
+        }
+
+        if (u.endsWith('/admin/courses/c-100/lessons') && method === 'POST') {
+          const body = JSON.parse(init.body);
+          const newLesson = {
+            id: `les-${lessonsList.length + 1}`,
+            course_id: 'c-100',
+            title: body.title,
+            description: body.description,
+            display_order: body.display_order,
+            media_asset_id: body.media_asset_id,
+            duration_seconds: body.duration_seconds,
+            is_free_preview: body.is_free_preview,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          lessonsList.push(newLesson);
+          return new Response(JSON.stringify(newLesson), { status: 201 });
+        }
+
+        if (u.endsWith('/admin/courses/c-100/lessons') && method === 'GET') {
+          return new Response(JSON.stringify(lessonsList), { status: 200 });
+        }
+
+        if (u.endsWith('/admin/courses/c-100/entitlements') && method === 'GET') {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 'ent-1',
+                tenant_id: 'ten-1',
+                buyer_id: 'buyer-1',
+                buyer_phone: '09123456789',
+                buyer_name: 'سارا رضایی',
+                course_id: 'c-100',
+                purchase_id: 'pur-1',
+                status: 'active',
+                course_title_snapshot: 'دوره جدید',
+                price_rials_snapshot: 20000000,
+                granted_at: new Date().toISOString(),
+              },
+            ]),
+            { status: 200 }
+          );
+        }
+
+        return new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 });
+      },
+    });
+
+    // 1. Create Course
+    const course = await client.createAdminCourse({
+      title: 'دوره جدید',
+      slug: 'new-course',
+      description: 'توضیحات دوره',
+      instructor_name: 'دکتر صادقی',
+      price_rials: 20000000,
+    });
+    assert.strictEqual(course.id, 'c-100');
+    assert.strictEqual(course.status, 'draft');
+
+    // 2. Publish Course
+    const published = await client.publishAdminCourse('c-100');
+    assert.strictEqual(published.status, 'published');
+
+    // 3. Add Lesson
+    const lesson = await client.createAdminCourseLesson('c-100', {
+      title: 'درس اول',
+      description: 'مقدمات',
+      display_order: 1,
+      media_asset_id: 'med-video-1',
+      duration_seconds: 1200,
+      is_free_preview: true,
+    });
+    assert.strictEqual(lesson.id, 'les-1');
+    assert.strictEqual(lesson.is_free_preview, true);
+
+    // 4. List Lessons
+    const lessons = await client.listAdminCourseLessons('c-100');
+    assert.strictEqual(lessons.length, 1);
+
+    // 5. Entitlements
+    const entitlements = await client.listAdminCourseEntitlements('c-100');
+    assert.strictEqual(entitlements.length, 1);
+    assert.strictEqual(entitlements[0].buyer_phone, '09123456789');
+  });
+
+  test('Public Course checkout and syllabus flow', async () => {
+    const client = new PsychologyApiClient({
+      baseUrl: 'https://test-clinic.ir',
+      fetch: async (url, init = {}) => {
+        const u = url.toString();
+        const method = init.method || 'GET';
+
+        if (u.endsWith('/public/courses/anxiety-management') && method === 'GET') {
+          return new Response(
+            JSON.stringify({
+              id: 'c-200',
+              title: 'دوره اضطراب',
+              slug: 'anxiety-management',
+              instructor_name: 'دکتر محمدی',
+              price_rials: 15000000,
+              status: 'published',
+              lessons: [
+                {
+                  id: 'les-1',
+                  title: 'معرفی',
+                  display_order: 1,
+                  duration_seconds: 900,
+                  is_free_preview: true,
+                },
+              ],
+            }),
+            { status: 200 }
+          );
+        }
+
+        if (u.endsWith('/public/courses/anxiety-management/checkout') && method === 'POST') {
+          return new Response(
+            JSON.stringify({
+              payment_attempt_id: 'att-100',
+              purchase_id: 'pur-100',
+              authority: 'A00001234',
+              payment_url: 'https://payment.zarinpal.com/pg/StartPay/A00001234',
+              amount_rials: 15000000,
+              status: 'initiated',
+            }),
+            { status: 200 }
+          );
+        }
+
+        return new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 });
+      },
+    });
+
+    const course = await client.getPublicCourse('anxiety-management');
+    assert.strictEqual(course.id, 'c-200');
+    assert.strictEqual(course.price_rials, 15000000);
+    assert.strictEqual(course.lessons.length, 1);
+
+    const checkout = await client.initiateCourseCheckout('anxiety-management', {
+      idempotency_key: 'chk_key_test_1',
+      callback_url: 'https://test-clinic.ir/callbacks/payments/zarinpal',
+    });
+    assert.strictEqual(checkout.authority, 'A00001234');
+    assert.strictEqual(checkout.amount_rials, 15000000);
+    assert.strictEqual(checkout.status, 'initiated');
+  });
+
+  test('reports: getAdminReportsMetrics aggregates non-PII metrics', async () => {
+    const client = new PsychologyApiClient({
+      baseUrl: 'https://api.example.com',
+      fetch: async (url, opts) => {
+        const u = String(url);
+        if (u.endsWith('/admin/reports/metrics')) {
+          return new Response(
+            JSON.stringify({
+              tenant_id: 't-123',
+              generated_at: new Date().toISOString(),
+              workshops: {
+                total_workshops: 4,
+                published_workshops: 2,
+                draft_workshops: 1,
+                closed_workshops: 1,
+                cancelled_workshops: 0,
+                total_registrations: 30,
+                confirmed_registrations: 28,
+                pending_registrations: 1,
+                cancelled_registrations: 1,
+              },
+              booking: {
+                active_therapists: 2,
+                total_slots: 40,
+                available_slots: 15,
+                booked_slots: 20,
+                held_slots: 5,
+                total_appointments: 25,
+                confirmed_appointments: 18,
+                pending_appointments: 2,
+                completed_appointments: 15,
+                cancelled_appointments: 5,
+              },
+              courses: {
+                total_courses: 3,
+                published_courses: 2,
+                draft_courses: 0,
+                archived_courses: 1,
+                total_lessons: 18,
+                total_entitlements: 50,
+                active_entitlements: 48,
+                revoked_entitlements: 2,
+                pending_entitlements: 0,
+              },
+              financial: {
+                total_purchases: 80,
+                completed_purchases: 76,
+                pending_purchases: 2,
+                failed_purchases: 1,
+                refund_required_purchases: 0,
+                refunded_purchases: 1,
+                gross_revenue_rials: 400000000,
+                total_refunded_rials: 5000000,
+                net_revenue_rials: 395000000,
+                workshop_revenue_rials: 150000000,
+                course_revenue_rials: 250000000,
+              },
+              payment_attempts: {
+                total_attempts: 85,
+                initiated_attempts: 85,
+                verified_attempts: 76,
+                failed_attempts: 9,
+              },
+              media: {
+                total_assets: 10,
+                total_bytes: 1073741824, // 1 GiB
+                storage_quota_bytes: 10737418240, // 10 GiB
+                usage_percentage_permille: 100,
+                usage_percentage: 10,
+                public_bytes: 52428800,
+                course_private_bytes: 1021313024,
+                video_count: 6,
+                audio_count: 3,
+                image_count: 1,
+              },
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 });
+      },
+    });
+
+    const metrics = await client.getAdminReportsMetrics();
+    assert.strictEqual(metrics.tenant_id, 't-123');
+    assert.strictEqual(metrics.workshops.total_workshops, 4);
+    assert.strictEqual(metrics.booking.active_therapists, 2);
+    assert.strictEqual(metrics.courses.total_lessons, 18);
+    assert.strictEqual(metrics.financial.net_revenue_rials, 395000000);
+    assert.strictEqual(metrics.media.usage_percentage, 10);
+  });
+});

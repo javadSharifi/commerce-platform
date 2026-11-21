@@ -64,3 +64,19 @@ sql:
         package: "bookingdb"
         out: "internal/booking/bookingdb"
         sql_package: "pgx/v5"
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/courses/queries.sql"
+    gen:
+      go:
+        package: "coursesdb"
+        out: "internal/courses/coursesdb"
+        sql_package: "pgx/v5"
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/reports/queries.sql"
+    gen:
+      go:
+        package: "reportsdb"
+        out: "internal/reports/reportsdb"
+        sql_package: "pgx/v5"
