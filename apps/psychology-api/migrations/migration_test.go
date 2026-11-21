@@ -69,6 +69,54 @@ func TestMigrationFilesPairingAndIntegrity(t *testing.T) {
 	}
 }
 
+func TestAppointmentTablesRLSAndConstraints(t *testing.T) {
+	upContentBytes, err := os.ReadFile("000005_create_appointments.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000005_create_appointments.up.sql: %v", err)
+	}
+	upContent := string(upContentBytes)
+
+	requiredTables := []string{
+		"therapists",
+		"therapist_working_hours",
+		"therapist_schedule_exceptions",
+		"appointment_slots",
+		"appointments",
+		"appointment_status_history",
+	}
+
+	for _, tbl := range requiredTables {
+		if !strings.Contains(upContent, "CREATE TABLE "+tbl) {
+			t.Errorf("expected 000005 to create table %s", tbl)
+		}
+		if !strings.Contains(upContent, "ALTER TABLE "+tbl+" ENABLE ROW LEVEL SECURITY;") {
+			t.Errorf("table %s missing ENABLE ROW LEVEL SECURITY", tbl)
+		}
+		if !strings.Contains(upContent, "ALTER TABLE "+tbl+" FORCE  ROW LEVEL SECURITY;") &&
+			!strings.Contains(upContent, "ALTER TABLE "+tbl+" FORCE ROW LEVEL SECURITY;") {
+			t.Errorf("table %s missing FORCE ROW LEVEL SECURITY", tbl)
+		}
+	}
+
+	// Composite FKs
+	expectedFKs := []string{
+		"FOREIGN KEY (tenant_id, therapist_id) REFERENCES therapists(tenant_id, id)",
+		"FOREIGN KEY (tenant_id, slot_id) REFERENCES appointment_slots(tenant_id, id)",
+		"FOREIGN KEY (tenant_id, appointment_id) REFERENCES appointments(tenant_id, id)",
+	}
+
+	for _, fk := range expectedFKs {
+		if !strings.Contains(upContent, fk) {
+			t.Errorf("missing composite foreign key: %s", fk)
+		}
+	}
+
+	// Active slot uniqueness
+	if !strings.Contains(upContent, "appointments_active_slot_uq") {
+		t.Errorf("missing appointments_active_slot_uq index")
+	}
+}
+
 func TestMigrationUpDownUpLive(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {

@@ -56,3 +56,11 @@ sql:
         package: "mediadb"
         out: "internal/media/mediadb"
         sql_package: "pgx/v5"
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/booking/queries.sql"
+    gen:
+      go:
+        package: "bookingdb"
+        out: "internal/booking/bookingdb"
+        sql_package: "pgx/v5"

@@ -323,3 +323,189 @@ export interface MediaListResponse {
   quota_used_bytes: number;
   quota_total_bytes: number;
 }
+
+// ---------------- Phase 2: Booking & Therapists ----------------
+export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'expired' | 'completed';
+export type SlotStatus = 'available' | 'reserved' | 'booked' | 'blocked';
+export type StatusHistoryAction = 'created' | 'confirmed' | 'cancelled' | 'rescheduled' | 'expired' | 'completed';
+export type StatusHistoryActorType = 'guest' | 'staff' | 'system';
+
+export interface PublicTherapistItem {
+  id: string;
+  name: string;
+  slug: string;
+  title: string;
+  avatar_asset_id?: string | null;
+  session_duration_minutes: number;
+}
+
+export interface PublicTherapistDetail {
+  id: string;
+  name: string;
+  slug: string;
+  title: string;
+  bio: string;
+  avatar_asset_id?: string | null;
+  session_duration_minutes: number;
+}
+
+export interface PublicAppointmentSlot {
+  id: string;
+  therapist_id: string;
+  starts_at: string;
+  ends_at: string;
+  status: SlotStatus;
+}
+
+export interface CreateAppointmentRequest {
+  therapist_id: string;
+  slot_id: string;
+  guest_name: string;
+  guest_phone: string;
+  notes?: string;
+}
+
+export interface PublicAppointmentResponse {
+  id: string;
+  therapist_id: string;
+  slot_id: string;
+  guest_name: string;
+  guest_lookup_hash: string;
+  status: AppointmentStatus;
+  expires_at: string;
+  starts_at: string;
+  ends_at: string;
+}
+
+export interface CancelAppointmentRequest {
+  reason?: string;
+}
+
+export interface AdminTherapistResponse {
+  id: string;
+  user_id?: string | null;
+  name: string;
+  slug: string;
+  title: string;
+  bio: string;
+  avatar_asset_id?: string | null;
+  session_duration_minutes: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTherapistRequest {
+  user_id?: string | null;
+  name: string;
+  slug: string;
+  title?: string;
+  bio?: string;
+  avatar_asset_id?: string | null;
+  session_duration_minutes?: number;
+  is_active?: boolean;
+}
+
+export interface UpdateTherapistRequest {
+  user_id?: string | null;
+  name?: string;
+  slug?: string;
+  title?: string;
+  bio?: string;
+  avatar_asset_id?: string | null;
+  session_duration_minutes?: number;
+  is_active?: boolean;
+}
+
+export interface WorkingHourItem {
+  id?: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+}
+
+export interface SetWorkingHoursRequest {
+  items: WorkingHourItem[];
+}
+
+export interface ScheduleExceptionItem {
+  id: string;
+  date: string;
+  is_unavailable: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+  reason?: string;
+}
+
+export interface CreateScheduleExceptionRequest {
+  date: string;
+  is_unavailable?: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+  reason?: string;
+}
+
+export interface GenerateSlotsRequest {
+  from_date: string;
+  to_date: string;
+}
+
+export interface AdminAppointmentSlot {
+  id: string;
+  therapist_id: string;
+  starts_at: string;
+  ends_at: string;
+  status: SlotStatus;
+}
+
+export interface AdminAppointmentListItem {
+  id: string;
+  therapist_id: string;
+  therapist_name: string;
+  slot_id: string;
+  starts_at: string;
+  ends_at: string;
+  guest_name: string;
+  guest_phone: string;
+  status: AppointmentStatus;
+  created_at: string;
+}
+
+export interface AdminAppointmentDetail {
+  id: string;
+  therapist_id: string;
+  therapist_name: string;
+  slot_id: string;
+  starts_at: string;
+  ends_at: string;
+  guest_name: string;
+  guest_phone: string;
+  notes: string;
+  status: AppointmentStatus;
+  expires_at: string;
+  confirmed_at?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RescheduleAppointmentRequest {
+  new_slot_id: string;
+  reason?: string;
+}
+
+export interface AppointmentStatusHistoryItem {
+  id: string;
+  appointment_id: string;
+  from_status?: string | null;
+  to_status: string;
+  action: StatusHistoryAction;
+  actor_type: StatusHistoryActorType;
+  actor_id?: string | null;
+  reason: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+

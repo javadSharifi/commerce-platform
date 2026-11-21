@@ -58,6 +58,7 @@ export const GET: APIRoute = async ({ request }) => {
     { loc: `${baseUrl}/`, priority: '1.0', changefreq: 'daily' },
     { loc: `${baseUrl}/workshops`, priority: '0.9', changefreq: 'daily' },
     { loc: `${baseUrl}/blog`, priority: '0.9', changefreq: 'daily' },
+    { loc: `${baseUrl}/booking`, priority: '0.9', changefreq: 'daily' },
   ];
 
   const blogUrls: SitemapUrl[] = blogPosts.map((post) => ({

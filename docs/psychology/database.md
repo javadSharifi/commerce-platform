@@ -688,10 +688,279 @@ CREATE POLICY tenant_isolation ON media_uploads
 
 ---
 
-## ۷. نقشهٔ راه تکمیل افزایشی جداول در فازهای بعدی
+## ۷. ساختار جداول نوبت‌دهی و تقویم درمانگر (Booking Schema - فاز PSY-2)
+
+### ۷.۱ جدول `therapists` (درمانگران)
+هر کلینیک یک یا چند درمانگر فعال دارد که دارای پروفایل عمومی، مدت زمان پیش‌فرض جلسه (`session_duration_minutes`) و اسلاگ یکتای مستاجر هستند. در صورت داشتن حساب کاربری در پنل، به `panel_identities(id)` متصل می‌شوند.
+```sql
+CREATE TABLE therapists (
+    id                       uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id                  uuid        REFERENCES panel_identities(id) ON DELETE SET NULL,
+    name                     text        NOT NULL,
+    slug                     text        NOT NULL,
+    title                    text        NOT NULL DEFAULT '',
+    bio                      text        NOT NULL DEFAULT '',
+    avatar_asset_id          uuid        REFERENCES media_assets(id) ON DELETE SET NULL,
+    session_duration_minutes integer     NOT NULL DEFAULT 45 CHECK (session_duration_minutes > 0),
+    is_active                boolean     NOT NULL DEFAULT true,
+    created_at               timestamptz NOT NULL DEFAULT now(),
+    updated_at               timestamptz NOT NULL DEFAULT now(),
+    deleted_at               timestamptz,
+    CONSTRAINT therapists_tenant_id_id_uq UNIQUE (tenant_id, id)
+);
+
+CREATE UNIQUE INDEX therapists_tenant_slug_uq ON therapists (tenant_id, slug) WHERE deleted_at IS NULL;
+CREATE INDEX therapists_tenant_is_active_idx ON therapists (tenant_id, is_active) WHERE deleted_at IS NULL;
+CREATE INDEX therapists_user_id_idx ON therapists (user_id);
+
+ALTER TABLE therapists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE therapists FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON therapists
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+### ۷.۲ جدول `therapist_working_hours` (برنامه کاری هفتگی)
+تعریف بازه‌های کاری روزهای هفته برای هر درمانگر (۰ = شنبه تا ۶ = جمعه).
+```sql
+CREATE TABLE therapist_working_hours (
+    id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    therapist_id uuid        NOT NULL,
+    day_of_week  smallint    NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+    start_time   time        NOT NULL,
+    end_time     time        NOT NULL,
+    is_active    boolean     NOT NULL DEFAULT true,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT therapist_working_hours_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT therapist_working_hours_therapist_fk FOREIGN KEY (tenant_id, therapist_id) REFERENCES therapists(tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT therapist_working_hours_time_check CHECK (start_time < end_time)
+);
+
+CREATE INDEX therapist_working_hours_lookup_idx ON therapist_working_hours (tenant_id, therapist_id, day_of_week);
+
+ALTER TABLE therapist_working_hours ENABLE ROW LEVEL SECURITY;
+ALTER TABLE therapist_working_hours FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON therapist_working_hours
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+### ۷.۳ جدول `therapist_schedule_exceptions` (تعطیلات و استثناهای تقویم)
+تعریف روزهای مرخصی، تعطیلی کامل یا ساعات کاری استثنایی برای تاریخ‌های خاص.
+```sql
+CREATE TABLE therapist_schedule_exceptions (
+    id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id      uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    therapist_id   uuid        NOT NULL,
+    date           date        NOT NULL,
+    is_unavailable boolean     NOT NULL DEFAULT true,
+    start_time     time,
+    end_time       time,
+    reason         text        NOT NULL DEFAULT '',
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT therapist_exceptions_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT therapist_exceptions_therapist_fk FOREIGN KEY (tenant_id, therapist_id) REFERENCES therapists(tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT therapist_exceptions_time_check CHECK (
+        (is_unavailable = true AND start_time IS NULL AND end_time IS NULL) OR
+        (start_time IS NOT NULL AND end_time IS NOT NULL AND start_time < end_time)
+    )
+);
+
+CREATE INDEX therapist_exceptions_date_idx ON therapist_schedule_exceptions (tenant_id, therapist_id, date);
+
+ALTER TABLE therapist_schedule_exceptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE therapist_schedule_exceptions FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON therapist_schedule_exceptions
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+### ۷.۴ جدول `appointment_slots` (سانس‌های نوبت‌دهی)
+سانس‌های تولیدشده بر اساس بازه‌های کاری تا ۳۰ روز آینده. سانس‌ها با زمان UTC ذخیره می‌شوند و هیچ دو سانسی برای یک درمانگر هم‌پوشانی ندارند (`starts_at` یکتا در هر تقویم).
+```sql
+CREATE TABLE appointment_slots (
+    id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    therapist_id uuid        NOT NULL,
+    starts_at    timestamptz NOT NULL,
+    ends_at      timestamptz NOT NULL,
+    status       text        NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'reserved', 'booked', 'blocked')),
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT appointment_slots_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT appointment_slots_therapist_fk FOREIGN KEY (tenant_id, therapist_id) REFERENCES therapists(tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT appointment_slots_time_check CHECK (starts_at < ends_at),
+    CONSTRAINT appointment_slots_unique_time UNIQUE (tenant_id, therapist_id, starts_at)
+);
+
+CREATE INDEX appointment_slots_tenant_therapist_idx ON appointment_slots (tenant_id, therapist_id, starts_at);
+CREATE INDEX appointment_slots_tenant_status_idx ON appointment_slots (tenant_id, status);
+
+ALTER TABLE appointment_slots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointment_slots FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON appointment_slots
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+### ۷.۵ جدول `appointments` (نوبت‌های ثبت‌شده)
+ثبت درخواست نوبت مراجع با نام و شماره تماس، و صدور شناسه امن پیگیری (`guest_lookup_hash`) بدون انتشار PII.
+```sql
+CREATE TABLE appointments (
+    id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id           uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    therapist_id        uuid        NOT NULL,
+    slot_id             uuid        NOT NULL,
+    status              text        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'cancelled', 'expired', 'completed')),
+    guest_name          text        NOT NULL,
+    guest_phone         text        NOT NULL,
+    guest_lookup_hash   text        NOT NULL,
+    notes               text        NOT NULL DEFAULT '',
+    expires_at          timestamptz NOT NULL,
+    confirmed_at        timestamptz,
+    cancelled_at        timestamptz,
+    cancellation_reason text        NOT NULL DEFAULT '',
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    updated_at          timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT appointments_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT appointments_therapist_fk FOREIGN KEY (tenant_id, therapist_id) REFERENCES therapists(tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT appointments_slot_fk FOREIGN KEY (tenant_id, slot_id) REFERENCES appointment_slots(tenant_id, id) ON DELETE RESTRICT
+);
+
+-- حداکثر یک نوبت فعال برای هر سانس در محدودهٔ یک Tenant
+CREATE UNIQUE INDEX appointments_active_slot_uq
+    ON appointments (tenant_id, slot_id)
+    WHERE status IN ('pending', 'confirmed', 'completed');
+
+CREATE INDEX appointments_tenant_status_idx ON appointments (tenant_id, status);
+CREATE INDEX appointments_tenant_therapist_idx ON appointments (tenant_id, therapist_id, created_at);
+CREATE INDEX appointments_expires_at_idx ON appointments (expires_at) WHERE status = 'pending';
+CREATE INDEX appointments_lookup_hash_idx ON appointments (tenant_id, guest_lookup_hash);
+
+ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointments FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON appointments
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+### ۷.۶ جدول `appointment_status_history` (تاریخچه وضعیت و ممیزی نوبت)
+ردیابی هرگونه تغییر وضعیت در نوبت شامل ایجاد، تأیید، لغو، جابه‌جایی و انقضا به همراه مشخصات عامل (`guest`, `staff`, `system`).
+```sql
+CREATE TABLE appointment_status_history (
+    id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id      uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    appointment_id uuid        NOT NULL,
+    from_status    text,
+    to_status      text        NOT NULL,
+    action         text        NOT NULL CHECK (action IN ('created', 'confirmed', 'cancelled', 'rescheduled', 'expired', 'completed')),
+    actor_type     text        NOT NULL CHECK (actor_type IN ('guest', 'staff', 'system')),
+    actor_id       uuid        REFERENCES panel_identities(id) ON DELETE SET NULL,
+    reason         text        NOT NULL DEFAULT '',
+    metadata       jsonb       NOT NULL DEFAULT '{}'::jsonb,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT appointment_history_tenant_id_id_uq UNIQUE (tenant_id, id),
+    CONSTRAINT appointment_history_appointment_fk FOREIGN KEY (tenant_id, appointment_id) REFERENCES appointments(tenant_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX appointment_history_appointment_idx ON appointment_status_history (tenant_id, appointment_id, created_at);
+
+ALTER TABLE appointment_status_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointment_status_history FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON appointment_status_history
+    USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+---
+
+### ۷.۷ ماتریس نقش و مجوزهای نوبت‌دهی
+
+| عملیات | مالک (`owner`) | مدیر محتوا (`content_manager`) | پذیرش (`receptionist`) | درمانگر (`therapist`) |
+| --- | :---: | :---: | :---: | :---: |
+| ایجاد/ویرایش درمانگران | ✅ | ❌ | ❌ | ❌ |
+| تنظیم برنامه کاری درمانگر | ✅ | ❌ | ✅ | ✅ (صرفاً تقویم خود) |
+| ثبت استثنا/مرخصی تقویم | ✅ | ❌ | ✅ | ✅ (صرفاً تقویم خود) |
+| تولید سانس‌های جدید | ✅ | ❌ | ✅ | ✅ (صرفاً تقویم خود) |
+| مشاهده نوبت‌ها و مراجعین | ✅ | ❌ | ✅ | ✅ (صرفاً نوبت‌های خود) |
+| تأیید نوبت پس از تماس | ✅ | ❌ | ✅ | ✅ (صرفاً نوبت‌های خود) |
+| لغو نوبت از پنل | ✅ | ❌ | ✅ | ✅ (صرفاً نوبت‌های خود) |
+| جابه‌جایی نوبت قطعی | ✅ | ❌ | ✅ | ✅ (صرفاً نوبت‌های خود) |
+| مشاهده تاریخچه تغییرات | ✅ | ❌ | ✅ | ✅ (صرفاً نوبت‌های خود) |
+
+---
+
+### ۷.۸ چرخه وضعیت‌ها و TTL
+
+#### چرخه وضعیت سانس (`appointment_slots.status`)
+```
+[تولید از الگو] ──> [available] ──(درخواست رزرو مهمان)──> [reserved]
+                        │                                    │
+                        ├──(مسدودسازی توسط درمانگر/پذیرش)     ├──(تأیید پذیرش/درمانگر)──> [booked]
+                        │   ▼                                │                             │
+                        │  [blocked]                         └──(انقضا یا لغو درخواست)     └──(لغو نوبت)
+                        │                                             │                         │
+                        └─────────────────────────────────────────────┴─────────────────────────┘
+```
+
+#### چرخه وضعیت نوبت (`appointments.status`)
+```
+[درخواست مهمان] ──> [pending] ──(تأیید پذیرش/درمانگر قبل از انقضا)──> [confirmed] ──(اتمام جلسه)──> [completed]
+                       │                                                    │
+                       ├──(انقضای ۲ ساعته یا رسیدن زمان سانس)                └──(لغو توسط مهمان یا پذیرش)
+                       │   ▼                                                    ▼
+                       │  [expired]                                         [cancelled]
+                       │                                                        ▲
+                       └──(لغو توسط مهمان قبل از تأیید)─────────────────────────┘
+```
+
+#### سیاست‌های زمانی و TTL
+1. **مهلت نگه‌داشت موقت سانس (`pending` TTL):**
+   - حداکثر ۲ ساعت از زمان ثبت درخواست.
+   - سقف این مهلت نمی‌تواند از زمان شروع سانس (`starts_at`) فراتر رود:
+     `expires_at = LEAST(now() + interval '2 hours', slot.starts_at)`.
+   - در صورت عدم تأیید تا موعد مقرر، درخواست منقضی (`expired`) شده و سانس مجدداً آزاد (`available`) می‌گردد.
+2. **پیش‌تولید سانس‌ها:**
+   - سانس‌ها تا حداکثر ۳۰ روز آینده از الگوی بازه‌های کاری تولید می‌شوند.
+   - اعمال تغییرات در الگوی کاری فقط بر سانس‌های آزاد آینده اثر می‌گذارد و نوبت‌های ثبت‌شده دست‌نخورده باقی می‌مانند.
+
+---
+
+### ۷.۹ ترتیب قفل‌ها (Lock Ordering) در عملیات نوبت‌دهی
+
+1. **ثبت درخواست نوبت (`POST /public/appointments`):**
+   - قفل سطر سانس نوبت‌دهی با `SELECT ... FROM appointment_slots WHERE id = $1 FOR UPDATE`.
+   - بررسی وضعیت: سانس باید `available` باشد و آغاز آن در آینده باشد.
+   - تغییر وضعیت سانس به `reserved` و درج ردیف در `appointments` با وضعیت `pending` و درج ردیف در `appointment_status_history`.
+2. **تأیید نوبت (`POST /admin/appointments/{id}/confirm`):**
+   - قفل سطر نوبت با `FOR UPDATE`.
+   - قفل سطر سانس متصل با `FOR UPDATE`.
+   - بررسی عدم انقضا (`expires_at > now()`) و عدم شروع سانس.
+   - تغییر وضعیت نوبت به `confirmed` و وضعیت سانس به `booked`.
+3. **لغو نوبت (`POST /public/appointments/{id}/cancel` یا لغو پنل):**
+   - قفل سطر نوبت با `FOR UPDATE`.
+   - قفل سطر سانس متصل با `FOR UPDATE`.
+   - تغییر وضعیت نوبت به `cancelled` و آزادسازی سانس به `available`.
+4. **جابه‌جایی نوبت قطعی (`POST /admin/appointments/{id}/reschedule`):**
+   - قفل اتمیک هر دو سانس قدیمی و جدید به **ترتیب الفبایی/عددی شناسه‌ها (`ORDER BY id ASC FOR UPDATE`)** جهت جلوگیری قطعی از Deadlock.
+   - بررسی اینکه سانس جدید حتماً `available` باشد.
+   - تغییر سانس جدید به `booked`، آزادسازی سانس قدیم به `available`، به‌روزرسانی `slot_id` در سطر نوبت، و ثبت رویداد `rescheduled` در `appointment_status_history` با متادیتا شامل `previous_slot_id` و `new_slot_id`.
+
+---
+
+## ۸. نقشهٔ راه تکمیل افزایشی جداول در فازهای بعدی
 
 | فاز | جداول جدید | شرح و قیدهای کلیدی |
 | --- | --- | --- |
-| **`PSY-2` (نوبت‌دهی)** | `therapists`<br>`therapist_schedules`<br>`appointment_slots`<br>`appointments` | • تولید سانس‌های غیرهم‌پوشان<br>• قفل اتمیک سانس نوبت جهت جلوگیری از رزرو هم‌زمان<br>• ثبت تاریخچه تغییر وضعیت نوبت |
+| **`PSY-2` (نوبت‌دهی)** | `therapists`<br>`therapist_working_hours`<br>`therapist_schedule_exceptions`<br>`appointment_slots`<br>`appointments`<br>`appointment_status_history` | • تکمیل شد در `PSY-2.1` |
 | **`PSY-3` (دوره‌ها)** | `buyer_accounts`<br>`buyer_sessions`<br>`courses`<br>`course_lessons`<br>`course_entitlements` | • حساب مجزای خریدار مقید به Tenant<br>• دسترسی فعال به دوره با پیوند به خرید موفق<br>• عدم دسترسی به لینک‌های ویدیو بدون خرید |
 | **`PSY-4` (بهره‌برداری)** | `outbox_events` (در صورت نیاز به CDN purge) | • رویدادهای پاک‌سازی کش در همان تراکنش تغییر داده |

@@ -1,0 +1,513 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// Fallback therapists for SSR/preview when backend is offline
+const fallbackTherapists = [
+  {
+    id: 'e48a12bc-1111-4000-8000-000000000001',
+    name: 'دکتر مریم علوی',
+    slug: 'dr-maryam-alavi',
+    title: 'متخصص روان‌درمانی فردی و زوج‌درمانی',
+    bio: 'بیش از ۱۰ سال سابقه مشاوره بالینی، عضو انجمن روان‌شناسی ایران و مدرس دوره‌های رشد فردی.',
+    session_duration_minutes: 50,
+  },
+  {
+    id: 'e48a12bc-2222-4000-8000-000000000002',
+    name: 'دکتر رضا مرادی',
+    slug: 'dr-reza-moradi',
+    title: 'روان‌شناس سلامت و درمانگر شناختی‌رفتاری (CBT)',
+    bio: 'رویکرد مبتنی بر شواهد در درمان اضطراب، وسواس فکری و ارتقای بهزیستی روان‌شناختی.',
+    session_duration_minutes: 45,
+  },
+];
+
+let therapists = fallbackTherapists;
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const host = Astro.request.headers.get('host') || 'localhost:3000';
+
+try {
+  const res = await fetch(`${apiBase}/public/therapists`, {
+    headers: { 'Host': host },
+    signal: AbortSignal.timeout(1200),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) {
+      therapists = data;
+    }
+  }
+} catch {
+  // Graceful fallback to static demo therapists
+}
+
+// Generate fallback slots for the first therapist for preview
+const now = new Date();
+const baseTomorrow = new Date(now.getTime() + 24 * 3600 * 1000);
+baseTomorrow.setUTCHours(10, 0, 0, 0);
+
+const baseDayAfter = new Date(now.getTime() + 48 * 3600 * 1000);
+baseDayAfter.setUTCHours(12, 0, 0, 0);
+
+const fallbackSlots = [
+  {
+    id: 's1111111-0000-4000-8000-000000000001',
+    therapist_id: therapists[0]?.id || '',
+    starts_at: baseTomorrow.toISOString(),
+    ends_at: new Date(baseTomorrow.getTime() + 50 * 60 * 1000).toISOString(),
+    status: 'available',
+  },
+  {
+    id: 's2222222-0000-4000-8000-000000000002',
+    therapist_id: therapists[0]?.id || '',
+    starts_at: new Date(baseTomorrow.getTime() + 60 * 60 * 1000).toISOString(),
+    ends_at: new Date(baseTomorrow.getTime() + 110 * 60 * 1000).toISOString(),
+    status: 'available',
+  },
+  {
+    id: 's3333333-0000-4000-8000-000000000003',
+    therapist_id: therapists[0]?.id || '',
+    starts_at: baseDayAfter.toISOString(),
+    ends_at: new Date(baseDayAfter.getTime() + 50 * 60 * 1000).toISOString(),
+    status: 'available',
+  },
+];
+
+let initialSlots = fallbackSlots;
+if (therapists[0]?.id) {
+  try {
+    const slotsRes = await fetch(`${apiBase}/public/therapists/${therapists[0].id}/slots`, {
+      headers: { 'Host': host },
+      signal: AbortSignal.timeout(1200),
+    });
+    if (slotsRes.ok) {
+      const sData = await slotsRes.json();
+      if (Array.isArray(sData) && sData.length > 0) {
+        initialSlots = sData;
+      }
+    }
+  } catch {
+    // Keep fallback
+  }
+}
+
+function formatDateTehran(dateStr: string) {
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      timeZone: 'Asia/Tehran',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatTimeTehran(dateStr: string) {
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      timeZone: 'Asia/Tehran',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+---
+
+<BaseLayout title="رزرو نوبت مشاوره حضوری | کلینیک روان‌شناسی" description="انتخاب زمان آزاد، تعیین وقت مشاوره با روان‌شناسان و پیگیری خصوصی نوبت">
+  <div style="margin-bottom: 2rem;">
+    <h1 style="font-size: 1.75rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem;">
+      درخواست نوبت مشاوره و روان‌درمانی
+    </h1>
+    <p style="color: #64748b; font-size: 1rem; line-height: 1.6;">
+      درمانگر مورد نظر و سانس خالی مناسب خود را انتخاب نمایید. پس از ثبت نوبت، زمان برای شما به مدت ۲ ساعت رزرو موقت شده و لینک پیگیری خصوصی در اختیارتان قرار می‌گیرد.
+    </p>
+  </div>
+
+  <!-- Therapist Selector Tabs / Cards -->
+  <div style="margin-bottom: 2rem;">
+    <label style="display: block; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; font-size: 1rem;">
+      ۱. انتخاب درمانگر:
+    </label>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;" id="therapist-list">
+      {therapists.map((th, idx) => (
+        <div
+          class={`therapist-card ${idx === 0 ? 'selected' : ''}`}
+          data-id={th.id}
+          data-name={th.name}
+          data-duration={th.session_duration_minutes}
+          style="background: #ffffff; border: 2px solid #e2e8f0; border-radius: 0.75rem; padding: 1.25rem; cursor: pointer; transition: all 0.2s ease;"
+        >
+          <div style="font-weight: 700; font-size: 1.1rem; color: #0f172a; margin-bottom: 0.25rem;">
+            {th.name}
+          </div>
+          <div style="font-size: 0.85rem; color: #0284c7; font-weight: 600; margin-bottom: 0.5rem;">
+            {th.title}
+          </div>
+          <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.75rem; line-height: 1.5;">
+            {th.bio}
+          </p>
+          <div style="font-size: 0.8rem; color: #475569; background: #f8fafc; padding: 0.4rem 0.6rem; border-radius: 0.375rem; display: inline-block;">
+            مدت هر جلسه: <strong>{th.session_duration_minutes} دقیقه</strong>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <!-- Available Slots Section -->
+  <div style="margin-bottom: 2.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <label style="font-weight: 700; color: #1e293b; font-size: 1rem;">
+        ۲. انتخاب سانس آزاد (به وقت تهران):
+      </label>
+      <span id="loading-slots" style="display: none; font-size: 0.85rem; color: #0284c7;">
+        در حال دریافت سانس‌های آزاد...
+      </span>
+    </div>
+
+    <div id="slots-container" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.5rem; min-height: 180px;">
+      {initialSlots.length === 0 ? (
+        <div id="no-slots-msg" style="text-align: center; color: #64748b; padding: 2rem 1rem;">
+          در حال حاضر سانس بازی برای این درمانگر ثبت نشده است. لطفاً روزهای دیگر را بررسی فرمایید.
+        </div>
+      ) : (
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;" id="slots-grid">
+          {initialSlots.map((s) => (
+            <button
+              type="button"
+              class="slot-btn"
+              data-slot-id={s.id}
+              data-starts={s.starts_at}
+              data-ends={s.ends_at}
+              style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 0.5rem; padding: 0.75rem 1rem; text-align: center; cursor: pointer; transition: all 0.15s ease;"
+            >
+              <div style="font-size: 0.8rem; color: #166534; font-weight: 600; margin-bottom: 0.25rem;">
+                {formatDateTehran(s.starts_at)}
+              </div>
+              <div style="font-size: 1rem; font-weight: 700; color: #0f172a;" dir="ltr">
+                {formatTimeTehran(s.starts_at)} - {formatTimeTehran(s.ends_at)}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+
+  <!-- Booking Modal / Slide-out Form -->
+  <div id="booking-modal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 100; align-items: center; justify-content: center; padding: 1rem;">
+    <div style="background: #ffffff; border-radius: 1rem; max-width: 480px; width: 100%; padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem;">
+        <h3 style="font-size: 1.2rem; font-weight: 700; color: #0f172a;">
+          تکمیل درخواست نوبت مشاوره
+        </h3>
+        <button id="close-modal-btn" type="button" style="background: none; border: none; font-size: 1.5rem; color: #94a3b8; cursor: pointer; line-height: 1;">
+          &times;
+        </button>
+      </div>
+
+      <div id="modal-alert" style="display: none; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.85rem; line-height: 1.5;"></div>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.25rem; font-size: 0.9rem;">
+        <div style="margin-bottom: 0.4rem;">
+          <span style="color: #64748b;">درمانگر:</span> <strong id="modal-therapist-name" style="color: #0f172a;">-</strong>
+        </div>
+        <div>
+          <span style="color: #64748b;">زمان نوبت:</span> <strong id="modal-slot-time" style="color: #0284c7;" dir="ltr">-</strong>
+        </div>
+      </div>
+
+      <form id="booking-form">
+        <input type="hidden" id="selected-therapist-id" value={therapists[0]?.id || ''} />
+        <input type="hidden" id="selected-slot-id" value="" />
+
+        <div style="margin-bottom: 1rem;">
+          <label for="guest_name" style="display: block; font-size: 0.9rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+            نام و نام خانوادگی مراجع <span style="color: #ef4444;">*</span>
+          </label>
+          <input
+            type="text"
+            id="guest_name"
+            required
+            placeholder="مثال: سارا محمدی"
+            style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; outline: none; font-family: inherit;"
+          />
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label for="guest_phone" style="display: block; font-size: 0.9rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+            شماره تلفن همراه (جهت هماهنگی نوبت) <span style="color: #ef4444;">*</span>
+          </label>
+          <input
+            type="tel"
+            id="guest_phone"
+            required
+            dir="ltr"
+            placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+            style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; outline: none; font-family: inherit;"
+          />
+          <small style="display: block; color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
+            شماره همراه فقط جهت تماس پرسنل پذیرش استفاده شده و کاملاً محرمانه می‌ماند.
+          </small>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <label for="notes" style="display: block; font-size: 0.9rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+            توضیحات یا علت مراجعه (اختیاری)
+          </label>
+          <textarea
+            id="notes"
+            rows="2"
+            placeholder="توضیح کوتاه درباره موضوع جلسه..."
+            style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; outline: none; font-family: inherit; resize: vertical;"
+          ></textarea>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem;">
+          <button
+            type="submit"
+            id="submit-booking-btn"
+            style="flex: 1; padding: 0.75rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.5rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: background 0.15s ease;"
+          >
+            تأیید و ارسال درخواست نوبت
+          </button>
+          <button
+            type="button"
+            id="cancel-modal-btn"
+            style="padding: 0.75rem 1.25rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; cursor: pointer;"
+          >
+            انصراف
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <style>
+    .therapist-card.selected {
+      border-color: #0284c7 !important;
+      background-color: #f0f9ff !important;
+      box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.1);
+    }
+    .slot-btn:hover {
+      background-color: #dcfce7 !important;
+      border-color: #22c55e !important;
+      transform: translateY(-1px);
+    }
+  </style>
+
+  <script define:vars={{ apiBase }}>
+    let currentTherapistId = document.getElementById('selected-therapist-id')?.value || '';
+    let currentTherapistName = document.querySelector('.therapist-card.selected')?.getAttribute('data-name') || '';
+
+    const therapistCards = document.querySelectorAll('.therapist-card');
+    const slotsContainer = document.getElementById('slots-container');
+    const loadingSlots = document.getElementById('loading-slots');
+    const bookingModal = document.getElementById('booking-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const cancelModalBtn = document.getElementById('cancel-modal-btn');
+    const bookingForm = document.getElementById('booking-form');
+    const modalAlert = document.getElementById('modal-alert');
+    const submitBtn = document.getElementById('submit-booking-btn');
+
+    function formatTehranDateStr(dateStr) {
+      try {
+        return new Intl.DateTimeFormat('fa-IR', {
+          timeZone: 'Asia/Tehran',
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+        }).format(new Date(dateStr));
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function formatTehranTimeStr(dateStr) {
+      try {
+        return new Intl.DateTimeFormat('fa-IR', {
+          timeZone: 'Asia/Tehran',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(new Date(dateStr));
+      } catch {
+        return dateStr;
+      }
+    }
+
+    // Therapist Card Selection
+    therapistCards.forEach((card) => {
+      card.addEventListener('click', async () => {
+        therapistCards.forEach((c) => c.classList.remove('selected'));
+        card.classList.add('selected');
+
+        currentTherapistId = card.getAttribute('data-id') || '';
+        currentTherapistName = card.getAttribute('data-name') || '';
+        document.getElementById('selected-therapist-id').value = currentTherapistId;
+
+        await loadSlots(currentTherapistId);
+      });
+    });
+
+    async function loadSlots(thId) {
+      if (!thId) return;
+      loadingSlots.style.display = 'inline';
+      try {
+        const host = window.location.host;
+        const res = await fetch(`${apiBase}/public/therapists/${thId}/slots`, {
+          headers: { 'Host': host },
+        });
+        if (res.ok) {
+          const slots = await res.json();
+          renderSlots(slots);
+        } else {
+          renderSlots([]);
+        }
+      } catch {
+        // network issue
+      } finally {
+        loadingSlots.style.display = 'none';
+      }
+    }
+
+    function renderSlots(slots) {
+      if (!slots || slots.length === 0) {
+        slotsContainer.innerHTML = `
+          <div style="text-align: center; color: #64748b; padding: 2rem 1rem;">
+            در حال حاضر سانس بازی برای این درمانگر ثبت نشده است. لطفاً روزهای دیگر را بررسی فرمایید.
+          </div>
+        `;
+        return;
+      }
+
+      let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;" id="slots-grid">';
+      slots.forEach((s) => {
+        const dStr = formatTehranDateStr(s.starts_at);
+        const tStart = formatTehranTimeStr(s.starts_at);
+        const tEnd = formatTehranTimeStr(s.ends_at);
+        html += `
+          <button
+            type="button"
+            class="slot-btn"
+            data-slot-id="${s.id}"
+            data-starts="${s.starts_at}"
+            data-ends="${s.ends_at}"
+            style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 0.5rem; padding: 0.75rem 1rem; text-align: center; cursor: pointer; transition: all 0.15s ease;"
+          >
+            <div style="font-size: 0.8rem; color: #166534; font-weight: 600; margin-bottom: 0.25rem;">
+              ${dStr}
+            </div>
+            <div style="font-size: 1rem; font-weight: 700; color: #0f172a;" dir="ltr">
+              ${tStart} - ${tEnd}
+            </div>
+          </button>
+        `;
+      });
+      html += '</div>';
+      slotsContainer.innerHTML = html;
+      attachSlotListeners();
+    }
+
+    function attachSlotListeners() {
+      const slotBtns = slotsContainer.querySelectorAll('.slot-btn');
+      slotBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const slotId = btn.getAttribute('data-slot-id');
+          const starts = btn.getAttribute('data-starts');
+          const ends = btn.getAttribute('data-ends');
+
+          document.getElementById('selected-slot-id').value = slotId;
+          document.getElementById('modal-therapist-name').textContent = currentTherapistName;
+
+          const datePart = formatTehranDateStr(starts);
+          const timePart = `${formatTehranTimeStr(starts)} تا ${formatTehranTimeStr(ends)}`;
+          document.getElementById('modal-slot-time').textContent = `${datePart} (${timePart})`;
+
+          modalAlert.style.display = 'none';
+          bookingModal.style.display = 'flex';
+        });
+      });
+    }
+
+    attachSlotListeners();
+
+    function closeModal() {
+      bookingModal.style.display = 'none';
+      modalAlert.style.display = 'none';
+    }
+
+    closeModalBtn?.addEventListener('click', closeModal);
+    cancelModalBtn?.addEventListener('click', closeModal);
+
+    // Handle Form Submit
+    bookingForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      modalAlert.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'در حال ثبت...';
+
+      const therapistId = document.getElementById('selected-therapist-id').value;
+      const slotId = document.getElementById('selected-slot-id').value;
+      const guestName = document.getElementById('guest_name').value.trim();
+      const guestPhone = document.getElementById('guest_phone').value.trim();
+      const notes = document.getElementById('notes').value.trim();
+
+      try {
+        const host = window.location.host;
+        const res = await fetch(`${apiBase}/public/appointments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Host': host,
+          },
+          body: JSON.stringify({
+            therapist_id: therapistId,
+            slot_id: slotId,
+            guest_name: guestName,
+            guest_phone: guestPhone,
+            notes: notes,
+          }),
+        });
+
+        if (res.status === 201) {
+          const data = await res.json();
+          // Store lookup token in session storage for local resilience
+          try {
+            sessionStorage.setItem(`appt_${data.id}_hash`, data.guest_lookup_hash);
+          } catch {}
+          window.location.href = `/appointments/${data.id}?hash=${encodeURIComponent(data.guest_lookup_hash)}`;
+          return;
+        }
+
+        const errData = await res.json().catch(() => ({}));
+        modalAlert.style.display = 'block';
+        modalAlert.style.background = '#fef2f2';
+        modalAlert.style.border = '1px solid #fecaca';
+        modalAlert.style.color = '#991b1b';
+
+        if (res.status === 409) {
+          modalAlert.textContent = 'متأسفانه این سانس هم‌اکنون رزرو شده یا در دست هماهنگی با متقاضی دیگری است. لطفاً سانس آزاد دیگری را انتخاب فرمایید.';
+        } else if (res.status === 429) {
+          modalAlert.textContent = 'تعداد درخواست‌های شما بیش از حد مجاز است. لطفاً چند دقیقه بعد مجدداً تلاش کنید.';
+        } else if (errData.code === 'INVALID_PHONE') {
+          modalAlert.textContent = 'شماره موبایل واردشده نامعتبر است. لطفاً شماره صحیح ۱۱ رقمی (مثلاً ۰۹۱۲۳۴۵۶۷۸۹) وارد کنید.';
+        } else {
+          modalAlert.textContent = errData.message || 'خطا در ثبت نوبت. لطفاً دوباره تلاش فرمایید.';
+        }
+      } catch {
+        modalAlert.style.display = 'block';
+        modalAlert.style.background = '#fef2f2';
+        modalAlert.style.border = '1px solid #fecaca';
+        modalAlert.style.color = '#991b1b';
+        modalAlert.textContent = 'خطای ارتباط با سرور. لطفاً اتصال اینترنت خود را بررسی کنید.';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'تأیید و ارسال درخواست نوبت';
+      }
+    });
+  </script>
+</BaseLayout>

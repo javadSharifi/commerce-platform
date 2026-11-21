@@ -1025,6 +1025,657 @@ paths:
         '302':
           description: Redirects to receipt or payment status page on the tenant storefront
 
+  # ----------------------------------------------------
+  # PUBLIC BOOKINGS & THERAPISTS (Phase 2 - PSY-2.1)
+  # ----------------------------------------------------
+  /public/therapists:
+    get:
+      tags:
+        - Public Therapists
+      summary: List active therapists
+      description: Returns active therapists of the clinic with public profile and specializations.
+      operationId: getPublicTherapists
+      responses:
+        '200':
+          description: List of active therapists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicTherapistItem'
+
+  /public/therapists/{id}:
+    get:
+      tags:
+        - Public Therapists
+      summary: Get therapist details
+      description: Returns public details and bio of a specific therapist.
+      operationId: getPublicTherapistDetail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Therapist profile details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicTherapistDetail'
+        '404':
+          description: Therapist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /public/therapists/{id}/slots:
+    get:
+      tags:
+        - Public Therapists
+      summary: Get available future appointment slots
+      description: Returns available time slots for the therapist within the next 30 days without exposing any PII.
+      operationId: getPublicTherapistSlots
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: from_date
+          schema:
+            type: string
+            format: date
+          description: Optional start date filter (defaults to today)
+      responses:
+        '200':
+          description: List of available appointment slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicAppointmentSlot'
+
+  /public/appointments:
+    post:
+      tags:
+        - Public Appointments
+      summary: Request an appointment booking
+      description: Initiates a booking for an available time slot with a 2-hour pending TTL. Holds the slot atomically.
+      operationId: createPublicAppointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentRequest'
+      responses:
+        '201':
+          description: Appointment requested successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicAppointmentResponse'
+        '400':
+          description: Invalid input or slot in the past
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Slot is no longer available (already booked or reserved)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /public/appointments/{id}:
+    get:
+      tags:
+        - Public Appointments
+      summary: Check appointment booking status
+      description: Returns booking status for the initiator using guest lookup hash.
+      operationId: getPublicAppointmentStatus
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: X-Guest-Lookup-Hash
+          schema:
+            type: string
+          required: true
+          description: Secure lookup hash returned upon appointment creation
+      responses:
+        '200':
+          description: Appointment status details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicAppointmentResponse'
+        '404':
+          description: Appointment not found or unauthorized hash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /public/appointments/{id}/cancel:
+    post:
+      tags:
+        - Public Appointments
+      summary: Cancel appointment by guest
+      description: Cancels pending or confirmed appointment before session start time.
+      operationId: cancelPublicAppointment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: X-Guest-Lookup-Hash
+          schema:
+            type: string
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelAppointmentRequest'
+      responses:
+        '200':
+          description: Appointment cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicAppointmentResponse'
+        '400':
+          description: Cannot cancel appointment (already completed or session started)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------
+  # ADMIN BOOKINGS & THERAPISTS (Phase 2 - PSY-2.1)
+  # ----------------------------------------------------
+  /admin/therapists:
+    get:
+      tags:
+        - Admin Therapists
+      summary: List clinic therapists
+      description: Returns all clinic therapists (owner, receptionist, therapist roles).
+      operationId: listAdminTherapists
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: List of therapists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminTherapistResponse'
+    post:
+      tags:
+        - Admin Therapists
+      summary: Create new therapist profile
+      description: Creates a new therapist for the clinic (owner only).
+      operationId: createAdminTherapist
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTherapistRequest'
+      responses:
+        '201':
+          description: Therapist created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTherapistResponse'
+
+  /admin/therapists/{id}:
+    get:
+      tags:
+        - Admin Therapists
+      summary: Get therapist details
+      operationId: getAdminTherapist
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Therapist details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTherapistResponse'
+    put:
+      tags:
+        - Admin Therapists
+      summary: Update therapist profile
+      operationId: updateAdminTherapist
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTherapistRequest'
+      responses:
+        '200':
+          description: Therapist updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTherapistResponse'
+    delete:
+      tags:
+        - Admin Therapists
+      summary: Soft delete therapist
+      operationId: deleteAdminTherapist
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Therapist deleted
+
+  /admin/therapists/{id}/working-hours:
+    get:
+      tags:
+        - Admin Therapists
+      summary: Get weekly working hours
+      operationId: getAdminWorkingHours
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of weekly working hours
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkingHourItem'
+    put:
+      tags:
+        - Admin Therapists
+      summary: Update weekly working hours
+      operationId: updateAdminWorkingHours
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetWorkingHoursRequest'
+      responses:
+        '200':
+          description: Working hours updated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkingHourItem'
+
+  /admin/therapists/{id}/exceptions:
+    get:
+      tags:
+        - Admin Therapists
+      summary: Get schedule exceptions
+      operationId: getAdminScheduleExceptions
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of exceptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduleExceptionItem'
+    post:
+      tags:
+        - Admin Therapists
+      summary: Add schedule exception
+      operationId: createAdminScheduleException
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduleExceptionRequest'
+      responses:
+        '201':
+          description: Exception created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleExceptionItem'
+
+  /admin/therapists/{id}/exceptions/{exceptionId}:
+    delete:
+      tags:
+        - Admin Therapists
+      summary: Delete schedule exception
+      operationId: deleteAdminScheduleException
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: exceptionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Exception removed
+
+  /admin/therapists/{id}/slots:
+    get:
+      tags:
+        - Admin Booking Slots
+      summary: List appointment slots
+      operationId: listAdminAppointmentSlots
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: List of slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminAppointmentSlot'
+
+  /admin/therapists/{id}/slots/generate:
+    post:
+      tags:
+        - Admin Booking Slots
+      summary: Generate slots from schedule
+      operationId: generateAdminAppointmentSlots
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateSlotsRequest'
+      responses:
+        '200':
+          description: Slots generation summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_count:
+                    type: integer
+                  skipped_count:
+                    type: integer
+
+  /admin/appointments:
+    get:
+      tags:
+        - Admin Appointments
+      summary: List appointments
+      operationId: listAdminAppointments
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: query
+          name: therapist_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, confirmed, cancelled, expired, completed]
+      responses:
+        '200':
+          description: List of appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminAppointmentListItem'
+
+  /admin/appointments/{id}:
+    get:
+      tags:
+        - Admin Appointments
+      summary: Get appointment details
+      operationId: getAdminAppointment
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Appointment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAppointmentDetail'
+
+  /admin/appointments/{id}/confirm:
+    post:
+      tags:
+        - Admin Appointments
+      summary: Confirm appointment
+      operationId: confirmAdminAppointment
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Appointment confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAppointmentDetail'
+
+  /admin/appointments/{id}/cancel:
+    post:
+      tags:
+        - Admin Appointments
+      summary: Cancel appointment by clinic staff
+      operationId: cancelAdminAppointment
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelAppointmentRequest'
+      responses:
+        '200':
+          description: Appointment cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAppointmentDetail'
+
+  /admin/appointments/{id}/reschedule:
+    post:
+      tags:
+        - Admin Appointments
+      summary: Reschedule confirmed appointment
+      description: Atomically releases previous slot and locks new slot, preserving audit history.
+      operationId: rescheduleAdminAppointment
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleAppointmentRequest'
+      responses:
+        '200':
+          description: Appointment rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAppointmentDetail'
+
+  /admin/appointments/{id}/history:
+    get:
+      tags:
+        - Admin Appointments
+      summary: Get appointment audit history
+      operationId: getAdminAppointmentHistory
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Audit history log
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppointmentStatusHistoryItem'
+
 components:
   securitySchemes:
     SessionAuth:
@@ -1998,3 +2649,530 @@ components:
           type: integer
           format: int64
           example: 10737418240
+
+    # ----------------------------------------------------
+    # BOOKING & THERAPIST SCHEMAS (Phase 2 - PSY-2.1)
+    # ----------------------------------------------------
+    PublicTherapistItem:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - title
+        - session_duration_minutes
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        avatar_asset_id:
+          type: string
+          format: uuid
+          nullable: true
+        session_duration_minutes:
+          type: integer
+          example: 45
+
+    PublicTherapistDetail:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - title
+        - bio
+        - session_duration_minutes
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        bio:
+          type: string
+        avatar_asset_id:
+          type: string
+          format: uuid
+          nullable: true
+        session_duration_minutes:
+          type: integer
+          example: 45
+
+    PublicAppointmentSlot:
+      type: object
+      required:
+        - id
+        - therapist_id
+        - starts_at
+        - ends_at
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        therapist_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [available, reserved, booked, blocked]
+
+    CreateAppointmentRequest:
+      type: object
+      required:
+        - therapist_id
+        - slot_id
+        - guest_name
+        - guest_phone
+      properties:
+        therapist_id:
+          type: string
+          format: uuid
+        slot_id:
+          type: string
+          format: uuid
+        guest_name:
+          type: string
+          example: 'مریم احمدی'
+        guest_phone:
+          type: string
+          example: '09123456789'
+        notes:
+          type: string
+          default: ''
+
+    PublicAppointmentResponse:
+      type: object
+      required:
+        - id
+        - therapist_id
+        - slot_id
+        - guest_name
+        - guest_lookup_hash
+        - status
+        - expires_at
+        - starts_at
+        - ends_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        therapist_id:
+          type: string
+          format: uuid
+        slot_id:
+          type: string
+          format: uuid
+        guest_name:
+          type: string
+        guest_lookup_hash:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, expired, completed]
+        expires_at:
+          type: string
+          format: date-time
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+
+    CancelAppointmentRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          default: ''
+
+    AdminTherapistResponse:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - title
+        - bio
+        - session_duration_minutes
+        - is_active
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        bio:
+          type: string
+        avatar_asset_id:
+          type: string
+          format: uuid
+          nullable: true
+        session_duration_minutes:
+          type: integer
+          example: 45
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateTherapistRequest:
+      type: object
+      required:
+        - name
+        - slug
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+          default: ''
+        bio:
+          type: string
+          default: ''
+        avatar_asset_id:
+          type: string
+          format: uuid
+          nullable: true
+        session_duration_minutes:
+          type: integer
+          default: 45
+        is_active:
+          type: boolean
+          default: true
+
+    UpdateTherapistRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        bio:
+          type: string
+        avatar_asset_id:
+          type: string
+          format: uuid
+          nullable: true
+        session_duration_minutes:
+          type: integer
+        is_active:
+          type: boolean
+
+    WorkingHourItem:
+      type: object
+      required:
+        - day_of_week
+        - start_time
+        - end_time
+        - is_active
+      properties:
+        id:
+          type: string
+          format: uuid
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: '0=Saturday, 6=Friday'
+        start_time:
+          type: string
+          example: '09:00:00'
+        end_time:
+          type: string
+          example: '17:00:00'
+        is_active:
+          type: boolean
+
+    SetWorkingHoursRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkingHourItem'
+
+    ScheduleExceptionItem:
+      type: object
+      required:
+        - id
+        - date
+        - is_unavailable
+      properties:
+        id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        is_unavailable:
+          type: boolean
+        start_time:
+          type: string
+          nullable: true
+        end_time:
+          type: string
+          nullable: true
+        reason:
+          type: string
+
+    CreateScheduleExceptionRequest:
+      type: object
+      required:
+        - date
+      properties:
+        date:
+          type: string
+          format: date
+        is_unavailable:
+          type: boolean
+          default: true
+        start_time:
+          type: string
+          nullable: true
+        end_time:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          default: ''
+
+    GenerateSlotsRequest:
+      type: object
+      required:
+        - from_date
+        - to_date
+      properties:
+        from_date:
+          type: string
+          format: date
+        to_date:
+          type: string
+          format: date
+
+    AdminAppointmentSlot:
+      type: object
+      required:
+        - id
+        - therapist_id
+        - starts_at
+        - ends_at
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        therapist_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [available, reserved, booked, blocked]
+
+    AdminAppointmentListItem:
+      type: object
+      required:
+        - id
+        - therapist_id
+        - therapist_name
+        - slot_id
+        - starts_at
+        - ends_at
+        - guest_name
+        - guest_phone
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        therapist_id:
+          type: string
+          format: uuid
+        therapist_name:
+          type: string
+        slot_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        guest_name:
+          type: string
+        guest_phone:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, expired, completed]
+        created_at:
+          type: string
+          format: date-time
+
+    AdminAppointmentDetail:
+      type: object
+      required:
+        - id
+        - therapist_id
+        - therapist_name
+        - slot_id
+        - starts_at
+        - ends_at
+        - guest_name
+        - guest_phone
+        - notes
+        - status
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        therapist_id:
+          type: string
+          format: uuid
+        therapist_name:
+          type: string
+        slot_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        guest_name:
+          type: string
+        guest_phone:
+          type: string
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, expired, completed]
+        expires_at:
+          type: string
+          format: date-time
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancellation_reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RescheduleAppointmentRequest:
+      type: object
+      required:
+        - new_slot_id
+      properties:
+        new_slot_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          default: ''
+
+    AppointmentStatusHistoryItem:
+      type: object
+      required:
+        - id
+        - appointment_id
+        - to_status
+        - action
+        - actor_type
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        appointment_id:
+          type: string
+          format: uuid
+        from_status:
+          type: string
+          nullable: true
+        to_status:
+          type: string
+        action:
+          type: string
+          enum: [created, confirmed, cancelled, rescheduled, expired, completed]
+        actor_type:
+          type: string
+          enum: [guest, staff, system]
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        reason:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+

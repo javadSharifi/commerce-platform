@@ -1,0 +1,652 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+
+// Fallback sample data for SSR/preview
+const now = new Date();
+const t1 = new Date(now.getTime() + 24 * 3600 * 1000);
+t1.setUTCHours(10, 0, 0, 0);
+const t2 = new Date(now.getTime() + 48 * 3600 * 1000);
+t2.setUTCHours(14, 0, 0, 0);
+const t3 = new Date(now.getTime() - 24 * 3600 * 1000);
+t3.setUTCHours(11, 0, 0, 0);
+
+const fallbackAppointments = [
+  {
+    id: 'a0000001-1111-4000-8000-000000000001',
+    therapist_id: 'e48a12bc-1111-4000-8000-000000000001',
+    therapist_name: 'دکتر مریم علوی',
+    slot_id: 's1111111-0000-4000-8000-000000000001',
+    guest_name: 'سارا محمدی',
+    guest_phone: '۰۹۱۲۳۴۵۶۷۸۹',
+    notes: 'مشاوره اضطراب و استرس شغلی',
+    status: 'pending',
+    starts_at: t1.toISOString(),
+    ends_at: new Date(t1.getTime() + 50 * 60 * 1000).toISOString(),
+    created_at: new Date(now.getTime() - 30 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'a0000002-2222-4000-8000-000000000002',
+    therapist_id: 'e48a12bc-1111-4000-8000-000000000001',
+    therapist_name: 'دکتر مریم علوی',
+    slot_id: 's2222222-0000-4000-8000-000000000002',
+    guest_name: 'علی حسینی',
+    guest_phone: '۰۹۱۸۱۲۳۴۵۶۷',
+    notes: 'جلسه پیگیری زوج‌درمانی',
+    status: 'confirmed',
+    starts_at: t2.toISOString(),
+    ends_at: new Date(t2.getTime() + 50 * 60 * 1000).toISOString(),
+    created_at: new Date(now.getTime() - 5 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'a0000003-3333-4000-8000-000000000003',
+    therapist_id: 'e48a12bc-2222-4000-8000-000000000002',
+    therapist_name: 'دکتر رضا مرادی',
+    slot_id: 's3333333-0000-4000-8000-000000000003',
+    guest_name: 'مهدی کریمی',
+    guest_phone: '۰۹۳۵۰۰۰۱۱۲۲',
+    notes: 'وسواس فکری',
+    status: 'completed',
+    starts_at: t3.toISOString(),
+    ends_at: new Date(t3.getTime() + 45 * 60 * 1000).toISOString(),
+    created_at: new Date(now.getTime() - 48 * 3600 * 1000).toISOString(),
+  },
+];
+
+let appointments = fallbackAppointments;
+
+const url = new URL(Astro.request.url);
+const currentFilter = url.searchParams.get('status') || 'all';
+
+const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const host = Astro.request.headers.get('host') || 'localhost:3001';
+const cookie = Astro.request.headers.get('cookie') || '';
+
+try {
+  const queryStr = currentFilter !== 'all' ? `?status=${encodeURIComponent(currentFilter)}` : '';
+  const res = await fetch(`${apiBase}/admin/appointments${queryStr}`, {
+    headers: {
+      'Host': host,
+      'Cookie': cookie,
+    },
+    signal: AbortSignal.timeout(1000),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      appointments = data;
+    }
+  }
+} catch {
+  // Graceful fallback to preview demo data
+}
+
+if (currentFilter !== 'all') {
+  appointments = appointments.filter((a) => a.status === currentFilter);
+}
+
+const pendingCount = fallbackAppointments.filter((a) => a.status === 'pending').length;
+const confirmedCount = fallbackAppointments.filter((a) => a.status === 'confirmed').length;
+const totalCount = fallbackAppointments.length;
+
+function formatDateTehran(dateStr: string) {
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      timeZone: 'Asia/Tehran',
+      weekday: 'short',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+function getStatusBadge(st: string) {
+  switch (st) {
+    case 'confirmed':
+      return { text: 'تأییدشده و قطعی', bg: '#dcfce7', color: '#15803d' };
+    case 'pending':
+      return { text: 'در انتظار تماس و تأیید', bg: '#e0f2fe', color: '#0369a1' };
+    case 'cancelled':
+      return { text: 'لغو شده', bg: '#fee2e2', color: '#b91c1c' };
+    case 'expired':
+      return { text: 'منقضی‌شده', bg: '#f1f5f9', color: '#64748b' };
+    case 'completed':
+      return { text: 'انجام شد', bg: '#ccfbf1', color: '#0f766e' };
+    default:
+      return { text: st, bg: '#f1f5f9', color: '#475569' };
+  }
+}
+---
+
+<AdminLayout title="مدیریت نوبت‌ها و تقویم مشاوره" currentNav="appointments">
+  <!-- Summary Cards -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 2rem;">
+    <div class="card" style="border-right: 4px solid #0284c7;">
+      <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600;">
+        نوبت‌های در انتظار تأیید پذیرش
+      </div>
+      <div style="font-size: 1.75rem; font-weight: 800; color: #0284c7;">
+        {pendingCount}
+      </div>
+      <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+        نگه‌داشت موقت ۲ ساعته
+      </div>
+    </div>
+
+    <div class="card" style="border-right: 4px solid #16a34a;">
+      <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600;">
+        نوبت‌های قطعی پیش‌رو
+      </div>
+      <div style="font-size: 1.75rem; font-weight: 800; color: #16a34a;">
+        {confirmedCount}
+      </div>
+      <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+        آماده برگزاری در کلینیک
+      </div>
+    </div>
+
+    <div class="card" style="border-right: 4px solid #64748b;">
+      <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600;">
+        کل نوبت‌های ثبت‌شده
+      </div>
+      <div style="font-size: 1.75rem; font-weight: 800; color: #0f172a;">
+        {totalCount}
+      </div>
+      <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+        کلینیک به وقت تهران
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Navigation Tabs -->
+  <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem; flex-wrap: wrap;">
+    <a
+      href="/appointments?status=all"
+      style={`padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; text-decoration: none; ${
+        currentFilter === 'all' ? 'background: #0284c7; color: #ffffff;' : 'background: #ffffff; color: #64748b; border: 1px solid #e2e8f0;'
+      }`}
+    >
+      همه نوبت‌ها
+    </a>
+    <a
+      href="/appointments?status=pending"
+      style={`padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; text-decoration: none; ${
+        currentFilter === 'pending' ? 'background: #0284c7; color: #ffffff;' : 'background: #ffffff; color: #64748b; border: 1px solid #e2e8f0;'
+      }`}
+    >
+      در انتظار تأیید ({pendingCount})
+    </a>
+    <a
+      href="/appointments?status=confirmed"
+      style={`padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; text-decoration: none; ${
+        currentFilter === 'confirmed' ? 'background: #0284c7; color: #ffffff;' : 'background: #ffffff; color: #64748b; border: 1px solid #e2e8f0;'
+      }`}
+    >
+      تأییدشده و قطعی
+    </a>
+    <a
+      href="/appointments?status=completed"
+      style={`padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; text-decoration: none; ${
+        currentFilter === 'completed' ? 'background: #0284c7; color: #ffffff;' : 'background: #ffffff; color: #64748b; border: 1px solid #e2e8f0;'
+      }`}
+    >
+      انجام شده
+    </a>
+    <a
+      href="/appointments?status=cancelled"
+      style={`padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; text-decoration: none; ${
+        currentFilter === 'cancelled' ? 'background: #0284c7; color: #ffffff;' : 'background: #ffffff; color: #64748b; border: 1px solid #e2e8f0;'
+      }`}
+    >
+      لغو شده / منقضی
+    </a>
+  </div>
+
+  <!-- Appointments Table -->
+  <div class="card" style="padding: 0; overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+      <thead>
+        <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600;">
+          <th style="padding: 1rem 1.25rem;">مراجع (نام و تماس)</th>
+          <th style="padding: 1rem 1.25rem;">درمانگر</th>
+          <th style="padding: 1rem 1.25rem;">تاریخ و ساعت (تهران)</th>
+          <th style="padding: 1rem 1.25rem;">وضعیت</th>
+          <th style="padding: 1rem 1.25rem; text-align: left;">عملیات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {appointments.length === 0 ? (
+          <tr>
+            <td colspan="5" style="padding: 3rem; text-align: center; color: #94a3b8;">
+              هیچ نوبتی با این وضعیت ثبت نشده است.
+            </td>
+          </tr>
+        ) : (
+          appointments.map((appt) => {
+            const badge = getStatusBadge(appt.status);
+            return (
+              <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s ease;" class="table-row">
+                <td style="padding: 1rem 1.25rem;">
+                  <div style="font-weight: 700; color: #0f172a; margin-bottom: 0.2rem;">
+                    {appt.guest_name}
+                  </div>
+                  <div style="font-size: 0.8rem; color: #0284c7;" dir="ltr">
+                    <a href={`tel:${appt.guest_phone}`} style="color: inherit; text-decoration: none;">
+                      {appt.guest_phone}
+                    </a>
+                  </div>
+                </td>
+                <td style="padding: 1rem 1.25rem; color: #334155; font-weight: 600;">
+                  {appt.therapist_name}
+                </td>
+                <td style="padding: 1rem 1.25rem; color: #475569;">
+                  <div style="font-weight: 600; color: #0f172a;">
+                    {formatDateTehran(appt.starts_at)}
+                  </div>
+                </td>
+                <td style="padding: 1rem 1.25rem;">
+                  <span style={`display: inline-block; padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700; background: ${badge.bg}; color: ${badge.color};`}>
+                    {badge.text}
+                  </span>
+                </td>
+                <td style="padding: 1rem 1.25rem; text-align: left;">
+                  <div style="display: flex; gap: 0.4rem; justify-content: flex-end;">
+                    {appt.status === 'pending' && (
+                      <button
+                        type="button"
+                        class="action-btn confirm-btn"
+                        data-id={appt.id}
+                        style="padding: 0.4rem 0.75rem; background: #16a34a; color: #ffffff; border: none; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;"
+                      >
+                        تأیید نوبت
+                      </button>
+                    )}
+
+                    {appt.status === 'confirmed' && (
+                      <button
+                        type="button"
+                        class="action-btn reschedule-btn"
+                        data-id={appt.id}
+                        data-therapist-id={appt.therapist_id}
+                        data-therapist-name={appt.therapist_name}
+                        style="padding: 0.4rem 0.75rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;"
+                      >
+                        جابه‌جایی
+                      </button>
+                    )}
+
+                    {(appt.status === 'pending' || appt.status === 'confirmed') && (
+                      <button
+                        type="button"
+                        class="action-btn cancel-btn"
+                        data-id={appt.id}
+                        style="padding: 0.4rem 0.75rem; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;"
+                      >
+                        لغو
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      class="action-btn history-btn"
+                      data-id={appt.id}
+                      style="padding: 0.4rem 0.75rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;"
+                    >
+                      تاریخچه
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Cancel Modal -->
+  <div id="cancel-modal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 100; align-items: center; justify-content: center; padding: 1rem;">
+    <div style="background: #ffffff; border-radius: 0.75rem; max-width: 440px; width: 100%; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #991b1b; margin-bottom: 0.75rem;">
+        لغو نوبت توسط پذیرش کلینیک
+      </h3>
+      <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1rem; line-height: 1.5;">
+        با ثبت لغو، سانس مربوطه آزاد شده و علت لغو در سوابق نوبت و لاگ ممیزی ثبت می‌شود.
+      </p>
+      <input type="hidden" id="cancel-target-id" value="" />
+      <div style="margin-bottom: 1rem;">
+        <label for="cancel-reason" style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+          علت لغو نوبت:
+        </label>
+        <textarea
+          id="cancel-reason"
+          rows="2"
+          placeholder="مثال: عدم پاسخگویی مراجع در هماهنگی تلفنی یا درخواست انصراف مراجع"
+          style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.85rem; outline: none; font-family: inherit;"
+        ></textarea>
+      </div>
+      <div id="cancel-err-msg" style="display: none; color: #991b1b; background: #fee2e2; padding: 0.5rem; border-radius: 0.375rem; font-size: 0.8rem; margin-bottom: 1rem;"></div>
+      <div style="display: flex; gap: 0.5rem;">
+        <button id="do-cancel-btn" type="button" style="flex: 1; padding: 0.6rem; background: #dc2626; color: #ffffff; border: none; border-radius: 0.375rem; font-weight: 700; cursor: pointer;">
+          تأیید لغو نوبت
+        </button>
+        <button id="close-cancel-btn" type="button" style="padding: 0.6rem 1rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 0.375rem; cursor: pointer;">
+          انصراف
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reschedule Modal -->
+  <div id="reschedule-modal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 100; align-items: center; justify-content: center; padding: 1rem;">
+    <div style="background: #ffffff; border-radius: 0.75rem; max-width: 480px; width: 100%; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #0284c7; margin-bottom: 0.75rem;">
+        جابه‌جایی نوبت به سانس آزاد جدید
+      </h3>
+      <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1rem;">
+        درمانگر: <strong id="reschedule-th-name" style="color: #0f172a;">-</strong>
+      </p>
+      <input type="hidden" id="reschedule-target-id" value="" />
+      <div style="margin-bottom: 1rem;">
+        <label for="reschedule-new-slot" style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+          انتخاب سانس جدید:
+        </label>
+        <select
+          id="reschedule-new-slot"
+          style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.85rem; outline: none; font-family: inherit;"
+        >
+          <option value="">در حال دریافت سانس‌های آزاد...</option>
+        </select>
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <label for="reschedule-reason" style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+          علت جابه‌جایی نوبت:
+        </label>
+        <input
+          type="text"
+          id="reschedule-reason"
+          placeholder="هماهنگی تلفنی با مراجع"
+          style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.85rem; outline: none; font-family: inherit;"
+        />
+      </div>
+      <div id="reschedule-err-msg" style="display: none; color: #991b1b; background: #fee2e2; padding: 0.5rem; border-radius: 0.375rem; font-size: 0.8rem; margin-bottom: 1rem;"></div>
+      <div style="display: flex; gap: 0.5rem;">
+        <button id="do-reschedule-btn" type="button" style="flex: 1; padding: 0.6rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.375rem; font-weight: 700; cursor: pointer;">
+          ثبت جابه‌جایی اتمیک
+        </button>
+        <button id="close-reschedule-btn" type="button" style="padding: 0.6rem 1rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 0.375rem; cursor: pointer;">
+          انصراف
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Modal -->
+  <div id="history-modal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 100; align-items: center; justify-content: center; padding: 1rem;">
+    <div style="background: #ffffff; border-radius: 0.75rem; max-width: 520px; width: 100%; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); max-height: 80vh; display: flex; flex-direction: column;">
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.5rem;">
+        تاریخچه و ردگیری وضعیت نوبت
+      </h3>
+      <div id="history-content" style="flex: 1; overflow-y: auto; padding: 0.5rem 0;">
+        در حال بارگذاری سوابق...
+      </div>
+      <div style="margin-top: 1rem; text-align: left;">
+        <button id="close-history-btn" type="button" style="padding: 0.5rem 1.25rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 0.375rem; cursor: pointer;">
+          بستن
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .table-row:hover {
+      background-color: #f8fafc;
+    }
+    .action-btn:hover {
+      opacity: 0.9;
+    }
+  </style>
+
+  <script define:vars={{ apiBase }}>
+    // Confirm Appointment
+    document.querySelectorAll('.confirm-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const apptId = btn.getAttribute('data-id');
+        if (!confirm('آیا از تأیید قطعی این نوبت اطمینان دارید؟')) return;
+
+        btn.disabled = true;
+        btn.textContent = 'در حال ثبت...';
+
+        try {
+          const res = await fetch(`${apiBase}/admin/appointments/${apptId}/confirm`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Host': window.location.host,
+            },
+          });
+          if (res.ok) {
+            window.location.reload();
+          } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.message || 'خطا در تأیید نوبت.');
+            btn.disabled = false;
+            btn.textContent = 'تأیید نوبت';
+          }
+        } catch {
+          alert('خطای اتصال به سرور.');
+          btn.disabled = false;
+          btn.textContent = 'تأیید نوبت';
+        }
+      });
+    });
+
+    // Cancel Modal
+    const cancelModal = document.getElementById('cancel-modal');
+    const cancelTargetId = document.getElementById('cancel-target-id');
+    const cancelReason = document.getElementById('cancel-reason');
+    const cancelErrMsg = document.getElementById('cancel-err-msg');
+    const doCancelBtn = document.getElementById('do-cancel-btn');
+    const closeCancelBtn = document.getElementById('close-cancel-btn');
+
+    document.querySelectorAll('.cancel-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        cancelTargetId.value = btn.getAttribute('data-id') || '';
+        cancelReason.value = '';
+        cancelErrMsg.style.display = 'none';
+        cancelModal.style.display = 'flex';
+      });
+    });
+
+    closeCancelBtn?.addEventListener('click', () => {
+      cancelModal.style.display = 'none';
+    });
+
+    doCancelBtn?.addEventListener('click', async () => {
+      const apptId = cancelTargetId.value;
+      const reason = cancelReason.value.trim();
+      doCancelBtn.disabled = true;
+      doCancelBtn.textContent = 'در حال ثبت...';
+      cancelErrMsg.style.display = 'none';
+
+      try {
+        const res = await fetch(`${apiBase}/admin/appointments/${apptId}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Host': window.location.host,
+          },
+          body: JSON.stringify({ reason }),
+        });
+
+        if (res.ok) {
+          window.location.reload();
+          return;
+        }
+        const err = await res.json().catch(() => ({}));
+        cancelErrMsg.style.display = 'block';
+        cancelErrMsg.textContent = err.message || 'خطا در لغو نوبت.';
+      } catch {
+        cancelErrMsg.style.display = 'block';
+        cancelErrMsg.textContent = 'خطای اتصال به سرور.';
+      } finally {
+        doCancelBtn.disabled = false;
+        doCancelBtn.textContent = 'تأیید لغو نوبت';
+      }
+    });
+
+    // Reschedule Modal
+    const rescheduleModal = document.getElementById('reschedule-modal');
+    const rescheduleTargetId = document.getElementById('reschedule-target-id');
+    const rescheduleThName = document.getElementById('reschedule-th-name');
+    const rescheduleNewSlot = document.getElementById('reschedule-new-slot');
+    const rescheduleReason = document.getElementById('reschedule-reason');
+    const rescheduleErrMsg = document.getElementById('reschedule-err-msg');
+    const doRescheduleBtn = document.getElementById('do-reschedule-btn');
+    const closeRescheduleBtn = document.getElementById('close-reschedule-btn');
+
+    document.querySelectorAll('.reschedule-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const apptId = btn.getAttribute('data-id') || '';
+        const thId = btn.getAttribute('data-therapist-id') || '';
+        const thName = btn.getAttribute('data-therapist-name') || '';
+
+        rescheduleTargetId.value = apptId;
+        rescheduleThName.textContent = thName;
+        rescheduleReason.value = 'هماهنگی تلفنی با مراجع';
+        rescheduleErrMsg.style.display = 'none';
+        rescheduleNewSlot.innerHTML = '<option value="">در حال دریافت سانس‌های آزاد...</option>';
+        rescheduleModal.style.display = 'flex';
+
+        try {
+          const res = await fetch(`${apiBase}/public/therapists/${thId}/slots`, {
+            headers: { 'Host': window.location.host },
+          });
+          if (res.ok) {
+            const slots = await res.json();
+            if (slots.length === 0) {
+              rescheduleNewSlot.innerHTML = '<option value="">سانس خالی موجود نیست</option>';
+            } else {
+              rescheduleNewSlot.innerHTML = slots.map((s) => {
+                const dStr = new Intl.DateTimeFormat('fa-IR', {
+                  timeZone: 'Asia/Tehran',
+                  month: 'numeric',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }).format(new Date(s.starts_at));
+                return `<option value="${s.id}">${dStr} (سانس آزاد)</option>`;
+              }).join('');
+            }
+          }
+        } catch {
+          rescheduleNewSlot.innerHTML = '<option value="">خطا در دریافت سانس‌ها</option>';
+        }
+      });
+    });
+
+    closeRescheduleBtn?.addEventListener('click', () => {
+      rescheduleModal.style.display = 'none';
+    });
+
+    doRescheduleBtn?.addEventListener('click', async () => {
+      const apptId = rescheduleTargetId.value;
+      const newSlotId = rescheduleNewSlot.value;
+      const reason = rescheduleReason.value.trim();
+
+      if (!newSlotId) {
+        alert('لطفاً یک سانس جدید انتخاب کنید.');
+        return;
+      }
+
+      doRescheduleBtn.disabled = true;
+      doRescheduleBtn.textContent = 'در حال جابه‌جایی...';
+      rescheduleErrMsg.style.display = 'none';
+
+      try {
+        const res = await fetch(`${apiBase}/admin/appointments/${apptId}/reschedule`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Host': window.location.host,
+          },
+          body: JSON.stringify({ new_slot_id: newSlotId, reason }),
+        });
+
+        if (res.ok) {
+          window.location.reload();
+          return;
+        }
+
+        const err = await res.json().catch(() => ({}));
+        rescheduleErrMsg.style.display = 'block';
+        if (res.status === 409) {
+          rescheduleErrMsg.textContent = 'سانس انتخابی پر شده است. لطفاً سانس دیگری انتخاب نمایید (نوبت قبلی تغییر نکرد).';
+        } else {
+          rescheduleErrMsg.textContent = err.message || 'خطا در جابه‌جایی نوبت.';
+        }
+      } catch {
+        rescheduleErrMsg.style.display = 'block';
+        rescheduleErrMsg.textContent = 'خطای اتصال به سرور.';
+      } finally {
+        doRescheduleBtn.disabled = false;
+        doRescheduleBtn.textContent = 'ثبت جابه‌جایی اتمیک';
+      }
+    });
+
+    // History Modal
+    const historyModal = document.getElementById('history-modal');
+    const historyContent = document.getElementById('history-content');
+    const closeHistoryBtn = document.getElementById('close-history-btn');
+
+    document.querySelectorAll('.history-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const apptId = btn.getAttribute('data-id') || '';
+        historyContent.innerHTML = 'در حال دریافت سوابق...';
+        historyModal.style.display = 'flex';
+
+        try {
+          const res = await fetch(`${apiBase}/admin/appointments/${apptId}/history`, {
+            headers: { 'Host': window.location.host },
+          });
+          if (res.ok) {
+            const list = await res.json();
+            if (!list || list.length === 0) {
+              historyContent.innerHTML = '<div style="color: #64748b; text-align: center; padding: 1rem;">سابقه‌ای برای این نوبت ثبت نشده است.</div>';
+            } else {
+              historyContent.innerHTML = list.map((h) => {
+                const tStr = new Intl.DateTimeFormat('fa-IR', {
+                  timeZone: 'Asia/Tehran',
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                }).format(new Date(h.created_at));
+                return `
+                  <div style="border-right: 3px solid #0284c7; padding-right: 0.75rem; margin-bottom: 0.75rem;">
+                    <div style="font-weight: 700; color: #0f172a; font-size: 0.85rem;">
+                      تغییر وضعیت: <span style="color: #0284c7;">${h.from_status || 'شروع'} &larr; ${h.to_status}</span>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #64748b; margin: 0.2rem 0;">
+                      اقدام‌کننده: <strong>${h.actor_role}</strong> (${tStr})
+                    </div>
+                    ${h.note ? `<div style="font-size: 0.8rem; color: #334155; background: #f8fafc; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">علت: ${h.note}</div>` : ''}
+                  </div>
+                `;
+              }).join('');
+            }
+          } else {
+            historyContent.innerHTML = '<div style="color: #ef4444;">خطا در دریافت سوابق تاریخچه.</div>';
+          }
+        } catch {
+          historyContent.innerHTML = '<div style="color: #ef4444;">خطای اتصال به سرور.</div>';
+        }
+      });
+    });
+
+    closeHistoryBtn?.addEventListener('click', () => {
+      historyModal.style.display = 'none';
+    });
+  </script>
+</AdminLayout>

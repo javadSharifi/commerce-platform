@@ -305,3 +305,206 @@ ${urls.map((loc) => `  <url><loc>${loc}</loc></url>`).join('\n')}
     assert.ok(xml.includes('https://clinic-alavi.ir/blog/self-awareness'));
   });
 });
+
+describe('PsychologyApiClient - Booking & Therapist Endpoints (PSY-2.1)', () => {
+  test('listPublicTherapists and getPublicTherapistDetail return therapist data', async () => {
+    const mockTherapist = {
+      id: 'th-1',
+      name: 'دکتر محمد رضایی',
+      slug: 'dr-rezaei',
+      title: 'متخصص روان‌شناسی بالینی',
+      bio: '۱۰ سال سابقه مشاوره فردی و زوج‌درمانی',
+      session_duration_minutes: 45,
+    };
+
+    const client = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      fetch: async (url, init) => {
+        if (url.toString().endsWith('/public/therapists/th-1')) {
+          return new Response(JSON.stringify(mockTherapist), { status: 200 });
+        }
+        return new Response(JSON.stringify([mockTherapist]), { status: 200 });
+      },
+    });
+
+    const list = await client.listPublicTherapists();
+    assert.strictEqual(list.length, 1);
+    assert.strictEqual(list[0].name, 'دکتر محمد رضایی');
+
+    const detail = await client.getPublicTherapistDetail('th-1');
+    assert.strictEqual(detail.slug, 'dr-rezaei');
+    assert.strictEqual(detail.session_duration_minutes, 45);
+  });
+
+  test('listPublicTherapistSlots returns available future slots without exposing PII', async () => {
+    const mockSlots = [
+      {
+        id: 'slot-1',
+        therapist_id: 'th-1',
+        starts_at: '2026-11-22T09:00:00Z',
+        ends_at: '2026-11-22T09:45:00Z',
+        status: 'available',
+      },
+      {
+        id: 'slot-2',
+        therapist_id: 'th-1',
+        starts_at: '2026-11-22T10:00:00Z',
+        ends_at: '2026-11-22T10:45:00Z',
+        status: 'available',
+      },
+    ];
+
+    const client = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      fetch: async (url, init) => {
+        assert.ok(url.toString().includes('/public/therapists/th-1/slots'));
+        return new Response(JSON.stringify(mockSlots), { status: 200 });
+      },
+    });
+
+    const slots = await client.listPublicTherapistSlots('th-1');
+    assert.strictEqual(slots.length, 2);
+    // Guarantee no PII in public slots
+    assert.strictEqual(slots[0].status, 'available');
+    assert.strictEqual(slots[0].guest_name, undefined);
+    assert.strictEqual(slots[0].guest_phone, undefined);
+  });
+
+  test('public appointment lifecycle: create, check status with lookup hash, and cancel', async () => {
+    let appt = {
+      id: 'app-1',
+      therapist_id: 'th-1',
+      slot_id: 'slot-1',
+      guest_name: 'سارا صادقی',
+      guest_lookup_hash: 'hash-abc-123',
+      status: 'pending',
+      expires_at: '2026-11-21T11:30:00Z',
+      starts_at: '2026-11-22T09:00:00Z',
+      ends_at: '2026-11-22T09:45:00Z',
+    };
+
+    const client = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      fetch: async (url, init) => {
+        const u = url.toString();
+        if (init?.method === 'POST' && u.endsWith('/public/appointments')) {
+          return new Response(JSON.stringify(appt), { status: 201 });
+        }
+        if (init?.method === 'POST' && u.endsWith('/cancel')) {
+          assert.strictEqual(init.headers['X-Guest-Lookup-Hash'], 'hash-abc-123');
+          appt.status = 'cancelled';
+          return new Response(JSON.stringify(appt), { status: 200 });
+        }
+        if (u.endsWith('/public/appointments/app-1')) {
+          assert.strictEqual(init.headers['X-Guest-Lookup-Hash'], 'hash-abc-123');
+          return new Response(JSON.stringify(appt), { status: 200 });
+        }
+        return new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 });
+      },
+    });
+
+    // 1. Create appointment
+    const created = await client.createPublicAppointment({
+      therapist_id: 'th-1',
+      slot_id: 'slot-1',
+      guest_name: 'سارا صادقی',
+      guest_phone: '09120000000',
+    });
+    assert.strictEqual(created.id, 'app-1');
+    assert.strictEqual(created.status, 'pending');
+    assert.strictEqual(created.guest_lookup_hash, 'hash-abc-123');
+
+    // 2. Check status
+    const status = await client.getPublicAppointmentStatus('app-1', 'hash-abc-123');
+    assert.strictEqual(status.status, 'pending');
+
+    // 3. Cancel appointment
+    const cancelled = await client.cancelPublicAppointment('app-1', 'hash-abc-123', {
+      reason: 'عدم امکان حضور در موعد مقرر',
+    });
+    assert.strictEqual(cancelled.status, 'cancelled');
+  });
+
+  test('admin appointment management: confirm, reschedule, and audit history', async () => {
+    let appt = {
+      id: 'app-1',
+      therapist_id: 'th-1',
+      therapist_name: 'دکتر محمد رضایی',
+      slot_id: 'slot-1',
+      starts_at: '2026-11-22T09:00:00Z',
+      ends_at: '2026-11-22T09:45:00Z',
+      guest_name: 'سارا صادقی',
+      guest_phone: '09120000000',
+      notes: 'جلسه اول',
+      status: 'pending',
+      expires_at: '2026-11-21T11:30:00Z',
+      confirmed_at: null,
+      cancelled_at: null,
+      cancellation_reason: '',
+      created_at: '2026-11-21T09:30:00Z',
+      updated_at: '2026-11-21T09:30:00Z',
+    };
+
+    const history = [];
+
+    const client = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      sessionToken: 'admin-sess',
+      fetch: async (url, init) => {
+        const u = url.toString();
+        if (init?.method === 'POST' && u.endsWith('/confirm')) {
+          appt.status = 'confirmed';
+          appt.confirmed_at = new Date().toISOString();
+          history.push({
+            id: 'h-1',
+            appointment_id: 'app-1',
+            from_status: 'pending',
+            to_status: 'confirmed',
+            action: 'confirmed',
+            actor_type: 'staff',
+            reason: '',
+            created_at: new Date().toISOString(),
+          });
+          return new Response(JSON.stringify(appt), { status: 200 });
+        }
+        if (init?.method === 'POST' && u.endsWith('/reschedule')) {
+          const body = JSON.parse(init.body);
+          appt.slot_id = body.new_slot_id;
+          history.push({
+            id: 'h-2',
+            appointment_id: 'app-1',
+            from_status: 'confirmed',
+            to_status: 'confirmed',
+            action: 'rescheduled',
+            actor_type: 'staff',
+            reason: body.reason,
+            created_at: new Date().toISOString(),
+          });
+          return new Response(JSON.stringify(appt), { status: 200 });
+        }
+        if (u.endsWith('/history')) {
+          return new Response(JSON.stringify(history), { status: 200 });
+        }
+        return new Response(JSON.stringify(appt), { status: 200 });
+      },
+    });
+
+    // 1. Confirm
+    const confirmed = await client.confirmAdminAppointment('app-1');
+    assert.strictEqual(confirmed.status, 'confirmed');
+    assert.ok(confirmed.confirmed_at);
+
+    // 2. Reschedule
+    const rescheduled = await client.rescheduleAdminAppointment('app-1', {
+      new_slot_id: 'slot-2',
+      reason: 'درخواست مراجع برای ساعت بعدی',
+    });
+    assert.strictEqual(rescheduled.slot_id, 'slot-2');
+
+    // 3. History
+    const logs = await client.getAdminAppointmentHistory('app-1');
+    assert.strictEqual(logs.length, 2);
+    assert.strictEqual(logs[0].action, 'confirmed');
+    assert.strictEqual(logs[1].action, 'rescheduled');
+  });
+});

@@ -34,6 +34,26 @@ import type {
   UpdateSiteSettingsRequest,
   UpdateWorkshopRequest,
   WorkshopStatus,
+  PublicTherapistItem,
+  PublicTherapistDetail,
+  PublicAppointmentSlot,
+  CreateAppointmentRequest,
+  PublicAppointmentResponse,
+  CancelAppointmentRequest,
+  AdminTherapistResponse,
+  CreateTherapistRequest,
+  UpdateTherapistRequest,
+  WorkingHourItem,
+  SetWorkingHoursRequest,
+  ScheduleExceptionItem,
+  CreateScheduleExceptionRequest,
+  GenerateSlotsRequest,
+  AdminAppointmentSlot,
+  AdminAppointmentListItem,
+  AdminAppointmentDetail,
+  RescheduleAppointmentRequest,
+  AppointmentStatusHistoryItem,
+  AppointmentStatus,
 } from './types.js';
 
 export * from './types.js';
@@ -289,5 +309,181 @@ export class PsychologyApiClient {
 
   async listAdminMedia(): Promise<MediaListResponse> {
     return this.request<MediaListResponse>('/admin/media');
+  }
+
+  // ---------------- Public Booking & Therapists (Phase 2) ----------------
+  async listPublicTherapists(): Promise<PublicTherapistItem[]> {
+    return this.request<PublicTherapistItem[]>('/public/therapists');
+  }
+
+  async getPublicTherapistDetail(id: string): Promise<PublicTherapistDetail> {
+    return this.request<PublicTherapistDetail>(`/public/therapists/${id}`);
+  }
+
+  async listPublicTherapistSlots(id: string, fromDate?: string): Promise<PublicAppointmentSlot[]> {
+    const query = fromDate ? `?from_date=${encodeURIComponent(fromDate)}` : '';
+    return this.request<PublicAppointmentSlot[]>(`/public/therapists/${id}/slots${query}`);
+  }
+
+  async createPublicAppointment(data: CreateAppointmentRequest): Promise<PublicAppointmentResponse> {
+    return this.request<PublicAppointmentResponse>('/public/appointments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPublicAppointmentStatus(id: string, lookupHash: string): Promise<PublicAppointmentResponse> {
+    return this.request<PublicAppointmentResponse>(`/public/appointments/${id}`, {
+      headers: {
+        'X-Guest-Lookup-Hash': lookupHash,
+      },
+    });
+  }
+
+  async cancelPublicAppointment(
+    id: string,
+    lookupHash: string,
+    data?: CancelAppointmentRequest
+  ): Promise<PublicAppointmentResponse> {
+    return this.request<PublicAppointmentResponse>(`/public/appointments/${id}/cancel`, {
+      method: 'POST',
+      headers: {
+        'X-Guest-Lookup-Hash': lookupHash,
+      },
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  // ---------------- Admin Booking & Therapists (Phase 2) ----------------
+  async listAdminTherapists(): Promise<AdminTherapistResponse[]> {
+    return this.request<AdminTherapistResponse[]>('/admin/therapists');
+  }
+
+  async createAdminTherapist(data: CreateTherapistRequest): Promise<AdminTherapistResponse> {
+    return this.request<AdminTherapistResponse>('/admin/therapists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAdminTherapist(id: string): Promise<AdminTherapistResponse> {
+    return this.request<AdminTherapistResponse>(`/admin/therapists/${id}`);
+  }
+
+  async updateAdminTherapist(id: string, data: UpdateTherapistRequest): Promise<AdminTherapistResponse> {
+    return this.request<AdminTherapistResponse>(`/admin/therapists/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAdminTherapist(id: string): Promise<void> {
+    await this.request<void>(`/admin/therapists/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getAdminWorkingHours(therapistId: string): Promise<WorkingHourItem[]> {
+    return this.request<WorkingHourItem[]>(`/admin/therapists/${therapistId}/working-hours`);
+  }
+
+  async updateAdminWorkingHours(
+    therapistId: string,
+    data: SetWorkingHoursRequest
+  ): Promise<WorkingHourItem[]> {
+    return this.request<WorkingHourItem[]>(`/admin/therapists/${therapistId}/working-hours`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAdminScheduleExceptions(therapistId: string): Promise<ScheduleExceptionItem[]> {
+    return this.request<ScheduleExceptionItem[]>(`/admin/therapists/${therapistId}/exceptions`);
+  }
+
+  async createAdminScheduleException(
+    therapistId: string,
+    data: CreateScheduleExceptionRequest
+  ): Promise<ScheduleExceptionItem> {
+    return this.request<ScheduleExceptionItem>(`/admin/therapists/${therapistId}/exceptions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAdminScheduleException(therapistId: string, exceptionId: string): Promise<void> {
+    await this.request<void>(`/admin/therapists/${therapistId}/exceptions/${exceptionId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listAdminAppointmentSlots(
+    therapistId: string,
+    from?: string,
+    to?: string
+  ): Promise<AdminAppointmentSlot[]> {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<AdminAppointmentSlot[]>(`/admin/therapists/${therapistId}/slots${query}`);
+  }
+
+  async generateAdminAppointmentSlots(
+    therapistId: string,
+    data: GenerateSlotsRequest
+  ): Promise<{ generated_count: number; skipped_count: number }> {
+    return this.request<{ generated_count: number; skipped_count: number }>(
+      `/admin/therapists/${therapistId}/slots/generate`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  async listAdminAppointments(
+    therapistId?: string,
+    status?: AppointmentStatus
+  ): Promise<AdminAppointmentListItem[]> {
+    const params = new URLSearchParams();
+    if (therapistId) params.set('therapist_id', therapistId);
+    if (status) params.set('status', status);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<AdminAppointmentListItem[]>(`/admin/appointments${query}`);
+  }
+
+  async getAdminAppointment(id: string): Promise<AdminAppointmentDetail> {
+    return this.request<AdminAppointmentDetail>(`/admin/appointments/${id}`);
+  }
+
+  async confirmAdminAppointment(id: string): Promise<AdminAppointmentDetail> {
+    return this.request<AdminAppointmentDetail>(`/admin/appointments/${id}/confirm`, {
+      method: 'POST',
+    });
+  }
+
+  async cancelAdminAppointment(
+    id: string,
+    data?: CancelAppointmentRequest
+  ): Promise<AdminAppointmentDetail> {
+    return this.request<AdminAppointmentDetail>(`/admin/appointments/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  async rescheduleAdminAppointment(
+    id: string,
+    data: RescheduleAppointmentRequest
+  ): Promise<AdminAppointmentDetail> {
+    return this.request<AdminAppointmentDetail>(`/admin/appointments/${id}/reschedule`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAdminAppointmentHistory(id: string): Promise<AppointmentStatusHistoryItem[]> {
+    return this.request<AppointmentStatusHistoryItem[]>(`/admin/appointments/${id}/history`);
   }
 }
