@@ -7,7 +7,7 @@
 
 ## ۰. پیش‌نیاز یک‌بار-مصرف: نقش‌های دیتابیس (زیرساخت، نه Migration)
 
-برنامه با نقش کم‌اختیار اجرا می‌شود. نقش‌های پایه در D-19 ثبت شده‌اند و lookup و Worker نقش جدا و محدود طبق D-28 دارند.
+برنامه با نقش کم‌اختیار اجرا می‌شود. lookup و Worker مطابق تصمیم‌های پروژه نقش جدا و محدود دارند.
 
 | نقش | کار | RLS |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
 ## ۱. ساخت فایل Migration
 
 ```bash
-migrate create -ext sql -dir apps/api/migrations -seq create_categories
+migrate create -ext sql -dir apps/psychology-api/migrations -seq create_categories
 # → 000003_create_categories.up.sql  و  000003_create_categories.down.sql
 ```
 
@@ -52,7 +52,7 @@ migrate create -ext sql -dir apps/api/migrations -seq create_categories
 
 ```sql
 CREATE TABLE categories (
-    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),   -- نوع ID طبق P0.2.1
+    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),   -- نوع ID مطابق طرح‌وارهٔ پروژه
     tenant_id  uuid        NOT NULL REFERENCES tenants(id),
     name       text        NOT NULL,
     slug       text        NOT NULL,
@@ -99,7 +99,7 @@ DROP TABLE categories;   -- policy و ایندکس‌ها همراه جدول ح
 
 ## ۳. جدول فرزند: جلوگیری از اشاره‌ی بین‌Tenantی (Composite FK)
 
-**مشکل:** `order_items` ممکن است به `order_id` فروشگاه دیگر اشاره کند. کنترل‌های Referential Integrity دیتابیس RLS را **دور می‌زنند**، پس خود RLS جلوی این را نمی‌گیرد.
+**مشکل:** `order_items` ممکن است به `order_id` Tenant دیگر اشاره کند. کنترل‌های Referential Integrity دیتابیس RLS را **دور می‌زنند**، پس خود RLS جلوی این را نمی‌گیرد.
 **راه‌حل:** جدول والد یک `UNIQUE (tenant_id, id)` دارد و فرزند با کلید ترکیبی به آن اشاره می‌کند.
 
 ```sql
@@ -133,9 +133,9 @@ CREATE TABLE order_items (
 ## ۵. جدول‌های غیر tenant-scoped (استثنا، با احتیاط)
 
 - دسترسی غیر tenant-scoped به جدول‌های `tenants` و `users` محدود به ماژول‌های مسئول آن‌ها و مسیر مجاز در schema است.
-- RLS روی `domains` و `memberships` طبق D-24 فعال می‌ماند. lookup اولیه از عملیات پارامتری و نقش‌های محدود طبق D-28 استفاده می‌کند.
+- RLS روی `domains` و `memberships` طبق تصمیم‌های پروژه فعال می‌ماند. lookup اولیه از عملیات پارامتری و نقش‌های محدود مطابق تصمیم‌های پروژه استفاده می‌کند.
 - **هر جدولی که `tenant_id` دارد ولی RLS ندارد** باید در فهرست استثنای تست نگهبان (الگوی ۰۳) باشد، و اضافه‌کردن به آن فهرست **فقط با تأیید من** مجاز است.
-- `outbox_events` RLS اجباری دارد. Worker نقش جداگانه و مجوز محدود به عملیات پردازش همان صف دارد. policyهای آن طبق D-28 آزموده می‌شوند.
+- `outbox_events` RLS اجباری دارد. Worker نقش جداگانه و مجوز محدود به عملیات پردازش همان صف دارد. policyهای آن مطابق تصمیم‌های پروژه آزموده می‌شوند.
 
 ---
 

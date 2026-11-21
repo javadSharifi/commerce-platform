@@ -27,7 +27,7 @@
 | `sqlc` (ابزار تولید کد) | Queryها |
 | `github.com/golang-migrate/migrate/v4` | Migration |
 | `github.com/go-playground/validator/v10` | اعتبارسنجی ورودی |
-| `github.com/google/uuid` | نوع UUID (طبق تصمیم P0.2.1؛ اگر ID از نوع دیگری انتخاب شد، الگوها را با من هماهنگ کن) |
+| `github.com/google/uuid` | نوع UUID (مطابق تصمیم‌های پروژه) |
 
 > برای تست‌ها از خود `testing` استفاده کن؛ کتابخانه assertion اضافه نکن.
 
@@ -40,4 +40,4 @@
 - **خطاها:** خطای دامنه با `errors.New` در ماژول تعریف می‌شود (`ErrNotFound`، `ErrSlugTaken`) و `http.go` آن‌ها را به status code ترجمه می‌کند.
 - **نام‌گذاری Migration:** `NNNNNN_<action>_<table>.up.sql` و `.down.sql`.
 - **زمان:** `timestamptz` همیشه؛ مقدار زمان در UTC.
-- **ID** — UUID v4 با `gen_random_uuid()` طبق D-21.
+- **ID** — UUID v4 با `gen_random_uuid()` مطابق [تصمیم‌های پروژه](../psychology/DECISIONS.md).

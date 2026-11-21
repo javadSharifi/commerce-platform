@@ -4,7 +4,7 @@
 > قبل از نوشتن کد، اگر کاری که می‌خواهی بکنی شبیه ستون ❌ یکی از موارد پایین است، **بایست** و ستون ✅ را انجام بده.
 > هر مورد شناسه دارد (`AP-01`، ...). در گزارش‌ها و کامیت‌ها می‌توانی به آن ارجاع بدهی.
 > اگر وضعیتی را می‌بینی که این‌جا نیست و «راه آسان» با «راه درست» فرق دارد، **بپرس** و بعد از تأیید من همین‌جا اضافه‌اش کن (بخش آخر).
-> مثال‌ها قالب هستند: نام جدول/ستون/نوع ID را با تصمیم نهایی P0.2 هماهنگ کن.
+> مثال‌ها قالب هستند: نام جدول/ستون/نوع ID را با طرح‌وارهٔ پروژه هماهنگ کن.
 
 ## فهرست سریع
 
@@ -38,7 +38,7 @@
 ## AP-01 — `tenant_id` از ورودی کاربر 🔴
 
 **وسوسه:** «کلاینت `tenant_id` را می‌فرستد، ساده‌تر است.»
-**چرا غلط است:** هر کسی می‌تواند عدد را عوض کند و به داده فروشگاه دیگر برسد.
+**چرا غلط است:** هر کسی می‌تواند عدد را عوض کند و به دادهٔ Tenant دیگر برسد.
 
 ```go
 // ❌
@@ -49,7 +49,7 @@ t, ok := tenant.FromContext(r.Context())
 if !ok { http.Error(w, "tenant not resolved", http.StatusInternalServerError); return }
 ```
 
-**قاعده:** Storefront ← از دامنه تأییدشده. Admin ← از عضویت احرازشده کاربر (و اگر چند فروشگاه دارد، بررسی کن عضو آن است).
+**قاعده:** Storefront ← از دامنه تأییدشده. Admin ← از عضویت احرازشده کاربر (و اگر عضو چند مطب است، بررسی کن عضو آن است).
 
 ---
 
@@ -107,7 +107,7 @@ func (s *Store) WithTenantTx(ctx context.Context, fn func(tx pgx.Tx, tenantID uu
 ```sql
 -- ✅ هر جدول tenant-scoped در همان Migration:
 CREATE TABLE products (
-    id         uuid PRIMARY KEY,                       -- نوع ID طبق P0.2.1
+    id         uuid PRIMARY KEY,                       -- نوع ID مطابق طرح‌وارهٔ پروژه
     tenant_id  uuid NOT NULL REFERENCES tenants(id),
     -- ...
 );
@@ -148,7 +148,7 @@ total := computeTotal(variants, req.Items, shipping)   // محاسبه در Back
 price float64
 // ❌ ستون: numeric با ممیز بدون تصمیم، real، double precision، money
 
-// ✅ عدد صحیح در کوچک‌ترین واحد (طبق تصمیم P0.2.2)
+// ✅ عدد صحیح در کوچک‌ترین واحد (طبق قرارداد مالی پروژه)
 price int64            // Go
 -- ✅ SQL
 price bigint NOT NULL CHECK (price >= 0)
@@ -241,7 +241,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=300');
 - پاسخی که به cookie/session/کاربر وابسته است **هرگز** عمومی Cache نشود.
 - Cache key شامل Host + مسیر (و زبان/ارز اگر وجود دارد).
 - صفحات جستجو، فیلتر و pagination با query string از کش مشترک عبور می‌کنند.
-- Worker URLهای متأثر را فقط برای Host تأییدشدهٔ همان Tenant در آروان پاک می‌کند. رفتار CDN در P5 طبق D-26 آزموده می‌شود.
+- Worker URLهای متأثر را فقط برای Host تأییدشدهٔ همان Tenant در آروان پاک می‌کند. رفتار CDN مطابق تصمیم‌های زیرساخت پروژه آزموده می‌شود.
 
 ---
 
@@ -283,7 +283,7 @@ SELECT tenant_id FROM domains WHERE hostname = $1 AND status = 'verified';
 
 - دامنه تأییدنشده به هیچ Tenant وصل نمی‌شود.
 - یک hostname فقط به یک Tenant تعلق دارد (`UNIQUE (hostname)`).
-- فعال‌سازی CDN و صدور TLS لبه و origin به دامنهٔ تأییدشده محدودند. مسیر و آزمون‌ها در D-26 آمده‌اند.
+- فعال‌سازی CDN و صدور TLS لبه و origin به دامنهٔ تأییدشده محدودند. مسیر و آزمون‌ها در تصمیم‌های زیرساخت پروژه آمده‌اند.
 
 ---
 
@@ -307,12 +307,12 @@ SELECT * FROM products WHERE slug = $1;
 
 ```astro
 ---
-// ❌ توضیحات محصول (که صاحب فروشگاه نوشته) مستقیم
+// ❌ متن مطلب (که صاحب سایت نوشته) مستقیم
 ---
-<div set:html={product.description} />
+<div set:html={post.body} />
 
 <!-- ✅ -->
-<!-- ۱) ترجیحاً متن ساده: <p>{product.description}</p> -->
+<!-- ۱) ترجیحاً متن ساده: <p>{post.body}</p> -->
 <!-- ۲) اگر HTML لازم است: هنگام ذخیره، در Backend با sanitizer مبتنی بر allowlist
         پاک‌سازی شود و نسخه پاک‌سازی‌شده ذخیره/رندر شود. -->
 ```
@@ -324,12 +324,11 @@ SELECT * FROM products WHERE slug = $1;
 ## AP-15 — یکتایی سراسری به‌جای یکتایی در هر Tenant 🟠
 
 ```sql
--- ❌ دو فروشگاه نمی‌توانند هر دو محصولی با slug "iphone" داشته باشند
+-- ❌ دو مطب نمی‌توانند هر دو مطلبی با slug "workshop" داشته باشند
 slug text UNIQUE
 
 -- ✅
 UNIQUE (tenant_id, slug)
-UNIQUE (tenant_id, sku)
 ```
 و ایندکس‌های جستجو هم با `tenant_id` شروع شوند: `(tenant_id, slug)`.
 
@@ -423,7 +422,7 @@ const paymentKey = "abc123"
 key := os.Getenv("PAYMENT_API_KEY")
 ```
 
-کلیدهای درگاهِ هر فروشگاه که در دیتابیس ذخیره می‌شوند باید **رمزنگاری‌شده** باشند و در لاگ/پاسخ API ظاهر نشوند.
+کلیدهای درگاهِ هر Tenant که در دیتابیس ذخیره می‌شوند باید **رمزنگاری‌شده** باشند و در لاگ/پاسخ API ظاهر نشوند.
 
 ---
 
