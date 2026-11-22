@@ -11,22 +11,45 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getPrimaryVerifiedDomain = `-- name: GetPrimaryVerifiedDomain :one
+SELECT host
+FROM domains
+WHERE tenant_id = $1 AND is_verified = true
+ORDER BY is_primary DESC, created_at ASC
+LIMIT 1
+`
+
+func (q *Queries) GetPrimaryVerifiedDomain(ctx context.Context, tenantID pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPrimaryVerifiedDomain, tenantID)
+	var host string
+	err := row.Scan(&host)
+	return host, err
+}
+
 const getPublicSiteProfile = `-- name: GetPublicSiteProfile :one
 SELECT t.name as clinic_name,
-       s.title, s.description, s.phone, s.address, s.primary_color, s.logo_media_id
+       s.title, s.description, s.phone, s.address, s.primary_color, s.logo_media_id,
+       COALESCE(s.template_id, 'minimal')::text as template_id,
+       COALESCE(s.template_version, '1.0.0')::text as template_version,
+       COALESCE(s.theme_radius, 'md')::text as theme_radius,
+       COALESCE(s.theme_scale, 'md')::text as theme_scale
 FROM tenants t
 LEFT JOIN site_settings s ON s.tenant_id = t.id
 WHERE t.id = $1 AND t.status = 'active'
 `
 
 type GetPublicSiteProfileRow struct {
-	ClinicName   string
-	Title        pgtype.Text
-	Description  pgtype.Text
-	Phone        pgtype.Text
-	Address      pgtype.Text
-	PrimaryColor pgtype.Text
-	LogoMediaID  pgtype.UUID
+	ClinicName      string
+	Title           pgtype.Text
+	Description     pgtype.Text
+	Phone           pgtype.Text
+	Address         pgtype.Text
+	PrimaryColor    pgtype.Text
+	LogoMediaID     pgtype.UUID
+	TemplateID      string
+	TemplateVersion string
+	ThemeRadius     string
+	ThemeScale      string
 }
 
 func (q *Queries) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (GetPublicSiteProfileRow, error) {
@@ -40,19 +63,40 @@ func (q *Queries) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (Get
 		&i.Address,
 		&i.PrimaryColor,
 		&i.LogoMediaID,
+		&i.TemplateID,
+		&i.TemplateVersion,
+		&i.ThemeRadius,
+		&i.ThemeScale,
 	)
 	return i, err
 }
 
 const getSiteSettings = `-- name: GetSiteSettings :one
-SELECT tenant_id, title, description, phone, address, primary_color, logo_media_id, created_at, updated_at
+SELECT tenant_id, title, description, phone, address, primary_color, logo_media_id,
+       template_id, template_version, theme_radius, theme_scale, created_at, updated_at
 FROM site_settings
 WHERE tenant_id = $1
 `
 
-func (q *Queries) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (SiteSetting, error) {
+type GetSiteSettingsRow struct {
+	TenantID        pgtype.UUID
+	Title           string
+	Description     string
+	Phone           string
+	Address         string
+	PrimaryColor    string
+	LogoMediaID     pgtype.UUID
+	TemplateID      string
+	TemplateVersion string
+	ThemeRadius     string
+	ThemeScale      string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (GetSiteSettingsRow, error) {
 	row := q.db.QueryRow(ctx, getSiteSettings, tenantID)
-	var i SiteSetting
+	var i GetSiteSettingsRow
 	err := row.Scan(
 		&i.TenantID,
 		&i.Title,
@@ -61,6 +105,10 @@ func (q *Queries) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (Si
 		&i.Address,
 		&i.PrimaryColor,
 		&i.LogoMediaID,
+		&i.TemplateID,
+		&i.TemplateVersion,
+		&i.ThemeRadius,
+		&i.ThemeScale,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -68,8 +116,11 @@ func (q *Queries) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (Si
 }
 
 const upsertSiteSettings = `-- name: UpsertSiteSettings :one
-INSERT INTO site_settings (tenant_id, title, description, phone, address, primary_color, logo_media_id, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+INSERT INTO site_settings (
+    tenant_id, title, description, phone, address, primary_color, logo_media_id,
+    template_id, template_version, theme_radius, theme_scale, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET title = EXCLUDED.title,
     description = EXCLUDED.description,
@@ -77,21 +128,46 @@ SET title = EXCLUDED.title,
     address = EXCLUDED.address,
     primary_color = EXCLUDED.primary_color,
     logo_media_id = EXCLUDED.logo_media_id,
+    template_id = EXCLUDED.template_id,
+    template_version = EXCLUDED.template_version,
+    theme_radius = EXCLUDED.theme_radius,
+    theme_scale = EXCLUDED.theme_scale,
     updated_at = now()
-RETURNING tenant_id, title, description, phone, address, primary_color, logo_media_id, created_at, updated_at
+RETURNING tenant_id, title, description, phone, address, primary_color, logo_media_id,
+          template_id, template_version, theme_radius, theme_scale, created_at, updated_at
 `
 
 type UpsertSiteSettingsParams struct {
-	TenantID     pgtype.UUID
-	Title        string
-	Description  string
-	Phone        string
-	Address      string
-	PrimaryColor string
-	LogoMediaID  pgtype.UUID
+	TenantID        pgtype.UUID
+	Title           string
+	Description     string
+	Phone           string
+	Address         string
+	PrimaryColor    string
+	LogoMediaID     pgtype.UUID
+	TemplateID      string
+	TemplateVersion string
+	ThemeRadius     string
+	ThemeScale      string
 }
 
-func (q *Queries) UpsertSiteSettings(ctx context.Context, arg UpsertSiteSettingsParams) (SiteSetting, error) {
+type UpsertSiteSettingsRow struct {
+	TenantID        pgtype.UUID
+	Title           string
+	Description     string
+	Phone           string
+	Address         string
+	PrimaryColor    string
+	LogoMediaID     pgtype.UUID
+	TemplateID      string
+	TemplateVersion string
+	ThemeRadius     string
+	ThemeScale      string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertSiteSettings(ctx context.Context, arg UpsertSiteSettingsParams) (UpsertSiteSettingsRow, error) {
 	row := q.db.QueryRow(ctx, upsertSiteSettings,
 		arg.TenantID,
 		arg.Title,
@@ -100,8 +176,12 @@ func (q *Queries) UpsertSiteSettings(ctx context.Context, arg UpsertSiteSettings
 		arg.Address,
 		arg.PrimaryColor,
 		arg.LogoMediaID,
+		arg.TemplateID,
+		arg.TemplateVersion,
+		arg.ThemeRadius,
+		arg.ThemeScale,
 	)
-	var i SiteSetting
+	var i UpsertSiteSettingsRow
 	err := row.Scan(
 		&i.TenantID,
 		&i.Title,
@@ -110,6 +190,10 @@ func (q *Queries) UpsertSiteSettings(ctx context.Context, arg UpsertSiteSettings
 		&i.Address,
 		&i.PrimaryColor,
 		&i.LogoMediaID,
+		&i.TemplateID,
+		&i.TemplateVersion,
+		&i.ThemeRadius,
+		&i.ThemeScale,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

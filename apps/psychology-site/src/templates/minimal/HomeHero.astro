@@ -1,0 +1,36 @@
+---
+import type { HomeHeroVM } from '../view-models.js';
+
+interface Props extends HomeHeroVM {}
+
+const { badgeText, title, description, primaryCta, secondaryCta } = Astro.props;
+---
+
+<section class="py-16 md:py-24 bg-base-100 text-center transition-colors">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    {badgeText && (
+      <div class="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold bg-base-200 text-primary mb-6">
+        {badgeText}
+      </div>
+    )}
+    
+    <h1 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-base-content tracking-tight leading-tight mb-6">
+      {title}
+    </h1>
+
+    <p class="text-base sm:text-lg text-base-content/80 max-w-2xl mx-auto leading-relaxed mb-10">
+      {description}
+    </p>
+
+    <div class="flex flex-wrap items-center justify-center gap-4">
+      <a href={primaryCta.href} class="btn btn-primary btn-md sm:btn-lg rounded-full font-medium shadow-none">
+        {primaryCta.label}
+      </a>
+      {secondaryCta && (
+        <a href={secondaryCta.href} class="btn btn-outline btn-md sm:btn-lg rounded-full font-medium">
+          {secondaryCta.label}
+        </a>
+      )}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,63 @@
+---
+import type { FooterVM } from '../view-models.js';
+
+interface Props extends FooterVM {}
+
+const { clinicName, copyrightYear, phone, address, description } = Astro.props;
+---
+
+<footer class="w-full bg-neutral text-neutral-content mt-auto transition-colors">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 pb-10 border-b border-neutral-content/20">
+      <!-- About Clinic -->
+      <div>
+        <div class="text-xl font-bold mb-3 text-neutral-content flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-primary inline-block"></span>
+          {clinicName}
+        </div>
+        <p class="text-sm text-neutral-content/80 leading-relaxed mb-4">
+          {description || 'مرکز تخصصی خدمات روان‌شناختی، مشاوره‌ای، کارگاه‌ها و دوره‌های آموزشی معتبر با کادر درمان متخصص.'}
+        </p>
+        <span class="badge badge-outline text-xs text-neutral-content/70">دارای مجوز رسمی از سازمان نظام روان‌شناسی</span>
+      </div>
+
+      <!-- Contact Info -->
+      <div>
+        <h4 class="text-base font-semibold mb-4 text-neutral-content">اطلاعات تماس و دسترسی</h4>
+        <div class="space-y-3 text-sm text-neutral-content/80">
+          {phone && (
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-neutral-content/60">تلفن:</span>
+              <span class="font-bold text-neutral-content">{phone}</span>
+            </div>
+          )}
+          {address && (
+            <div class="flex items-start gap-2">
+              <span class="text-xs text-neutral-content/60">نشانی:</span>
+              <span class="text-neutral-content/90">{address}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- Working Hours & Note -->
+      <div>
+        <h4 class="text-base font-semibold mb-4 text-neutral-content">ساعات کاری و پذیرش</h4>
+        <p class="text-sm text-neutral-content/80 mb-2">
+          شنبه تا چهارشنبه: ۸:۰۰ الی ۲۰:۰۰
+        </p>
+        <p class="text-sm text-neutral-content/80 mb-4">
+          پنج‌شنبه: ۸:۰۰ الی ۱۴:۰۰
+        </p>
+        <span class="text-xs text-neutral-content/60 block">
+          پذیرش مراجعین فقط با تعیین وقت قبلی امکان‌پذیر است.
+        </span>
+      </div>
+    </div>
+
+    <div class="pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-neutral-content/60">
+      <div>تمامی حقوق مادی و معنوی متعلق به {clinicName} است © {copyrightYear}</div>
+      <div>قالب کلینیکال · سامانه مستقل سلامت روان و درمانگاه‌ها</div>
+    </div>
+  </div>
+</footer>

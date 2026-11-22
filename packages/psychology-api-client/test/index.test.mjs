@@ -969,4 +969,94 @@ describe('PsychologyApiClient - Courses & Buyer Endpoints (Phase 3 - PSY-3.1)', 
     assert.strictEqual(metrics.financial.net_revenue_rials, 395000000);
     assert.strictEqual(metrics.media.usage_percentage, 10);
   });
+
+  test('Public and Admin Site Settings with template configuration (PSY-5.3)', async () => {
+    let storedSettings = {
+      tenant_id: 't-test-1',
+      title: 'کلینیک تخصصی روان‌شناسی',
+      description: 'مرکز مشاوره فردی و زوج‌درمانی',
+      phone: '02188888888',
+      address: 'تهران، میدان ونک',
+      primary_color: '#0284c7',
+      template_id: 'minimal',
+      template_version: '1.0.0',
+      theme_radius: 'md',
+      theme_scale: 'md',
+    };
+
+    const client = new PsychologyApiClient({
+      baseUrl: 'http://localhost:8080',
+      fetch: async (url, init) => {
+        const u = url.toString();
+        if (u.includes('/v1/public/site')) {
+          return new Response(
+            JSON.stringify({
+              name: 'کلینیک مهر',
+              title: storedSettings.title,
+              description: storedSettings.description,
+              phone: storedSettings.phone,
+              address: storedSettings.address,
+              primary_color: storedSettings.primary_color,
+              template_id: storedSettings.template_id,
+              template_version: storedSettings.template_version,
+              theme_radius: storedSettings.theme_radius,
+              theme_scale: storedSettings.theme_scale,
+            }),
+            { status: 200 }
+          );
+        }
+        if (u.includes('/v1/admin/site')) {
+          if (init?.method === 'PUT') {
+            const body = JSON.parse(init.body);
+            storedSettings = {
+              ...storedSettings,
+              ...body,
+              template_version: '1.0.0',
+            };
+            return new Response(JSON.stringify(storedSettings), {
+              status: 200,
+              headers: { 'Cache-Control': 'private, no-store' },
+            });
+          }
+          return new Response(JSON.stringify(storedSettings), { status: 200 });
+        }
+        return new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 });
+      },
+    });
+
+    // 1. Get Public Site
+    const pub = await client.getPublicSite();
+    assert.strictEqual(pub.name, 'کلینیک مهر');
+    assert.strictEqual(pub.template_id, 'minimal');
+    assert.strictEqual(pub.template_version, '1.0.0');
+    assert.strictEqual(pub.theme_radius, 'md');
+    assert.strictEqual(pub.theme_scale, 'md');
+
+    // 2. Get Admin Site
+    const adm = await client.getAdminSite();
+    assert.strictEqual(adm.tenant_id, 't-test-1');
+    assert.strictEqual(adm.template_id, 'minimal');
+
+    // 3. Update Admin Site with template and theme
+    const updated = await client.updateAdminSite({
+      title: 'کلینیک مدرن سپهر',
+      description: 'روان‌درمانی تحلیلی',
+      primary_color: '#0ea5e9',
+      template_id: 'clinical',
+      theme_radius: 'lg',
+      theme_scale: 'sm',
+    });
+    assert.strictEqual(updated.title, 'کلینیک مدرن سپهر');
+    assert.strictEqual(updated.template_id, 'clinical');
+    assert.strictEqual(updated.template_version, '1.0.0');
+    assert.strictEqual(updated.theme_radius, 'lg');
+    assert.strictEqual(updated.theme_scale, 'sm');
+
+    // 4. Public Site reflects update
+    const pubAfter = await client.getPublicSite();
+    assert.strictEqual(pubAfter.title, 'کلینیک مدرن سپهر');
+    assert.strictEqual(pubAfter.template_id, 'clinical');
+    assert.strictEqual(pubAfter.theme_radius, 'lg');
+    assert.strictEqual(pubAfter.theme_scale, 'sm');
+  });
 });

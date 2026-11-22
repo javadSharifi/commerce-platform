@@ -17,5 +17,7 @@
 | دوره، پخش و دسترسی | `apps/psychology-api/internal/{courses,media}/` و مسیرهای `courses/` در سایت و پنل و `account/courses/` در سایت | [دوره](modules/courses.md)، `PSY-3` |
 | تست ایزولاسیون و مرورگر | تست Go کنار ماژول‌ها و `apps/psychology-api/internal/testsupport/`، سناریوهای مرورگر در `apps/psychology-site/tests/` | [پذیرش](ACCEPTANCE.md)، همهٔ فازها |
 | استقرار، بکاپ و کش | `infrastructure/psychology/` و `apps/psychology-api/cmd/worker/` و `internal/cache/` | [پلتفرم](modules/platform.md)، `PSY-0` و `PSY-4` |
+| دیزاین سیستم و کامپوننت‌های مشترک UI | `packages/ui/` | [سیستم طراحی و قالب‌ها](modules/ui-templates.md)، `PSY-5` |
+| موتور قالب‌های سایت عمومی (Multi-Template) | `apps/psychology-site/src/templates/` | [الگوی ۰۴](../patterns/04-ui-and-templates.md)، `PSY-5` |
 
 الگوی داخل هر ماژول Go از `http.go` برای HTTP، `service.go` برای منطق و `queries.sql` برای sqlc شروع می‌شود. تصمیم دربارهٔ Routeهای REST با OpenAPI است. تنظیمات monorepo و بسته‌های UI، SEO و lint عمومی را در صورت سازگاری بازاستفاده کن. [الگوی ماژول](../patterns/01-tenant-scoped-module.md)

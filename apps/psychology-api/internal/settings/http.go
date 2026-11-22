@@ -33,6 +33,9 @@ type updateSettingsRequest struct {
 	Address      string     `json:"address"`
 	PrimaryColor string     `json:"primary_color"`
 	LogoMediaID  *uuid.UUID `json:"logo_media_id"`
+	TemplateID   string     `json:"template_id"`
+	ThemeRadius  string     `json:"theme_radius"`
+	ThemeScale   string     `json:"theme_scale"`
 }
 
 func writeJSONError(w http.ResponseWriter, status int, code, message string) {
@@ -78,7 +81,8 @@ func (h *Handler) handleGetPublicSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profile, err := h.service.GetPublicProfile(r.Context(), tenantID)
+	ctx := tenantctx.With(r.Context(), tenantID)
+	profile, err := h.service.GetPublicProfile(ctx, tenantID)
 	if err != nil {
 		if err == ErrClinicNotFound {
 			writeJSONError(w, http.StatusNotFound, "CLINIC_NOT_FOUND", "کلینیک مورد نظر یافت نشد.")
@@ -106,6 +110,7 @@ func (h *Handler) handleGetAdminSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(settings)
@@ -131,20 +136,34 @@ func (h *Handler) handleUpdateAdminSite(w http.ResponseWriter, r *http.Request) 
 		Address:      req.Address,
 		PrimaryColor: req.PrimaryColor,
 		LogoMediaID:  req.LogoMediaID,
+		TemplateID:   req.TemplateID,
+		ThemeRadius:  req.ThemeRadius,
+		ThemeScale:   req.ThemeScale,
 	})
 	if err != nil {
-		if err == ErrEmptyTitle {
+		switch err {
+		case ErrEmptyTitle:
 			writeJSONError(w, http.StatusBadRequest, "EMPTY_TITLE", "عنوان کلینیک الزامی است.")
 			return
-		}
-		if err == ErrInvalidColor {
+		case ErrInvalidColor:
 			writeJSONError(w, http.StatusBadRequest, "INVALID_COLOR", "فرمت رنگ باید کد هگز معتبر باشد (مانند #0284c7).")
 			return
+		case ErrInvalidTemplateID:
+			writeJSONError(w, http.StatusBadRequest, "INVALID_TEMPLATE_ID", "شناسه قالب نامعتبر است.")
+			return
+		case ErrInvalidRadius:
+			writeJSONError(w, http.StatusBadRequest, "INVALID_RADIUS", "شعاع گوشه‌ها باید یکی از مقادیر sm، md یا lg باشد.")
+			return
+		case ErrInvalidScale:
+			writeJSONError(w, http.StatusBadRequest, "INVALID_SCALE", "مقیاس باید یکی از مقادیر sm، md یا lg باشد.")
+			return
+		default:
+			writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "خطا در به‌روزرسانی تنظیمات.")
+			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "خطا در به‌روزرسانی تنظیمات.")
-		return
 	}
 
+	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(updated)

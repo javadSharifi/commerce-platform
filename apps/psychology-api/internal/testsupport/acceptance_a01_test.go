@@ -72,13 +72,17 @@ func (s *fullMockStore) GetSiteSettings(ctx context.Context, tenantID pgtype.UUI
 
 func (s *fullMockStore) UpsertSiteSettings(ctx context.Context, arg settingsdb.UpsertSiteSettingsParams) (settingsdb.SiteSetting, error) {
 	st := settingsdb.SiteSetting{
-		TenantID:     arg.TenantID,
-		Title:        arg.Title,
-		Description:  arg.Description,
-		Phone:        arg.Phone,
-		Address:      arg.Address,
-		PrimaryColor: arg.PrimaryColor,
-		LogoMediaID:  arg.LogoMediaID,
+		TenantID:        arg.TenantID,
+		Title:           arg.Title,
+		Description:     arg.Description,
+		Phone:           arg.Phone,
+		Address:         arg.Address,
+		PrimaryColor:    arg.PrimaryColor,
+		LogoMediaID:     arg.LogoMediaID,
+		TemplateID:      arg.TemplateID,
+		TemplateVersion: arg.TemplateVersion,
+		ThemeRadius:     arg.ThemeRadius,
+		ThemeScale:      arg.ThemeScale,
 	}
 	s.settings[fromPgUUID(arg.TenantID).String()] = st
 	return st, nil
@@ -92,19 +96,37 @@ func (s *fullMockStore) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID
 	st, ok := s.settings[fromPgUUID(id).String()]
 	if !ok {
 		return settingsdb.GetPublicSiteProfileRow{
-			ClinicName:   name,
-			Title:        pgtype.Text{String: name, Valid: true},
-			PrimaryColor: pgtype.Text{String: "#0284c7", Valid: true},
+			ClinicName:      name,
+			Title:           pgtype.Text{String: name, Valid: true},
+			PrimaryColor:    pgtype.Text{String: "#0284c7", Valid: true},
+			TemplateID:      "minimal",
+			TemplateVersion: "1.0.0",
+			ThemeRadius:     "md",
+			ThemeScale:      "md",
 		}, nil
 	}
 	return settingsdb.GetPublicSiteProfileRow{
-		ClinicName:   name,
-		Title:        pgtype.Text{String: st.Title, Valid: true},
-		Description:  pgtype.Text{String: st.Description, Valid: true},
-		Phone:        pgtype.Text{String: st.Phone, Valid: true},
-		Address:      pgtype.Text{String: st.Address, Valid: true},
-		PrimaryColor: pgtype.Text{String: st.PrimaryColor, Valid: true},
+		ClinicName:      name,
+		Title:           pgtype.Text{String: st.Title, Valid: true},
+		Description:     pgtype.Text{String: st.Description, Valid: true},
+		Phone:           pgtype.Text{String: st.Phone, Valid: true},
+		Address:         pgtype.Text{String: st.Address, Valid: true},
+		PrimaryColor:    pgtype.Text{String: st.PrimaryColor, Valid: true},
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
 	}, nil
+}
+
+func (s *fullMockStore) GetPrimaryVerifiedDomain(ctx context.Context, tenantID pgtype.UUID) (string, error) {
+	tid := fromPgUUID(tenantID).String()
+	for host, d := range s.domains {
+		if fromPgUUID(d.TenantID).String() == tid && d.IsVerified {
+			return host, nil
+		}
+	}
+	return "", pgx.ErrNoRows
 }
 
 // Auth Querier

@@ -19,6 +19,9 @@ export interface PaginationMeta {
   total_pages: number;
 }
 
+export type ThemeRadius = 'sm' | 'md' | 'lg';
+export type ThemeScale = 'sm' | 'md' | 'lg';
+
 export interface PublicSiteResponse {
   name: string;
   title: string;
@@ -27,6 +30,10 @@ export interface PublicSiteResponse {
   address?: string;
   primary_color: string;
   logo_url?: string | null;
+  template_id: string;
+  template_version: string;
+  theme_radius: ThemeRadius;
+  theme_scale: ThemeScale;
 }
 
 export interface LoginRequest {
@@ -67,6 +74,10 @@ export interface SiteSettingsResponse {
   address: string;
   primary_color: string;
   logo_media_id?: string | null;
+  template_id: string;
+  template_version: string;
+  theme_radius: ThemeRadius;
+  theme_scale: ThemeScale;
 }
 
 export interface UpdateSiteSettingsRequest {
@@ -76,6 +87,9 @@ export interface UpdateSiteSettingsRequest {
   address?: string;
   primary_color: string;
   logo_media_id?: string | null;
+  template_id?: string;
+  theme_radius?: ThemeRadius;
+  theme_scale?: ThemeScale;
 }
 
 export interface BuyerProfileResponse {
@@ -619,6 +633,7 @@ export interface AdminCourseItem {
   price_rials: number;
   cover_media_id?: string | null;
   status: CourseStatus;
+  lessons_count?: number;
   published_at?: string | null;
   created_at: string;
   updated_at: string;

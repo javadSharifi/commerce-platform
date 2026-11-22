@@ -86,30 +86,30 @@ function formatPriceToman(priceRials: number) {
 function getStatusBadge(st: string) {
   switch (st) {
     case 'published':
-      return { text: 'منتشرشده (ثبت‌نام فعال)', bg: '#dcfce7', color: '#15803d' };
+      return { text: 'منتشرشده (ثبت‌نام فعال)', badgeClass: 'badge-success' };
     case 'draft':
-      return { text: 'پیش‌نویس', bg: '#f1f5f9', color: '#475569' };
+      return { text: 'پیش‌نویس', badgeClass: 'badge-ghost' };
     case 'closed':
-      return { text: 'بسته‌شده / پایان مهلت', bg: '#fef3c7', color: '#b45309' };
+      return { text: 'بسته‌شده / پایان مهلت', badgeClass: 'badge-warning' };
     case 'cancelled':
-      return { text: 'لغو شده', bg: '#fee2e2', color: '#b91c1c' };
+      return { text: 'لغو شده', badgeClass: 'badge-error' };
     default:
-      return { text: st, bg: '#f1f5f9', color: '#475569' };
+      return { text: st, badgeClass: 'badge-ghost' };
   }
 }
 
 function getRegBadge(st: string) {
   switch (st) {
     case 'confirmed':
-      return { text: 'قطعی', bg: '#dcfce7', color: '#15803d' };
+      return { text: 'قطعی', badgeClass: 'badge-success' };
     case 'pending_payment':
-      return { text: 'در انتظار پرداخت (رزرو ۱۵ دقیقه)', bg: '#e0f2fe', color: '#0369a1' };
+      return { text: 'در انتظار پرداخت', badgeClass: 'badge-info' };
     case 'expired':
-      return { text: 'منقضی‌شده', bg: '#f1f5f9', color: '#64748b' };
+      return { text: 'منقضی‌شده', badgeClass: 'badge-ghost' };
     case 'cancelled':
-      return { text: 'لغو شده', bg: '#fee2e2', color: '#b91c1c' };
+      return { text: 'لغو شده', badgeClass: 'badge-error' };
     default:
-      return { text: st, bg: '#f1f5f9', color: '#64748b' };
+      return { text: st, badgeClass: 'badge-ghost' };
   }
 }
 
@@ -119,55 +119,46 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
 ---
 
 <AdminLayout title={`مدیریت کارگاه: ${workshop.title}`} currentNav="workshops">
-  <div style="margin-bottom: 1.5rem;">
-    <a href="/workshops" style="color: #64748b; font-size: 0.9rem; text-decoration: none;">
+  <div class="mb-4">
+    <a href="/workshops" class="btn btn-ghost btn-xs text-base-content/70">
       ← بازگشت به فهرست کارگاه‌ها
     </a>
   </div>
 
   <!-- Header Banner -->
-  <div class="card" style="margin-bottom: 1.5rem;">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+  <div class="card bg-base-100 border border-base-200 rounded-box p-6 shadow-xs mb-6">
+    <div class="flex justify-between items-start flex-wrap gap-4 mb-5">
       <div>
-        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
-          <h1 style="font-size: 1.45rem; font-weight: 800; color: #0f172a;">
+        <div class="flex items-center gap-3 mb-2 flex-wrap">
+          <h1 class="text-xl font-bold text-base-content">
             {workshop.title}
           </h1>
-          <span style={`display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700; background: ${statusBadge.bg}; color: ${statusBadge.color};`}>
+          <span class={`badge ${statusBadge.badgeClass} badge-sm font-medium`}>
             {statusBadge.text}
           </span>
         </div>
-        <p style="color: #64748b; font-size: 0.95rem;">
-          مدرس: <strong style="color: #334155;">{workshop.instructor_name}</strong> |
-          محل: <strong style="color: #334155;">{workshop.location}</strong>
+        <p class="text-xs text-base-content/70">
+          مدرس: <strong class="text-base-content">{workshop.instructor_name}</strong> |
+          محل: <strong class="text-base-content">{workshop.location}</strong>
         </p>
       </div>
 
       <!-- Action Buttons -->
-      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;" id="action-buttons">
+      <div class="flex gap-2 flex-wrap" id="action-buttons">
         {workshop.status === 'draft' && (
-          <button
-            id="btn-publish"
-            style="padding: 0.5rem 1rem; background: #16a34a; color: #ffffff; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
-          >
+          <button id="btn-publish" class="btn btn-success btn-sm font-medium">
             انتشار کارگاه در وب‌سایت
           </button>
         )}
 
         {workshop.status === 'published' && (
-          <button
-            id="btn-close"
-            style="padding: 0.5rem 1rem; background: #d97706; color: #ffffff; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
-          >
+          <button id="btn-close" class="btn btn-warning btn-sm font-medium">
             پایان مهلت ثبت‌نام (بستن)
           </button>
         )}
 
         {workshop.status !== 'cancelled' && (
-          <button
-            id="btn-cancel"
-            style="padding: 0.5rem 1rem; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
-          >
+          <button id="btn-cancel" class="btn btn-error btn-outline btn-sm font-medium">
             لغو کل کارگاه (مالک)
           </button>
         )}
@@ -175,42 +166,42 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
     </div>
 
     <!-- Quick Stats -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; border-top: 1px solid #f1f5f9; padding-top: 1.25rem;">
-      <div style="background: #f8fafc; padding: 0.85rem; border-radius: 0.5rem;">
-        <span style="display: block; font-size: 0.8rem; color: #64748b;">ظرفیت کل صندلی‌ها</span>
-        <strong style="font-size: 1.25rem; color: #0f172a;">{workshop.capacity} نفر</strong>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-4 border-t border-base-200">
+      <div class="bg-base-200/50 p-3 rounded-lg">
+        <span class="block text-xs text-base-content/70 mb-0.5">ظرفیت کل صندلی‌ها</span>
+        <strong class="text-base font-bold text-base-content">{workshop.capacity} نفر</strong>
       </div>
-      <div style="background: #f0fdf4; padding: 0.85rem; border-radius: 0.5rem;">
-        <span style="display: block; font-size: 0.8rem; color: #166534;">ثبت‌نام‌های قطعی</span>
-        <strong style="font-size: 1.25rem; color: #15803d;">{workshop.confirmed_count} نفر</strong>
+      <div class="bg-success/10 p-3 rounded-lg text-success">
+        <span class="block text-xs opacity-80 mb-0.5">ثبت‌نام‌های قطعی</span>
+        <strong class="text-base font-bold">{workshop.confirmed_count} نفر</strong>
       </div>
-      <div style="background: #eff6ff; padding: 0.85rem; border-radius: 0.5rem;">
-        <span style="display: block; font-size: 0.8rem; color: #1e40af;">رزروهای موقت درگاه</span>
-        <strong style="font-size: 1.25rem; color: #1d4ed8;">{workshop.pending_count} نفر</strong>
+      <div class="bg-info/10 p-3 rounded-lg text-info">
+        <span class="block text-xs opacity-80 mb-0.5">رزروهای موقت درگاه</span>
+        <strong class="text-base font-bold">{workshop.pending_count} نفر</strong>
       </div>
-      <div style="background: #fdf4ff; padding: 0.85rem; border-radius: 0.5rem;">
-        <span style="display: block; font-size: 0.8rem; color: #86198f;">صندلی‌های خالی</span>
-        <strong style="font-size: 1.25rem; color: #a21caf;">{remainingSeats} صندلی</strong>
+      <div class="bg-secondary/10 p-3 rounded-lg text-secondary">
+        <span class="block text-xs opacity-80 mb-0.5">صندلی‌های خالی</span>
+        <strong class="text-base font-bold">{remainingSeats} صندلی</strong>
       </div>
-      <div style="background: #f8fafc; padding: 0.85rem; border-radius: 0.5rem;">
-        <span style="display: block; font-size: 0.8rem; color: #64748b;">شهریه هر نفر</span>
-        <strong style="font-size: 1.1rem; color: #0284c7;">{formatPriceToman(workshop.price_rials)}</strong>
+      <div class="bg-base-200/50 p-3 rounded-lg">
+        <span class="block text-xs text-base-content/70 mb-0.5">شهریه هر نفر</span>
+        <strong class="text-base font-bold text-primary">{formatPriceToman(workshop.price_rials)}</strong>
       </div>
     </div>
   </div>
 
   <!-- Capacity Management Card -->
-  <div class="card" style="margin-bottom: 1.5rem; max-width: 600px;">
-    <h3 style="font-size: 1.1rem; font-weight: 700; color: #0f172a; margin-bottom: 0.5rem;">
+  <div class="card bg-base-100 border border-base-200 rounded-box p-6 shadow-xs mb-6 max-w-xl">
+    <h3 class="text-sm font-bold text-base-content mb-1">
       تغییر ظرفیت صندلی‌های کارگاه
     </h3>
-    <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1rem;">
+    <p class="text-xs text-base-content/70 mb-4">
       طبق قوانین سامانه، کاهش ظرفیت به کمتر از مجموع ثبت‌نام‌های قطعی و رزروهای موقت فعال ({activeReservations} صندلی) مجاز نمی‌باشد.
     </p>
 
-    <form id="capacity-form" style="display: flex; gap: 0.75rem; align-items: flex-end;">
-      <div style="flex: 1;">
-        <label for="capacity-input" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; color: #334155;">
+    <form id="capacity-form" class="flex gap-3 items-end">
+      <div class="flex-1">
+        <label for="capacity-input" class="block text-xs font-medium text-base-content/80 mb-1">
           ظرفیت جدید (حداقل {activeReservations})
         </label>
         <input
@@ -218,39 +209,36 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
           type="number"
           min={activeReservations}
           value={workshop.capacity}
-          style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.95rem;"
+          class="input input-bordered input-sm w-full"
         />
       </div>
-      <button
-        type="submit"
-        style="padding: 0.55rem 1rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.9rem;"
-      >
+      <button type="submit" class="btn btn-primary btn-sm font-medium">
         ثبت ظرفیت جدید
       </button>
     </form>
-    <div id="capacity-msg" style="display: none; margin-top: 0.75rem; font-size: 0.85rem;"></div>
+    <div id="capacity-msg" class="hidden mt-3 text-xs font-medium"></div>
   </div>
 
   <!-- Attendees / Registrations List -->
-  <div class="card" style="padding: 0; overflow-x: auto;">
-    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-      <h3 style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
+  <div class="card bg-base-100 border border-base-200 rounded-box shadow-xs overflow-x-auto">
+    <div class="p-4 sm:p-5 border-b border-base-200 flex justify-between items-center flex-wrap gap-2">
+      <h3 class="text-sm font-bold text-base-content">
         فهرست ثبت‌نام‌کنندگان و شرکت‌کنندگان ({registrations.length} رکورد)
       </h3>
-      <span style="font-size: 0.85rem; color: #64748b;">
+      <span class="text-xs text-base-content/60">
         امکان لغو ثبت‌نام و آزادسازی فوری صندلی توسط مسئول پذیرش یا مالک
       </span>
     </div>
 
-    <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+    <table class="table table-zebra w-full text-start text-xs">
       <thead>
-        <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569;">
-          <th style="padding: 0.85rem 1.25rem; font-weight: 600;">نام شرکت‌کننده</th>
-          <th style="padding: 0.85rem 1rem; font-weight: 600;">شماره همراه</th>
-          <th style="padding: 0.85rem 1rem; font-weight: 600;">وضعیت ثبت‌نام</th>
-          <th style="padding: 0.85rem 1rem; font-weight: 600;">زمان ثبت‌نام</th>
-          <th style="padding: 0.85rem 1rem; font-weight: 600;">مهلت انقضای رزرو</th>
-          <th style="padding: 0.85rem 1.25rem; font-weight: 600; text-align: left;">عملیات پذیرش</th>
+        <tr class="bg-base-200/50 text-base-content/70">
+          <th>نام شرکت‌کننده</th>
+          <th>شماره همراه</th>
+          <th>وضعیت ثبت‌نام</th>
+          <th>زمان ثبت‌نام</th>
+          <th>مهلت انقضای رزرو</th>
+          <th class="text-end">عملیات پذیرش</th>
         </tr>
       </thead>
       <tbody>
@@ -258,36 +246,35 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
           const badge = getRegBadge(reg.status);
           const isCancelable = reg.status === 'confirmed' || reg.status === 'pending_payment';
           return (
-            <tr style="border-bottom: 1px solid #f1f5f9;">
-              <td style="padding: 0.85rem 1.25rem; font-weight: 600; color: #0f172a;">
+            <tr class="hover">
+              <td class="font-bold text-base-content">
                 {reg.guest_name}
               </td>
-              <td style="padding: 0.85rem 1rem; color: #334155; font-family: monospace;" dir="ltr">
+              <td class="font-mono text-base-content/80" dir="ltr">
                 {reg.guest_phone}
               </td>
-              <td style="padding: 0.85rem 1rem;">
-                <span style={`display: inline-block; padding: 0.2rem 0.55rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; background: ${badge.bg}; color: ${badge.color};`}>
+              <td>
+                <span class={`badge ${badge.badgeClass} badge-xs font-medium`}>
                   {badge.text}
                 </span>
               </td>
-              <td style="padding: 0.85rem 1rem; color: #64748b; font-size: 0.85rem;">
+              <td class="text-base-content/70">
                 {formatDateTehran(reg.created_at)}
               </td>
-              <td style="padding: 0.85rem 1rem; color: #64748b; font-size: 0.85rem;">
+              <td class="text-base-content/70">
                 {reg.expires_at ? formatDateTehran(reg.expires_at) : '—'}
               </td>
-              <td style="padding: 0.85rem 1.25rem; text-align: left;">
+              <td class="text-end">
                 {isCancelable ? (
                   <button
-                    class="btn-cancel-reg"
+                    class="btn-cancel-reg btn btn-error btn-outline btn-xs font-medium"
                     data-reg-id={reg.id}
                     data-guest-name={reg.guest_name}
-                    style="padding: 0.35rem 0.75rem; background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;"
                   >
                     لغو ثبت‌نام و آزادسازی صندلی
                   </button>
                 ) : (
-                  <span style="color: #94a3b8; font-size: 0.8rem;">غیرفعال</span>
+                  <span class="text-base-content/40 text-[11px]">غیرفعال</span>
                 )}
               </td>
             </tr>
@@ -359,13 +346,12 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
     if (capForm && capInput && capMsg) {
       capForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        capMsg.style.display = 'none';
+        capMsg.classList.add('hidden');
 
         const newCap = parseInt(capInput.value, 10);
         if (newCap < activeReservations) {
           capMsg.textContent = `کاهش ظرفیت به کمتر از ${activeReservations} صندلی فعال مجاز نمی‌باشد.`;
-          capMsg.style.color = '#dc2626';
-          capMsg.style.display = 'block';
+          capMsg.className = 'mt-3 text-xs font-medium text-error block';
           return;
         }
 
@@ -378,19 +364,16 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
 
           if (res.ok) {
             capMsg.textContent = 'ظرفیت کارگاه با موفقیت به‌روزرسانی شد.';
-            capMsg.style.color = '#16a34a';
-            capMsg.style.display = 'block';
+            capMsg.className = 'mt-3 text-xs font-medium text-success block';
             setTimeout(() => window.location.reload(), 800);
           } else {
             const d = await res.json().catch(() => ({}));
             capMsg.textContent = d.message || 'خطا در تغییر ظرفیت.';
-            capMsg.style.color = '#dc2626';
-            capMsg.style.display = 'block';
+            capMsg.className = 'mt-3 text-xs font-medium text-error block';
           }
         } catch {
-          capMsg.textContent = 'خطا در ارتباط با سرور.';
-          capMsg.style.color = '#dc2626';
-          capMsg.style.display = 'block';
+          capMsg.textContent = 'خطای ارتباط با سرور.';
+          capMsg.className = 'mt-3 text-xs font-medium text-error block';
         }
       });
     }

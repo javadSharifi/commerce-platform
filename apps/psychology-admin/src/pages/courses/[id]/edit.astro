@@ -44,76 +44,84 @@ const priceTomans = Math.floor(course.price_rials / 10);
 ---
 
 <AdminLayout title={`ویرایش دوره: ${course.title}`} currentNav="courses">
-  <div style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+  <div class="max-w-3xl mx-auto flex flex-col gap-6">
     <!-- Top Bar -->
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div class="flex justify-between items-center flex-wrap gap-4">
       <div>
-        <h2 style="font-size: 1.3rem; font-weight: 700; color: #0f172a;">ویرایش مشخصات دوره آموزشی</h2>
-        <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
-          <span style="font-size: 0.85rem; color: #64748b;">وضعیت جاری:</span>
-          <span style="font-size: 0.8rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 9999px; background: #fef3c7; color: #92400e;">
+        <h2 class="text-xl font-bold text-base-content">ویرایش مشخصات دوره آموزشی</h2>
+        <div class="flex items-center gap-2 mt-1">
+          <span class="text-xs text-base-content/70">وضعیت جاری:</span>
+          <span class="badge badge-warning badge-xs font-semibold">
             {course.status === 'published' ? 'منتشرشده' : course.status === 'archived' ? 'بایگانی‌شده' : 'پیش‌نویس'}
           </span>
         </div>
       </div>
-      <div style="display: flex; gap: 0.5rem;">
-        <a href={`/courses/${course.id}/lessons`} class="btn-secondary">
+      <div class="flex gap-2 items-center">
+        <a href={`/courses/${course.id}/lessons`} class="btn btn-ghost btn-sm text-primary font-medium">
           🎬 مدیریت جلسات ({course.lessons_count} جلسه)
         </a>
-        <a href="/courses" style="font-size: 0.9rem; color: #64748b; text-decoration: none; display: flex; align-items: center; gap: 0.25rem; margin-right: 0.5rem;">
+        <a href="/courses" class="btn btn-ghost btn-xs text-base-content/60">
           ← لیست دوره‌ها
         </a>
       </div>
     </div>
 
     <!-- Edit Form Card -->
-    <div class="card">
-      <form id="edit-course-form" style="display: flex; flex-direction: column; gap: 1.25rem;" data-id={course.id}>
+    <div class="card bg-base-100 border border-base-200 rounded-box p-6 sm:p-8 shadow-xs">
+      <form id="edit-course-form" class="flex flex-col gap-5" data-id={course.id}>
         <div>
-          <label class="form-label" for="title">عنوان دوره <span style="color: #ef4444;">*</span></label>
-          <input type="text" id="title" name="title" required value={course.title} class="form-input" />
+          <label class="block text-xs font-semibold text-base-content/80 mb-1" for="title">
+            عنوان دوره <span class="text-error">*</span>
+          </label>
+          <input type="text" id="title" name="title" required value={course.title} class="input input-bordered input-sm w-full" />
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="form-label" for="slug">نامک انگلیسی (Slug) <span style="color: #ef4444;">*</span></label>
-            <input type="text" id="slug" name="slug" required value={course.slug} class="form-input" dir="ltr" />
+            <label class="block text-xs font-semibold text-base-content/80 mb-1" for="slug">
+              نامک انگلیسی (Slug) <span class="text-error">*</span>
+            </label>
+            <input type="text" id="slug" name="slug" required value={course.slug} class="input input-bordered input-sm w-full font-mono text-xs" dir="ltr" />
           </div>
 
           <div>
-            <label class="form-label" for="instructor_name">نام مدرس دوره <span style="color: #ef4444;">*</span></label>
-            <input type="text" id="instructor_name" name="instructor_name" required value={course.instructor_name} class="form-input" />
+            <label class="block text-xs font-semibold text-base-content/80 mb-1" for="instructor_name">
+              نام مدرس دوره <span class="text-error">*</span>
+            </label>
+            <input type="text" id="instructor_name" name="instructor_name" required value={course.instructor_name} class="input input-bordered input-sm w-full" />
           </div>
         </div>
 
         <div>
-          <label class="form-label" for="price_tomans">مبلغ دوره (تومان) <span style="color: #ef4444;">*</span></label>
-          <input type="number" id="price_tomans" name="price_tomans" required min="0" step="1000" value={priceTomans} class="form-input" />
-          <span style="font-size: 0.75rem; color: #64748b;">مبلغ در سیستم با دقت کامل ریالی ذخیره می‌شود.</span>
+          <label class="block text-xs font-semibold text-base-content/80 mb-1" for="price_tomans">
+            مبلغ دوره (تومان) <span class="text-error">*</span>
+          </label>
+          <input type="number" id="price_tomans" name="price_tomans" required min="0" step="1000" value={priceTomans} class="input input-bordered input-sm w-full" />
+          <span class="text-[11px] text-base-content/60 mt-1 block">مبلغ در سیستم با دقت کامل ریالی ذخیره می‌شود.</span>
         </div>
 
         <div>
-          <label class="form-label" for="description">توضیحات و اهداف آموزشی دوره</label>
-          <textarea id="description" name="description" rows="5" class="form-input">{course.description}</textarea>
+          <label class="block text-xs font-semibold text-base-content/80 mb-1" for="description">توضیحات و اهداف آموزشی دوره</label>
+          <textarea id="description" name="description" rows="4" class="textarea textarea-bordered textarea-sm w-full">{course.description}</textarea>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; flex-wrap: wrap; gap: 1rem;">
-          <div style="display: flex; gap: 0.5rem;">
+        <div class="flex justify-between items-center mt-2 pt-4 border-t border-base-200 flex-wrap gap-4">
+          <div class="flex gap-2">
             {course.status === 'draft' && (
-              <button type="button" class="btn-publish" id="publish-btn">
+              <button type="button" class="btn btn-success btn-sm font-medium" id="publish-btn">
                 🚀 انتشار عمومی دوره
               </button>
             )}
             {course.status === 'published' && (
-              <button type="button" class="btn-archive" id="archive-btn">
+              <button type="button" class="btn btn-warning btn-sm font-medium" id="archive-btn">
                 📦 بایگانی دوره
               </button>
             )}
           </div>
 
-          <div style="display: flex; gap: 0.75rem;">
-            <a href="/courses" class="btn-secondary">انصراف</a>
-            <button type="submit" class="btn-primary" id="save-btn">
+          <div class="flex gap-2">
+            <a href="/courses" class="btn btn-ghost btn-sm font-medium">انصراف</a>
+            <button type="submit" class="btn btn-primary btn-sm font-medium" id="save-btn">
               💾 ذخیره تغییرات
             </button>
           </div>
@@ -122,97 +130,9 @@ const priceTomans = Math.floor(course.price_rials / 10);
     </div>
   </div>
 
-  <style>
-    .form-label {
-      display: block;
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: #334155;
-      margin-bottom: 0.4rem;
-    }
-    .form-input {
-      width: 100%;
-      padding: 0.65rem 0.85rem;
-      border: 1px solid #cbd5e1;
-      border-radius: 0.5rem;
-      font-family: inherit;
-      font-size: 0.9rem;
-      color: #0f172a;
-      box-sizing: border-box;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-    .form-input:focus {
-      outline: none;
-      border-color: #0284c7;
-      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
-    }
-    .btn-primary {
-      background: #0284c7;
-      color: #ffffff;
-      padding: 0.6rem 1.4rem;
-      border: none;
-      border-radius: 0.5rem;
-      font-family: inherit;
-      font-weight: 600;
-      font-size: 0.9rem;
-      cursor: pointer;
-      transition: background 0.15s ease;
-    }
-    .btn-primary:hover {
-      background: #0369a1;
-    }
-    .btn-secondary {
-      background: #f1f5f9;
-      color: #475569;
-      padding: 0.6rem 1.2rem;
-      border-radius: 0.5rem;
-      font-family: inherit;
-      font-weight: 600;
-      font-size: 0.9rem;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      border: 1px solid #e2e8f0;
-    }
-    .btn-secondary:hover {
-      background: #e2e8f0;
-      color: #0f172a;
-    }
-    .btn-publish {
-      background: #dcfce7;
-      color: #166534;
-      border: 1px solid #bbf7d0;
-      padding: 0.6rem 1.2rem;
-      border-radius: 0.5rem;
-      font-family: inherit;
-      font-weight: 600;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-    .btn-publish:hover {
-      background: #bbf7d0;
-    }
-    .btn-archive {
-      background: #fee2e2;
-      color: #991b1b;
-      border: 1px solid #fecaca;
-      padding: 0.6rem 1.2rem;
-      border-radius: 0.5rem;
-      font-family: inherit;
-      font-weight: 600;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-    .btn-archive:hover {
-      background: #fecaca;
-    }
-  </style>
-
   <script>
     const form = document.getElementById('edit-course-form') as HTMLFormElement;
     const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
-    const publishBtn = document.getElementById('publish-btn') as HTMLButtonElement;
-    const archiveBtn = document.getElementById('archive-btn') as HTMLButtonElement;
     const courseId = form?.dataset.id;
 
     form?.addEventListener('submit', async (e) => {
@@ -224,10 +144,9 @@ const priceTomans = Math.floor(course.price_rials / 10);
       const title = String(formData.get('title') || '').trim();
       const slug = String(formData.get('slug') || '').trim();
       const instructor_name = String(formData.get('instructor_name') || '').trim();
-      const priceTomans = Number(formData.get('price_tomans') || 0);
       const description = String(formData.get('description') || '').trim();
-
-      const priceRials = priceTomans * 10;
+      const price_tomans = Number(formData.get('price_tomans') || 0);
+      const price_rials = price_tomans * 10;
 
       try {
         const res = await fetch(`/admin/courses/${courseId}`, {
@@ -237,8 +156,8 @@ const priceTomans = Math.floor(course.price_rials / 10);
             title,
             slug,
             instructor_name,
-            price_rials: priceRials,
             description,
+            price_rials,
           }),
         });
 
@@ -247,7 +166,7 @@ const priceTomans = Math.floor(course.price_rials / 10);
           window.location.href = '/courses';
         } else {
           const err = await res.json();
-          alert('خطا در ذخیره: ' + (err.message || 'خطا'));
+          alert('خطا در ذخیره تغییرات: ' + (err.message || 'خطا در اعتبارسنجی'));
           saveBtn.disabled = false;
           saveBtn.innerText = '💾 ذخیره تغییرات';
         }
@@ -258,27 +177,29 @@ const priceTomans = Math.floor(course.price_rials / 10);
       }
     });
 
+    const publishBtn = document.getElementById('publish-btn');
     publishBtn?.addEventListener('click', async () => {
-      if (!confirm('آیا از انتشار عمومی این دوره اطمینان دارید؟ دوره باید حداقل ۱ جلسه آماده داشته باشد.')) return;
+      if (!confirm('آیا از انتشار عمومی دوره اطمینان دارید؟ دوره باید حداقل ۱ جلسه داشته باشد.')) return;
       try {
         const res = await fetch(`/admin/courses/${courseId}/publish`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
         if (res.ok) {
-          alert('دوره با موفقیت منتشر شد.');
+          alert('دوره منتشر شد.');
           window.location.reload();
         } else {
           const err = await res.json();
-          alert('خطا در انتشار دوره: ' + (err.message || 'حداقل ۱ جلسه مورد نیاز است'));
+          alert('خطا در انتشار: ' + (err.message || 'حداقل ۱ جلسه نیاز است'));
         }
       } catch {
         alert('خطای ارتباط با سرور.');
       }
     });
 
+    const archiveBtn = document.getElementById('archive-btn');
     archiveBtn?.addEventListener('click', async () => {
-      if (!confirm('آیا از بایگانی این دوره اطمینان دارید؟')) return;
+      if (!confirm('آیا از بایگانی دوره اطمینان دارید؟ فروش جدید متوقف می‌شود.')) return;
       try {
         const res = await fetch(`/admin/courses/${courseId}/archive`, {
           method: 'POST',
@@ -289,7 +210,7 @@ const priceTomans = Math.floor(course.price_rials / 10);
           window.location.reload();
         } else {
           const err = await res.json();
-          alert('خطا در بایگانی دوره: ' + (err.message || 'خطا'));
+          alert('خطا در بایگانی: ' + (err.message || 'خطا'));
         }
       } catch {
         alert('خطای ارتباط با سرور.');

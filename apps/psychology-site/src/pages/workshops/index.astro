@@ -1,5 +1,16 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { fetchPublicSite } from '../../lib/site.js';
+import { resolveTemplate } from '../../templates/registry.js';
+import type { WorkshopCardVM } from '../../templates/view-models.js';
+import { EmptyState } from '@psychology/ui';
+
+// Edge CDN caching: public workshops listing
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
+
+const site = await fetchPublicSite(Astro.request);
+const activeTemplate = resolveTemplate(site.template_id);
+const WorkshopCard = activeTemplate.components.WorkshopCard;
 
 // Fallback sample data for SSR/preview if API not reachable
 const fallbackWorkshops = [
@@ -14,6 +25,7 @@ const fallbackWorkshops = [
     price_rials: 5000000,
     remaining_capacity: 4,
     is_registration_open: true,
+    cover_url: null,
   },
   {
     id: 'a12bc34d-58cc-4372-a567-0e02b2c3d480',
@@ -26,17 +38,17 @@ const fallbackWorkshops = [
     price_rials: 0,
     remaining_capacity: 0,
     is_registration_open: false,
+    cover_url: null,
   },
 ];
 
 let workshops = fallbackWorkshops;
 
-// Attempt to load live workshops from API if available
-const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 try {
   const host = Astro.request.headers.get('host') || 'localhost:3000';
   const res = await fetch(`${apiBase}/public/workshops`, {
-    headers: { 'Host': host },
+    headers: { Host: host },
     signal: AbortSignal.timeout(1000),
   });
   if (res.ok) {
@@ -66,79 +78,54 @@ function formatPriceToman(priceRials: number) {
   const toman = Math.floor(priceRials / 10);
   return `${toman.toLocaleString('fa-IR')} تومان`;
 }
+
+const workshopVMs: WorkshopCardVM[] = workshops.map((ws) => ({
+  id: ws.id,
+  title: ws.title,
+  instructorName: ws.instructor_name || site.title,
+  priceLabel: formatPriceToman(ws.price_rials),
+  dateLabel: formatDateTehran(ws.starts_at),
+  capacityLabel:
+    ws.is_registration_open && ws.remaining_capacity > 0
+      ? `${ws.remaining_capacity.toLocaleString('fa-IR')} نفر ظرفیت`
+      : 'تکمیل ظرفیت',
+  coverUrl: ws.cover_url || null,
+}));
 ---
 
-<BaseLayout title="کارگاه‌های آموزشی و روان‌شناسی" description="مشاهده و ثبت‌نام در کارگاه‌های تخصصی رشد فردی و روان‌درمانی">
-  <div style="margin-bottom: 2rem;">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-      <div>
-        <h1 style="font-size: 1.75rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem;">
-          کارگاه‌های تخصصی و آموزشی
-        </h1>
-        <p style="color: #64748b; font-size: 1rem;">
-          برگزاری دوره‌ها و کارگاه‌های مهارت‌های فردی، خودشناسی و زوج‌درمانی با ظرفیت محدود
-        </p>
-      </div>
+<BaseLayout
+  title={`کارگاه‌های تخصصی و آموزشی | ${site.title}`}
+  description="مشاهده و ثبت‌نام در کارگاه‌های تخصصی رشد فردی و روان‌درمانی با ظرفیت محدود"
+  primaryColor={site.primary_color}
+  templateId={site.template_id}
+  themeRadius={site.theme_radius}
+  themeScale={site.theme_scale}
+>
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div class="text-start sm:text-center mb-8">
+      <h1 class="text-2xl sm:text-3xl font-extrabold text-base-content mb-3">
+        کارگاه‌های تخصصی و آموزشی
+      </h1>
+      <p class="text-base-content/70 text-base max-w-2xl mx-auto">
+        برگزاری دوره‌ها و کارگاه‌های مهارت‌های فردی، خودشناسی و زوج‌درمانی با ظرفیت محدود
+      </p>
     </div>
-  </div>
 
-  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">
-    {workshops.map((ws) => (
-      <article style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 1rem;">
-            <span style={`padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; ${
-              ws.is_registration_open && ws.remaining_capacity > 0
-                ? 'background: #dcfce7; color: #15803d;'
-                : 'background: #fee2e2; color: #b91c1c;'
-            }`}>
-              {ws.is_registration_open && ws.remaining_capacity > 0 ? 'ثبت‌نام فعال' : 'تکمیل ظرفیت / پایان مهلت'}
-            </span>
-            <span style="font-size: 0.85rem; font-weight: 600; color: #0284c7;">
-              {formatPriceToman(ws.price_rials)}
-            </span>
-          </div>
-
-          <h2 style="font-size: 1.2rem; font-weight: 700; color: #0f172a; margin-bottom: 0.75rem; line-height: 1.4;">
-            <a href={`/workshops/${ws.id}`} style="color: inherit; text-decoration: none;">
-              {ws.title}
-            </a>
-          </h2>
-
-          <div style="font-size: 0.9rem; color: #475569; display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.25rem;">
-            <div>
-              <strong style="color: #334155;">مدرس:</strong> {ws.instructor_name}
-            </div>
-            <div>
-              <strong style="color: #334155;">زمان شروع:</strong> {formatDateTehran(ws.starts_at)}
-            </div>
-            <div>
-              <strong style="color: #334155;">محل برگزاری:</strong> {ws.location}
-            </div>
-          </div>
-        </div>
-
-        <div style="border-top: 1px solid #f1f5f9; padding-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
-          <div style="font-size: 0.85rem; color: #64748b;">
-            {ws.remaining_capacity > 0 ? (
-              <span>ظرفیت باقیمانده: <strong style="color: #0f172a;">{ws.remaining_capacity} صندلی</strong></span>
-            ) : (
-              <span style="color: #ef4444; font-weight: 600;">ظرفیت تکمیل است</span>
-            )}
-          </div>
-          <a
-            href={`/workshops/${ws.id}`}
-            class="btn"
-            style={`font-size: 0.9rem; padding: 0.5rem 1rem; ${
-              ws.is_registration_open && ws.remaining_capacity > 0
-                ? ''
-                : 'background: #e2e8f0; color: #64748b; cursor: pointer;'
-            }`}
-          >
-            {ws.is_registration_open && ws.remaining_capacity > 0 ? 'ثبت‌نام در کارگاه' : 'مشاهده جزئیات'}
-          </a>
-        </div>
-      </article>
-    ))}
+    {workshopVMs.length === 0 ? (
+      <EmptyState
+        title="در حال حاضر کارگاهی برای ثبت‌نام فعال نیست"
+        description="به زودی برنامه‌ریزی کارگاه‌های حضوری و آنلاین جدید اعلام خواهد شد."
+      >
+        <a href="/courses" class="btn btn-primary">
+          مشاهده دوره‌های آموزشی ضبط‌شده
+        </a>
+      </EmptyState>
+    ) : (
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {workshopVMs.map((vm) => (
+          <WorkshopCard {...vm} />
+        ))}
+      </div>
+    )}
   </div>
 </BaseLayout>

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"psychology/api/internal/auth/authdb"
 	"psychology/api/internal/domain"
 	"psychology/api/internal/domain/domaindb"
+	"psychology/api/internal/platform/tenantctx"
 	"psychology/api/internal/settings"
 	"psychology/api/internal/settings/settingsdb"
 
@@ -53,13 +55,17 @@ func (m *mockSettingsQuerier) GetSiteSettings(ctx context.Context, tenantID pgty
 
 func (m *mockSettingsQuerier) UpsertSiteSettings(ctx context.Context, arg settingsdb.UpsertSiteSettingsParams) (settingsdb.SiteSetting, error) {
 	s := settingsdb.SiteSetting{
-		TenantID:     arg.TenantID,
-		Title:        arg.Title,
-		Description:  arg.Description,
-		Phone:        arg.Phone,
-		Address:      arg.Address,
-		PrimaryColor: arg.PrimaryColor,
-		LogoMediaID:  arg.LogoMediaID,
+		TenantID:        arg.TenantID,
+		Title:           arg.Title,
+		Description:     arg.Description,
+		Phone:           arg.Phone,
+		Address:         arg.Address,
+		PrimaryColor:    arg.PrimaryColor,
+		LogoMediaID:     arg.LogoMediaID,
+		TemplateID:      arg.TemplateID,
+		TemplateVersion: arg.TemplateVersion,
+		ThemeRadius:     arg.ThemeRadius,
+		ThemeScale:      arg.ThemeScale,
 	}
 	m.settings[fromPgUUID(arg.TenantID).String()] = s
 	return s, nil
@@ -73,21 +79,33 @@ func (m *mockSettingsQuerier) GetPublicSiteProfile(ctx context.Context, id pgtyp
 	s, ok := m.settings[fromPgUUID(id).String()]
 	if !ok {
 		return settingsdb.GetPublicSiteProfileRow{
-			ClinicName:   clinicName,
-			Title:        pgtype.Text{String: clinicName, Valid: true},
-			Description:  pgtype.Text{Valid: false},
-			PrimaryColor: pgtype.Text{String: "#0284c7", Valid: true},
+			ClinicName:      clinicName,
+			Title:           pgtype.Text{String: clinicName, Valid: true},
+			Description:     pgtype.Text{Valid: false},
+			PrimaryColor:    pgtype.Text{String: "#0284c7", Valid: true},
+			TemplateID:      "minimal",
+			TemplateVersion: "1.0.0",
+			ThemeRadius:     "md",
+			ThemeScale:      "md",
 		}, nil
 	}
 	return settingsdb.GetPublicSiteProfileRow{
-		ClinicName:   clinicName,
-		Title:        pgtype.Text{String: s.Title, Valid: true},
-		Description:  pgtype.Text{String: s.Description, Valid: true},
-		Phone:        pgtype.Text{String: s.Phone, Valid: true},
-		Address:      pgtype.Text{String: s.Address, Valid: true},
-		PrimaryColor: pgtype.Text{String: s.PrimaryColor, Valid: true},
-		LogoMediaID:  s.LogoMediaID,
+		ClinicName:      clinicName,
+		Title:           pgtype.Text{String: s.Title, Valid: true},
+		Description:     pgtype.Text{String: s.Description, Valid: true},
+		Phone:           pgtype.Text{String: s.Phone, Valid: true},
+		Address:         pgtype.Text{String: s.Address, Valid: true},
+		PrimaryColor:    pgtype.Text{String: s.PrimaryColor, Valid: true},
+		LogoMediaID:     s.LogoMediaID,
+		TemplateID:      s.TemplateID,
+		TemplateVersion: s.TemplateVersion,
+		ThemeRadius:     s.ThemeRadius,
+		ThemeScale:      s.ThemeScale,
 	}, nil
+}
+
+func (m *mockSettingsQuerier) GetPrimaryVerifiedDomain(ctx context.Context, tenantID pgtype.UUID) (string, error) {
+	return "test-clinic.ir", nil
 }
 
 type mockDomainQuerier struct {
@@ -259,11 +277,62 @@ func TestAdminUpdateSiteSettingsValidationAndIsolation(t *testing.T) {
 		t.Fatalf("expected 400 for invalid color, got %d", rrInvalidColor.Code)
 	}
 
+	// 1.b Invalid template_id -> 400
+	invalidTplBody, _ := json.Marshal(map[string]string{
+		"title":         "کلینیک جدید",
+		"primary_color": "#0ea5e9",
+		"template_id":   "INVALID_CAPS!",
+	})
+	reqInvalidTpl := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(invalidTplBody))
+	reqInvalidTpl.Header.Set("Authorization", "Bearer valid-token-a")
+	reqInvalidTpl.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqInvalidTpl.Header.Set("Content-Type", "application/json")
+	rrInvalidTpl := httptest.NewRecorder()
+	r.ServeHTTP(rrInvalidTpl, reqInvalidTpl)
+	if rrInvalidTpl.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid template_id, got %d", rrInvalidTpl.Code)
+	}
+
+	// 1.c Invalid theme_radius -> 400
+	invalidRadiusBody, _ := json.Marshal(map[string]string{
+		"title":         "کلینیک جدید",
+		"primary_color": "#0ea5e9",
+		"theme_radius":  "xl",
+	})
+	reqInvalidRadius := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(invalidRadiusBody))
+	reqInvalidRadius.Header.Set("Authorization", "Bearer valid-token-a")
+	reqInvalidRadius.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqInvalidRadius.Header.Set("Content-Type", "application/json")
+	rrInvalidRadius := httptest.NewRecorder()
+	r.ServeHTTP(rrInvalidRadius, reqInvalidRadius)
+	if rrInvalidRadius.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid theme_radius, got %d", rrInvalidRadius.Code)
+	}
+
+	// 1.d Invalid theme_scale -> 400
+	invalidScaleBody, _ := json.Marshal(map[string]string{
+		"title":         "کلینیک جدید",
+		"primary_color": "#0ea5e9",
+		"theme_scale":   "2xl",
+	})
+	reqInvalidScale := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(invalidScaleBody))
+	reqInvalidScale.Header.Set("Authorization", "Bearer valid-token-a")
+	reqInvalidScale.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqInvalidScale.Header.Set("Content-Type", "application/json")
+	rrInvalidScale := httptest.NewRecorder()
+	r.ServeHTTP(rrInvalidScale, reqInvalidScale)
+	if rrInvalidScale.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid theme_scale, got %d", rrInvalidScale.Code)
+	}
+
 	// 2. Valid Update for Tenant A by Owner -> 200
 	validBody, _ := json.Marshal(map[string]string{
 		"title":         "کلینیک تخصصی مهر",
 		"description":   "روان‌شناسی سلامت",
 		"primary_color": "#0ea5e9",
+		"template_id":   "clinical",
+		"theme_radius":  "lg",
+		"theme_scale":   "sm",
 	})
 	reqValid := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(validBody))
 	reqValid.Header.Set("Authorization", "Bearer valid-token-a")
@@ -274,11 +343,17 @@ func TestAdminUpdateSiteSettingsValidationAndIsolation(t *testing.T) {
 	if rrValid.Code != http.StatusOK {
 		t.Fatalf("expected 200 for valid settings update, got %d: %s", rrValid.Code, rrValid.Body.String())
 	}
+	if rrValid.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("expected Cache-Control: private, no-store, got %s", rrValid.Header().Get("Cache-Control"))
+	}
 
-	// Verify Tenant A settings are stored
+	// Verify Tenant A settings are stored with template and active version
 	sA, err := settingsService.GetSettings(context.Background(), tenantAID)
 	if err != nil || sA.Title != "کلینیک تخصصی مهر" {
 		t.Fatalf("expected title 'کلینیک تخصصی مهر', got %v", sA)
+	}
+	if sA.TemplateID != "clinical" || sA.TemplateVersion != "1.0.0" || sA.ThemeRadius != "lg" || sA.ThemeScale != "sm" {
+		t.Fatalf("expected template fields clinical/1.0.0/lg/sm, got %+v", sA)
 	}
 
 	// 3. User A attempts to update Tenant B -> 403 Forbidden
@@ -290,5 +365,63 @@ func TestAdminUpdateSiteSettingsValidationAndIsolation(t *testing.T) {
 	r.ServeHTTP(rrCross, reqCross)
 	if rrCross.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for unauthorized tenant update, got %d", rrCross.Code)
+	}
+}
+
+type mockSpyTenantStore struct {
+	calledTenant uuid.UUID
+	errToReturn  error
+}
+
+func (m *mockSpyTenantStore) WithTenantTx(ctx context.Context, fn func(tx pgx.Tx, tenantID uuid.UUID) error) error {
+	tid, ok := tenantctx.ID(ctx)
+	if !ok {
+		return errors.New("missing tenant in context")
+	}
+	m.calledTenant = tid
+	if m.errToReturn != nil {
+		return m.errToReturn
+	}
+	return nil
+}
+
+func TestServiceWithStore_ErrorPropagation(t *testing.T) {
+	expectedErr := errors.New("db error")
+	spy := &mockSpyTenantStore{errToReturn: expectedErr}
+	svc := settings.NewServiceWithStore(spy)
+
+	tenantID := uuid.New()
+	ctx := tenantctx.With(context.Background(), tenantID)
+
+	// 1. GetSettings executes within WithTenantTx and propagates error
+	_, err := svc.GetSettings(ctx, tenantID)
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if spy.calledTenant != tenantID {
+		t.Fatalf("expected tenant %v, got %v", tenantID, spy.calledTenant)
+	}
+
+	// 2. UpdateSettings executes within WithTenantTx and propagates error
+	spy.calledTenant = uuid.Nil
+	_, err = svc.UpdateSettings(ctx, tenantID, settings.UpdateSettingsParams{
+		Title:        "کلینیک تست",
+		PrimaryColor: "#0284c7",
+	})
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if spy.calledTenant != tenantID {
+		t.Fatalf("expected tenant %v, got %v", tenantID, spy.calledTenant)
+	}
+
+	// 3. GetPublicProfile executes within WithTenantTx and propagates error
+	spy.calledTenant = uuid.Nil
+	_, err = svc.GetPublicProfile(ctx, tenantID)
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if spy.calledTenant != tenantID {
+		t.Fatalf("expected tenant %v, got %v", tenantID, spy.calledTenant)
 	}
 }

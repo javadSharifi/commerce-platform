@@ -1,0 +1,47 @@
+---
+import type { WorkshopCardVM } from '../view-models.js';
+
+interface Props extends WorkshopCardVM {}
+
+const { id, title, instructorName, priceLabel, dateLabel, capacityLabel, coverUrl } = Astro.props;
+---
+
+<div class="card bg-base-100 border border-base-300 hover:border-primary/60 transition-all duration-200 overflow-hidden shadow-xs rounded-xl flex flex-col h-full">
+  {coverUrl ? (
+    <figure class="aspect-video w-full bg-base-200 overflow-hidden relative">
+      <img src={coverUrl} alt={title} class="w-full h-full object-cover" loading="lazy" />
+      <span class="absolute top-2 start-2 badge badge-sm bg-primary text-primary-content border-none shadow-xs font-semibold">
+        {dateLabel}
+      </span>
+    </figure>
+  ) : (
+    <div class="aspect-video w-full bg-base-200 flex items-center justify-center text-base-content/40 text-sm">
+      بدون تصویر
+    </div>
+  )}
+
+  <div class="card-body p-5 flex flex-col flex-1 justify-between">
+    <div>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <span class="badge badge-sm badge-outline text-xs">{capacityLabel}</span>
+        <span class="text-xs text-base-content/70">تسهیل‌گر: {instructorName}</span>
+      </div>
+
+      <h3 class="card-title text-base sm:text-lg font-bold text-base-content mb-3 line-clamp-2">
+        <a href={`/workshops/${id}`} class="hover:text-primary transition-colors">
+          {title}
+        </a>
+      </h3>
+    </div>
+
+    <div class="pt-4 border-t border-base-200 flex items-center justify-between mt-auto">
+      <div class="flex flex-col">
+        <span class="text-[11px] text-base-content/60">شهریه کارگاه:</span>
+        <span class="font-bold text-primary text-base">{priceLabel}</span>
+      </div>
+      <a href={`/workshops/${id}`} class="btn btn-sm btn-primary rounded-lg font-medium">
+        ثبت‌نام آنلاین
+      </a>
+    </div>
+  </div>
+</div>

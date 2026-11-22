@@ -1,5 +1,14 @@
 # وضعیت مسیر روان‌شناسی
 
+## وضعیت فعلی فاز ۵
+
+- آخرین کار تکمیل‌شده — `PSY-5.9` (اجرای کامل سناریوی پذیرش PSY-A12 شامل رگرسیون جامع تمام صفحات محتوایی، تعاملی، RTL، ریسپانسیو موبایل، تقویم شمسی و ایزولاسیون کامل چندمستأجری؛ پایان و تکمیل موفقیت‌آمیز فاز ۵).
+- تسک در حال انجام — هیچ‌کدام (فاز ۵ با موفقیت ۱۰۰٪ تکمیل شد).
+- تسک پیشنهادی بعدی — فاز ۵ به پایان رسید و تمامی اهداف سایت‌ساز، قالب‌ها و دیزاین سیستم روان‌شناسی با آزمون‌های پذیرش تثبیت شدند.
+- دستور تأیید برنامه — `make verify-psychology` و `pnpm lint`.
+
+## وضعیت ثبت‌شده در پایان فاز ۴
+
 - آخرین کار تکمیل‌شده — `PSY-4.4` (پایان فاز ۴ و تکمیل کل نقشهٔ راه تخصصی روان‌شناسی · ثبت نتایج نهایی دو کلینیک پایلوت، محاسبه هزینه‌های واقعی زیرساخت ابری، سهمیه رسانه ۱۰ گیگابایتی، مدل قیمت‌گذاری اشتراک با حاشیه سود بالای ۷۰٪، تعیین محدوده نسخه بعد و تأیید کامل سناریوهای پذیرش PSY-A01 تا PSY-A11).
 - تسک در حال انجام — هیچ‌کدام (تمامی تسک‌های نقشهٔ راه از PSY-0 تا PSY-4.4 تکمیل و تأیید شده‌اند).
 - تسک پیشنهادی بعدی — آماده برای استقرار نهایی در محیط تولید (Production Deployment).
@@ -10,6 +19,289 @@
 - حساب هدف زرین‌پال، باکت پارس‌پک، دامنه و تنظیمات آروان، شرایط عرضه و نگه‌داری داده در تسک‌های عرضهٔ هر نسخه بررسی می‌شوند. مسیر محلی با دادهٔ ساختگی و Adapter پرداخت تستی قابل اجراست. [نقشهٔ راه](TASKS.md)
 
 ## گزارش‌ها
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.9 (اجرای کامل سناریوی پذیرش PSY-A12 و تکمیل فاز ۵)
+
+- آزمون جامع پذیرش فاز ۵ (`PSY-A12`) با پوشش کامل تمام سناریوها و معیارهای تعریف‌شده در `ACCEPTANCE.md` اجرا و تأیید شد:
+  - **بک‌اند و ایزولاسیون دیتابیس (`TestAcceptance_PSY_A12_InitialPath_TwoHosts`):**
+    - تأیید رفتار روی دو میزبان مجزا و تاییدشده (`rezaei-clinic.ir` و `niloofar-psych.ir`).
+    - ثبت و ذخیره تنظیمات بصری مستأجر A با نقش امن runtime و `FORCE RLS` در پایگاه داده.
+    - ثبت رویداد Outbox در همان تراکنش ذخیره تنظیمات و پاک‌سازی هوشمند کش پروکسی لبه فقط برای Host A.
+    - حفظ کامل داده و عدم باطل‌شدن کش Host B (تضمین صفر نشت بین‌مستأجری و بازگشت قطعی Cache HIT برای مستأجر B).
+    - اعتبارسنجی امنیتی عدم دستکاری متقابل (Cross-Tenant Tampering Guard): تلاش برای ویرایش مطب B توسط نشست مطب A با خطای `403 Forbidden` مسدود شد.
+  - **سایت عمومی، SSR و پیش‌نمایش در فرانت‌اند (`apps/psychology-site/test/acceptance-a12.test.mjs`):**
+    - پیش‌نمایش لحظه‌ای دو قالب `minimal` و `clinical` با متغیرهای رنگ برند، گردی لبه‌ها (`data-radius`) و مقیاس فونت (`data-scale`).
+    - صدور قطعی هدر `Cache-Control: private, no-store` و متاتگ `<meta name="robots" content="noindex, nofollow">` در مسیر `/preview`.
+    - بازگشت امن به قالب پیش‌فرض `minimal` در صورت درخواست شناسه قالب ناشناخته یا ثبت‌نشده.
+    - جلوگیری قطعی از تزریق کدهای مخرب CSS و XSS در پارامتر رنگ، و بازگشت امن به رنگ پیش‌فرض سیستم (`#0284c7`).
+    - حفاظت از صفحهٔ اصلی تولید (`/`): نادیده گرفتن پارامترهای پیش‌نمایش ارسالی در کوئری، نمایش ظاهر منتشرشده رسمی، و تنظیم هدر کش لبه `public, s-maxage=3600`.
+    - تفکیک قطعی خروجی عمومی Host A و Host B در سطح قالب و اطلاعات مطب.
+  - **رگرسیون صفحات محتوایی و رعایت اصول RTL و موبایل:**
+    - بررسی موفق ۶ مسیر محتوایی (`/courses`، `/courses/anxiety-management`، `/workshops`، `/workshops/[id]`، `/blog`، `/blog/[slug]`).
+    - تایید کد وضعیت ۲۰۰ و هدر کش عمومی `public` روی صفحات عمومی.
+    - تایید کامل ویژگی‌های جهت‌بندی راست‌به‌چپ (`dir="rtl"`) و زبان فارسی (`lang="fa"`).
+    - تایید متاتگ ابعاد ریسپانسیو موبایل (`<meta name="viewport" content="width=device-width, initial-scale=1.0">`) روی تمامی صفحات.
+    - تایید نبود JavaScript اضافه روی صفحات محتوایی خالص (0 KB Client JS / عدم وجود تگ اسکریپت ماژول).
+    - تایید حذف کامل تمامی رنگ‌های هاردکد شده (`#ffffff` و `#0f172a`) و جایگزینی کامل با توکن‌های معنایی مشترک DaisyUI (`card bg-base-100`, `text-primary`, etc.).
+  - **تعاملات رزرو نوبت و تقویم شمسی:**
+    - تایید رندر جزیره تعاملی Astro Island برای کامپوننت `PersianDatePicker` با شناسه فعال‌سازی `client="visible"`.
+    - تایید تولید تاریخ استاندارد شمسی و نمایش اعداد و اسامی ماه‌های هجری شمسی در ساختار HTML.
+    - تایید صدور قطعی هدر امنیتی `Cache-Control: private, no-store` روی داشبورد دوره‌ها (`/account/courses`)، پخش‌کننده جلسات (`/account/courses/[id]`)، پیگیری نوبت (`/appointments/[id]`) و وضعیت ثبت‌نام (`/workshops/registrations/[id]`).
+- **نتایج آزمون‌ها و اعتبارسنجی:**
+    - `node --test apps/psychology-site/test/acceptance-a12.test.mjs`: PASS (۱۴۶ میلی‌ثانیه).
+    - `pnpm test`: PASS برای تمامی سوئیت‌های تست فرانت‌اند (۶ سوئیت در `psychology-site`، ۳ سوئیت در `psychology-admin`، ۱۵ تست کامپوننت در `@psychology/ui`، و تست‌های `@psychology/api-client`).
+    - `pnpm typecheck`: بدون خطا و بدون هشدار روی تمامی ۶۶ فایل استرو و کدهای تایپ‌اسکریپت.
+    - `pnpm lint`: خروجی بدون خطا (exit 0) روی تمامی پروژه‌ها.
+    - `make verify-psychology`: اجرای موفقیت‌آمیز آزمون‌های بک‌اند Go (`go vet` و `go test -v ./...` با PASS کامل) و فرانت‌اند (`pnpm typecheck`, `pnpm test`, `pnpm build`) با پیام نهایی: `All psychology platform checks passed successfully!`.
+- فاز ۵ با موفقیت کامل به پایان رسید.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.8.4 (مهاجرت صفحات پنل مدیریت به کامپوننت‌های مشترک و DaisyUI)
+
+- ساختار پوسته و تمامی صفحات اپلیکیشن پنل مدیریت (`apps/psychology-admin`) به سیستم طراحی یکپارچه مهاجرت کردند:
+  - **پوسته مدیریت (`AdminLayout.astro`):**
+    - حذف کامل تمامی استایل‌های هاردکد شده CSS (`:root`, `.sidebar`, `.card`, `.nav-item`).
+    - بازنویسی سایدبار با ساختار معنایی `bg-neutral text-neutral-content`، ناوبری فعال با `bg-primary text-primary-content`، هدر بالا با `bg-base-100 border-base-300` و پس‌زمینه با `bg-base-200`.
+    - تنظیم قطعی هدرهای امنیتی `Cache-Control: no-store, no-cache, must-revalidate, private` و `<meta name="robots" content="noindex, nofollow">` برای تمامی صفحات پنل.
+  - **داشبورد شاخص‌ها (`index.astro`):**
+    - پیاده‌سازی کارت‌های آماری کلان با کلاس‌های `card bg-base-100 border-base-200` و لبه‌های رنگی وضعیت (`border-e-success`, `border-e-primary`, `border-e-secondary`, `border-e-warning`).
+    - استفاده از کامپوننت نوار پیشرفت استاندارد DaisyUI (`progress progress-warning`) برای نمایش سهمیه رسانه و فایل.
+  - **ماژول کارگاه‌ها (`workshops/index.astro`، `[id].astro`، `new.astro`):**
+    - بازنویسی جدول کارگاه‌ها و شرکت‌کنندگان با `table table-zebra`، تب‌های وضعیت با `tabs tabs-boxed`، بج‌های وضعیت با `badge-success`, `badge-warning`, `badge-error`, `badge-ghost`.
+    - فرم‌های تعریف کارگاه و ویرایش ظرفیت صندلی با فیلدهای `input input-bordered input-sm`، `textarea textarea-bordered` و دکمه‌های استاندارد `btn-primary`, `btn-success`, `btn-warning`, `btn-error`.
+  - **ماژول دوره‌ها (`courses/index.astro`، `[id]/lessons.astro`، `[id]/edit.astro`، `new.astro`):**
+    - حذف کامل استایل‌های inline و کلاس‌های اختصاصی؛ بازنویسی جدول دوره‌ها و لیست جلسات با توکن‌های DaisyUI.
+    - بازنویسی فرم‌های افزودن جلسه، اعتبارسنجی رسانه، ویرایش دوره و تغییر وضعیت‌های انتشار و بایگانی.
+  - **ماژول بلاگ (`blog/index.astro`، `[id].astro`، `new.astro`):**
+    - بازنویسی ویرایشگر امن بلوک‌های محتوایی (پاراگراف، تیتر، تصویر، صوت، ویدئو) با کارت‌های `card bg-base-200/40 border-base-200`، اینپوت‌ها و دراپ‌داون‌های استاندارد DaisyUI و دکمه‌های تغییر ترتیب و آپلود مدیا.
+  - **ماژول رسانه‌ها (`media/index.astro`):**
+    - کارت نمایش سهمیه ذخیره‌سازی پارس‌پک با `progress-primary`/`progress-error`، بخش آپلود مستقیم و جدول فایل‌های تاییدشده.
+  - **ماژول بازپرداخت‌ها (`payments/index.astro`):**
+    - جدول تراکنش‌های نیازمند استرداد و مودال ثبت دستی شماره مرجع بانکی با لایه بک‌دراپ بلور (`backdrop-blur-xs`) و استایل‌های استاندارد.
+  - **ماژول نوبت‌دهی (`appointments/index.astro`):**
+    - کارت‌های خلاصه وضعیت نوبت‌ها، جدول مراجعان، مودال‌های لغو، جابه‌جایی اتمیک و تاریخچه تغییر وضعیت با استایل‌های هماهنگ DaisyUI.
+- تست یکپارچگی SSR پنل مدیریت در `apps/psychology-admin/test/admin-pages.test.mjs` نوشته شد که پاسخ ۲۰۰، هدرهای `no-store, private`، متاتگ `noindex` و توکن‌های DaisyUI را روی تمامی ۸ مسیر پنل بررسی و تأیید می‌کند.
+- پورت‌های سوئیت‌های تست سایت و پنل جهت جلوگیری از تداخل همزمانی تفکیک شدند (`4391-4395` برای سایت و `4401-4403` برای پنل).
+- دستورهای `pnpm typecheck`، `pnpm test` (همه ۲۶ تست فرانت‌اند و کلاینت)، `pnpm lint` و `make verify-psychology` با موفقیت کامل پاس شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.8.3 (مهاجرت account/courses/، appointments/ و booking/ با no-store و PersianDatePicker Island)
+
+- تمامی صفحات تعاملی و خصوصی سایت عمومی (`apps/psychology-site`) بازنویسی و با دیزاین سیستم سازگار شدند:
+  - **داشبورد دوره‌های من (`account/courses/index.astro`):**
+    - حفظ هدر سخت‌گیرانه `Cache-Control: no-store, no-cache, must-revalidate, private` جهت جلوگیری قطعی از ذخیره در کش لبه یا پروکسی‌های عمومی.
+    - بازنویسی فرم احراز هویت پیامکی (ارسال OTP، تایمر شمارش معکوس دو دقیقه‌ای، اعتبارسنجی کد ۵ رقمی و ورود) و لیست دوره‌های خریداری‌شده با کلاس‌ها و کامپوننت‌های معنایی DaisyUI (`card bg-base-100`, `input-bordered`, `btn-primary`, `badge-success`).
+    - استفاده از کامپوننت اشتراکی `EmptyState` از `@psychology/ui` در صورت عدم وجود دوره با دکمه مستقیم بازگشت به کاتالوگ دوره‌ها.
+    - حذف کامل تمامی رنگ‌های ثابت و هاردکد قبلی (`#ffffff`, `#0f172a`, `#0284c7`, `#f1f5f9`).
+  - **پخش‌کننده جلسات دوره (`account/courses/[id].astro`):**
+    - حفظ هدر سخت‌گیرانه `Cache-Control: no-store, no-cache, must-revalidate, private`.
+    - بازنویسی کامل رابط کاربری سرفصل‌ها و جلسات دوره با ساختار دو ستونه ریسپانسیو (پلیر و اطلاعات جلسه در محتوای اصلی و لیست سرفصل‌ها در نوار کناری).
+    - پشتیبانی کامل از پلیر ویدیو و صوت اختصاصی با کلاس‌های DaisyUI (`card bg-base-100`, `badge-info`, `badge-accent`)، دکمه‌های ناوبری میان جلسات و استخراج داینامیک توکن پخش و هدرهای امنیتی.
+  - **پیگیری خصوصی نوبت (`appointments/[id].astro`):**
+    - حفظ هدرهای امنیتی خصوصی `Cache-Control: no-store, no-cache, must-revalidate, private` و متاتگ `<meta name="robots" content="noindex, nofollow">` برای جلوگیری از ایندکس شدن نوبت‌های شخصی مراجعان.
+    - بازنویسی کارت وضعیت نوبت، مشخصات جلسه، اطلاعات درمانگر، راهنمای تماس و پنجره تایید لغو نوبت با مدال و بج‌های وضعیت DaisyUI (`badge-success`, `badge-info`, `badge-error`, `badge-ghost`).
+    - هندلینگ ایمن عدم دسترسی و کلید نامعتبر `lookup_hash` با طراحی هماهنگ و بدون افشای اطلاعات حساس.
+  - **درخواست نوبت و رزرو مشاوره (`booking/index.astro`):**
+    - تنظیم هدر کش لبه عمومی `Cache-Control: public, max-age=0, s-maxage=1800, stale-while-revalidate=60`.
+    - ادغام کامپوننت `PersianDatePicker` از بسته `@psychology/ui` به عنوان یک Astro Island تعاملی (`<PersianDatePicker client:visible ... />`) جهت انتخاب تاریخ جلسه در گاه‌شماری هجری شمسی، نمایش نام ماه‌ها و اعداد فارسی، و تولید اینپوت مخفی استاندارد `YYYY-MM-DD` برای هماهنگی با بک‌اند.
+    - بازنویسی کارت‌های انتخاب درمانگر، مدال درخواست نوبت، فرم ثبت مشخصات مراجع و اعلان‌های راهنما با توکن‌های معنایی و استایل‌های استاندارد.
+- آزمون‌های اعتبارسنجی اختصاصی در `apps/psychology-site/test/interactive-pages.test.mjs` ایجاد شد و در اسکریپت `test` اضافه گردید:
+  - تأیید کد وضعیت ۲۰۰ برای تمام ۴ مسیر.
+  - تأیید صدور دقیق هدر `no-store, private` در صفحات خصوصی و `public` در صفحه عمومی رزرو.
+  - تأیید رندر Astro Island (`<astro-island client="visible" ...>`) و تولید خودکار خروجی تاریخ شمسی و توکن‌های DaisyUI.
+  - تأیید عدم وجود هرگونه رنگ هاردکد شده (`#ffffff`, `#0f172a`, etc.) در HTML رندر شده در سرور.
+- آزمون‌های پلتفرم: `pnpm typecheck`، `pnpm test` (تمامی ۶ سوئیت تست سایت و کل ورک‌اسپیس‌ها)، `pnpm lint` و `make verify-psychology` همگی با موفقیت کامل پاس شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.8.2 (مهاجرت courses/، workshops/ و blog/ سایت به رندر مشترک و SSR)
+
+- تمامی صفحات محتوایی سایت (`apps/psychology-site`) به رندر مشترک و معماری قالب‌ها مهاجرت کردند:
+  - **صفحات فهرست (`courses/index.astro`، `workshops/index.astro`، `blog/index.astro`):**
+    - تنظیم هدر کش لبهٔ شبکه `Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=60`.
+    - دریافت پروفایل مطب و تشخیص پویا و امن قالب فعال (`minimal` یا `clinical`) با `resolveTemplate(site.template_id)`.
+    - استفاده از کامپوننت‌های کارت اختصاصی قالب فعال (`activeTemplate.components.CourseCard`، `WorkshopCard`، `BlogCard`) و تبدیل داده به ساختار ViewModelهای استاندارد معماری ۸۰/۲۰ (`CourseCardVM`، `WorkshopCardVM`، `BlogCardVM`).
+    - استفاده از کامپوننت اشتراکی `EmptyState` از پکیج `@psychology/ui` در شرایط خالی بودن لیست دوره‌ها، کارگاه‌ها یا مقالات.
+    - حذف کامل رنگ‌های ثابت و استایل‌های inline و پیاده‌سازی کامل توکن‌های معنایی DaisyUI و Tailwind.
+  - **صفحات جزئیات (`courses/[slug].astro`، `workshops/[id].astro`، `blog/[slug].astro`):**
+    - تزریق متغیرهای ظاهری مطب (`templateId`، `primaryColor`، `themeRadius`، `themeScale`) به لایهٔ پایه `BaseLayout.astro`.
+    - بازنویسی کامل چیدمان بصری و ساختار با کلاس‌های معنایی DaisyUI (`card bg-base-100`, `input input-bordered`, `btn btn-primary`, `badge badge-success`, etc.) و رعایت دقیق قواعد RTL منطقی (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`).
+    - صفحهٔ وبلاگ `blog/[slug].astro` بلوک‌های محتوا (پاراگراف‌ها، هدینگ‌ها، صوت، تصویر، ویدئو) را به صورت کامل و خالص در سرور (SSR) بدون نیاز به حتی ۱ کیلوبایت اسکریپت در کلاینت رندر می‌کند.
+  - **صفحهٔ پیگیری ثبت‌نام (`workshops/registrations/[id].astro`):**
+    - تنظیم هدر پاسخ خصوصی `Cache-Control: private, no-store`.
+    - جایگزینی بج‌ها و هشدارهای رنگی هاردکد شده با کامپوننت‌ها و توکن‌های معتبر وضعیت در DaisyUI (`alert alert-success`، `badge-success`، `alert-warning`، `alert-error`).
+- آزمون‌های اعتبارسنجی SSR و رندر صفحات در `apps/psychology-site/test/content-pages.test.mjs` نوشته شد که پاسخ‌دهی ۲۰۰، هدرهای کش، عدم وجود رنگ‌های هاردکد در خروجی HTML و صفر بودن جاوااسکریپت اضافی روی صفحات محتوایی را بررسی و تأیید می‌کند.
+- بررسی نوع `pnpm typecheck`، آزمون‌های سراسری `pnpm test`، اعتبارسنجی پلتفرم `make verify-psychology` و `pnpm lint` همگی با موفقیت کامل پاس شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.8.1 (تکمیل کامپوننت‌های پایه و تعاملی UI با React Aria و تقویم شمسی)
+
+- پکیج مشترک `@psychology/ui` با وابستگی‌های تأییدشدهٔ `react-aria-components` و `@internationalized/date` توسعه یافت:
+  - **تکمیل کامپوننت‌های پایه (Primitives):**
+    - ارتقای کامپوننت `Button` با پشتیبانی از خصیصهٔ `isLoading` همراه با اسپینر استاندارد DaisyUI (`loading loading-spinner`) و غیرفعال‌سازی خودکار در زمان بارگذاری.
+    - ارتقای کامپوننت `Alert` با پشتیبانی از عنوان اختیاری (`title`).
+    - تثبیت کامپوننت‌های `Input`، `Textarea`، `Card` (با `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`)، `Badge` و `EmptyState` با رعایت توکن‌های معنایی و چیدمان RTL منطقی.
+  - **ساخت کامپوننت‌های تعاملی Headless (Interactive Components):**
+    - `Modal`: دیالوگ دسترس‌پذیر بر پایه `ModalOverlay`, `Modal`, `Dialog`, `Heading` از React Aria با لایه ماسک محو، پشتیبانی از سایزهای `sm` تا `xl`، کلوز اکشن و دکمه‌های اقدام، کاملاً ایمن در SSR و بدون FOUC.
+    - `Select`: دراپ‌داون فرم با پشتیبانی از انتخاب کنترل‌شده/غیرکنترل‌شده، برچسب، پیام خطا، لیست آیتم‌ها با استایل DaisyUI و تگ فرم مخفی استاندارد `<select>` برای پشتیبانی از ارسال فرم و رندر بدون جاوااسکریپت در SSR.
+    - `Tabs`: ناوبری تب‌ها بر پایه React Aria سازگار با واریانت‌های `boxed`, `bordered`, `lifted` دیسی‌یوآی، تنظیم خودکار کلاس `tab-active` و رندر تب پنل فعال در SSR.
+    - `PersianDatePicker`: پیکر تقویم شمسی جلالی بر پایه `I18nProvider locale="fa-IR-u-ca-persian"`، نمایش اعداد فارسی و نام ماه‌های شمسی (فروردین تا اسفند)، تقویم پاپ‌اور با حرکت میان ماه‌ها، و تولید خودکار اینپوت مخفی استاندارد ISO-8601 (`YYYY-MM-DD`) برای ذخیره در دیتابیس و ارسال به API.
+  - **توابع کمکی کار با تاریخ شمسی و میلادی (`date-utils.ts`):**
+    - `toISODateString`: تبدیل امن هر تقویم (شمسی یا میلادی) به رشتهٔ استاندارد ISO (`YYYY-MM-DD`).
+    - `parseISODate`: پارس رشته‌های تاریخ ISO به `CalendarDate`.
+    - `formatPersianDate`: قالب‌بندی تاریخ‌های میلادی و جلالی به متن فارسی خوانا (مانند «۳۰ آبان ۱۴۰۵»).
+    - `toPersianCalendarDate`: تبدیل تاریخ ورودی به شیء تقویم جلالی.
+    - `getTodayPersian`: دریافت تاریخ امروز در گاه‌شماری هجری شمسی بر اساس منطقه زمانی ایران (`Asia/Tehran`).
+- آزمون‌های واحد و یکپارچگی SSR در `packages/ui/test/interactive.test.mjs` نوشته و اجرا شدند (۱۵ تست موفق در سطح پکیج UI).
+- اجرای دستورهای `make verify-psychology` و `pnpm lint` با موفقیت صددرصدی و بدون هیچ خطایی تأیید شد.
+
+- سناریوی کامل آزمون پذیرش `PSY-A12` در دو لایهٔ بک‌اند و فرانت‌اند پیاده‌سازی و تأیید شد:
+  - **لایهٔ Go / Backend (`apps/psychology-api/internal/testsupport/acceptance_a12_test.go`):**
+    - دو مطب و دامنهٔ مستقل تعریف شدند: مطب A با دامنهٔ `rezaei-clinic.ir` و مطب B با دامنهٔ `niloofar-psych.ir`.
+    - در وضعیت اولیه هر دو کلینیک دارای قالب `minimal` و رنگ‌های پیش‌فرض بودند و پاسخ‌های عمومی صفحهٔ اصلی در پروکسی کش با وضعیت `MISS` و سپس `HIT` کش شدند.
+    - مالک مطب A پیش از ذخیره، قالب‌های `minimal` و `clinical` را روی `/preview` بررسی کرد. درخواست‌های پیش‌نمایش به دلیل ماهیت خصوصی و هدر `Cache-Control: private, no-store`، کش اشتراکی را دور زدند (`X-Cache: BYPASS`) و هیچ رکوردی در دیتابیس یا کش عمومی تغییر نکرد.
+    - مالک مطب A با درخواست `PUT /v1/admin/site` قالب `clinical`، رنگ `#0f766e`، شعاع `lg` و مقیاس `sm` را ذخیره کرد. پاسخ با `private, no-store` بازگشت و رویداد ابطال Outbox در همان تراکنش ثبت شد.
+    - ورکر Outbox رویداد را پردازش کرد و فقط کش دامنهٔ A را پاک کرد. درخواست بعدی دامنهٔ A با وضعیت `MISS` به سرور متصل شده و قالب جدید `clinical` را دریافت کرد، در حالی که کش دامنهٔ B همچنان با وضعیت `HIT` و قالب قبلی `minimal` دست‌نخورده باقی ماند (ایزولاسیون صددرصدی چندمستأجری).
+    - آزمون امنیت مرز مستأجران تأیید کرد تلاش مالک A برای تغییر تنظیمات کلینیک B با خطای `403 Forbidden` متوقف شده و داده‌های B کاملاً محافظت شده‌اند.
+  - **لایهٔ Astro / SSR Frontend (`apps/psychology-site/test/acceptance-a12.test.mjs`):**
+    - رندر زنده روی دو Host ورودی شبیه‌سازی شد.
+    - مسیر `/preview` با موفقیت هدر `Cache-Control: private, no-store`، متاتگ `<meta name="robots" content="noindex, nofollow">` و قالب‌های `minimal` و `clinical` را رندر کرد.
+    - تست Fallback تأیید کرد در صورت ارسال شناسهٔ ثبت‌نشده در رجیستری، پوسته به صورت امن به `minimal` بازمی‌گردد.
+    - تست جلوگیری از FOUC و تزریق CSS تأیید کرد رنگ‌های نامعتبر به رنگ پیش‌فرض `#0284c7` فال‌بک می‌شوند.
+    - بررسی صفحهٔ اصلی `/` تأیید کرد پارامترهای ظاهری کوئری استرینگ را نادیده گرفته و همواره ظاهر منتشرشده را با کش عمومی ارائه می‌دهد.
+- تمامی تست‌های پلتفرم با `make verify-psychology` و `pnpm lint` اجرا شده و کل پلتفرم بدون هیچ خطایی سبز است. موفقیت این سناریو مسیر را برای آغاز `PSY-5.8` فراهم کرد.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.6 (اتصال settings.astro و AdminLayout.astro به UI مشترک، کاتالوگ قالب‌ها، پیش‌نمایش و ذخیره API)
+
+- در `apps/psychology-admin/src/layouts/AdminLayout.astro`، استایل پایه پکیج مشترک `@psychology/ui/styles/base.css` لود شد و ساختار سایدبار و نوار بالا با توکن‌های DaisyUI و کلاس‌های معنایی Tailwind متصل شد.
+- صفحهٔ `apps/psychology-admin/src/pages/settings.astro` به طور کامل با سیستم طراحی `@psychology/ui` بازنویسی شد:
+  - **بخش انتخاب قالب:** اتصال مستقیم به `TEMPLATE_CATALOG` برای انتخاب میان `minimal` و `clinical` با نمایش کارت، توضیحات فارسی و نسخهٔ معتبر.
+  - **بخش هویت بصری:** انتخاب رنگ سازمانی با پالت‌های آماده `PRESET_PRIMARY_COLORS` و ورودی رنگ سفارشی هگز همراه با اعتبارسنجی زنده؛ گزینه‌های شعاع گوشه از `RADIUS_OPTIONS` (`sm`, `md`, `lg`) و مقیاس اندازه از `SCALE_OPTIONS` (`sm`, `md`, `lg`).
+  - **پیش‌نمایش قبل از ذخیره:** پیوند و دکمهٔ «پیش‌نمایش زنده در وب‌سایت» که به صورت بلادرنگ همگام با تغییرات فرم، آدرس `/preview?template=...&primary=...&radius=...&scale=...` را به‌روزرسانی کرده و امکان مشاهده را قبل از انتشار فراهم می‌کند.
+  - **خواندن و ذخیره از API:** دریافت مقادیر تنظیمات در SSR از `/v1/admin/site` و ذخیرهٔ فرم با درخواست `PUT` همراه با هدرهای امنیتی، نمایش وضعیت بارگذاری، و بازخورد آلرت‌های موفقیت و خطا.
+- مسیر واسط `apps/psychology-admin/src/pages/api/admin/site.ts` برای هندل کردن درخواست‌های `GET` و `PUT` تنظیمات با هدر `Cache-Control: private, no-store` ایجاد شد.
+- آزمون‌های جامع در `apps/psychology-admin/test/settings.test.mjs` پیاده‌سازی و اجرا شدند و `make verify-psychology` و `pnpm lint` با موفقیت کامل سبز شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.5 (اتصال خانه به داده عمومی Tenant و ساخت /preview با هدرهای امن و noindex)
+
+- ماژول کمکی `apps/psychology-site/src/lib/site.ts` با تابع `fetchPublicSite(request)` ساخته شد که با استفاده از `PsychologyApiClient` و هدر `Host` ورودی، تنظیمات عمومی منتشرشدهٔ همان کلینیک را از `/v1/public/site` دریافت می‌کند و در صورت عدم دسترسی موقت بک‌اند، به داده‌های پیش‌فرض امن برمی‌گردد.
+- صفحهٔ خانهٔ `apps/psychology-site/src/pages/index.astro`:
+  - هدر کش عمومی `Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=60` را تنظیم می‌کند.
+  - منحصراً ظاهر و تنظیمات منتشرشدهٔ کلینیک (`template_id`, `primary_color`, `theme_radius`, `theme_scale`) را اعمال کرده و طبق بند ۴ الزامات معماری، هرگونه پارامتر ظاهری در کوئری استرینگ را نادیده می‌گیرد.
+  - کامپوننت `HomeHero` قالب فعال را همراه با کامپوننت پایه `Button` از `@psychology/ui` در بخش اقدام سریع رندر می‌کند.
+- صفحهٔ پیش‌نمایش `apps/psychology-site/src/pages/preview.astro`:
+  - از همان داده‌های محتوایی عمومی و چیدمان صفحهٔ خانه استفاده می‌کند، اما متغیرهای ظاهری (`template`, `primary`, `radius`, `scale`) را از Query اعتبارسنجی می‌کند.
+  - در صورت ارسال مقادیر نامعتبر یا قالب ناشناخته، با fallback تضمین‌شده به تنظیمات منتشرشده یا پیش‌فرض‌های امن (`minimal`, `#0284c7`, `md`, `md`) برمی‌گردد.
+  - هدر کش خصوصی `Cache-Control: private, no-store` را ارسال می‌کند تا به هیچ عنوان در CDN یا حافظهٔ کش مشترک ذخیره نشود.
+  - تگ متا `<meta name="robots" content="noindex, nofollow">` در لایهٔ `BaseLayout.astro` رندر می‌شود تا در موتورهای جستجو ایندکس نشود.
+  - بنر متمایز حالت پیش‌نمایش در بالای صفحه نمایش داده می‌شود.
+- در `apps/psychology-site/src/pages/sitemap.xml.ts`، مسیر `/preview` به طور کامل از سایت‌مپ مستثنی است.
+- آزمون‌های جامع در `apps/psychology-site/test/preview.test.mjs` اضافه و اجرا شدند و `make verify-psychology` و `pnpm lint` با موفقیت کامل پاس شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.4 (قرارداد، ViewModelها، رجیستری، دو قالب minimal و clinical و رندر SSR در BaseLayout)
+
+- قرارداد تایپ‌اسکریپت `SiteTemplate` در `apps/psychology-site/src/templates/contract.ts` ایجاد شد که شامل ۶ کامپوننت پایه (`Header`, `Footer`, `HomeHero`, `CourseCard`, `WorkshopCard`, `BlogCard`) و فیلد `meta: TemplateMeta` متناظر کاتالوگ است.
+- مدل‌های پیش‌قالب‌بندی‌شده (ViewModels) در `apps/psychology-site/src/templates/view-models.ts` تعریف شدند (`SiteHeaderVM`, `FooterVM`, `HomeHeroVM`, `CourseCardVM`, `WorkshopCardVM`, `BlogCardVM`) تا طبق قاعده ۸۰/۲۰ و الگوی ۰۴ مستندات، هیچ لاجیک مالی، تبدیل تاریخ، کوکی، نشست یا ارتباط مستقیم با API کلاینت داخل کامپوننت‌های بصری قالب قرار نگیرد.
+- دو مجموعه قالب متمایز با استایل و چیدمان کاملاً اختصاصی ساخته شدند:
+  - `minimal`: طراحی آرام، ساده با فونت خلوت، استایل گرد و لطیف، حاشیه‌های نرم، فایل استایل `theme.css` با تم `data-theme="minimal"`.
+  - `clinical`: طراحی مقتدر و بالینی کلینیک با هدر اعلان، کارت‌های ساختاریافته، فوتر خدمات و مجوزها، فایل استایل `theme.css` با تم `data-theme="clinical"`.
+  - هر دو قالب از توکن‌های معنایی دیسی‌یوآی و جهت‌یابی منطقی راست‌به‌چپ (RTL logical properties نظیر `ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`) بدون هیچ رنگ هاردکد شده استفاده می‌کنند.
+- رجیستری مرکزی در `apps/psychology-site/src/templates/registry.ts` پیاده‌سازی شد و تابع `resolveTemplate(templateId)` با پشتیبانی از fallback تضمین‌شده و امن به `minimalTemplate` در صورت ارسال شناسهٔ نامعتبر، خالی یا null ایجاد شد.
+- لایهٔ پایه `apps/psychology-site/src/layouts/BaseLayout.astro` به‌روزرسانی شد:
+  - استایل‌های پایه `@psychology/ui/styles/base.css` و استایل‌های دو تم ایمپورت شدند.
+  - خصیصه‌های `data-theme`، `data-radius` و `data-scale` بر روی المان `<html>` ست می‌شوند.
+  - متغیر CSS رنگ اصلی `--color-primary` با اعتبارسنجی دقیق هگز برای جلوگیری از FOUC و تزریق CSS به صورت اینلاین رندر می‌شود.
+  - کامپوننت‌های هدر و فوتر به صورت داینامیک از قالب فعال استخراج و با مقادیر ViewModel رندر می‌شوند.
+- آزمون‌های جامع در `apps/psychology-site/test/templates.test.mjs` پیاده‌سازی شدند:
+  - برابری دوطرفه و دقیق شناسه‌ها بین کاتالوگ `TEMPLATE_CATALOG` و رجیستری `TEMPLATES_REGISTRY`.
+  - حضور و تعریف تمامی ۶ کامپوننت در هر قالب.
+  - رندر سرور واقعی (SSR) با استخراج ویژگی‌های تم، مقیاس و استایل اینلاین.
+  - عملکرد بی‌نقص fallback امن به قالب `minimal` در صورت درخواست قالب نامعتبر یا تهی.
+- دستورهای `make verify-psychology` و `pnpm lint` اجرا شده و کل پلتفرم با موفقیت سبز است.
+
+- فایل‌های مایگریشن `000008_add_site_template_settings.up.sql` و `000008_add_site_template_settings.down.sql` ایجاد شدند و ستون‌های `template_id` (با پیش‌فرض `minimal`)، `template_version` (با پیش‌فرض `1.0.0`)، `theme_radius` (با چک محدود به `sm`, `md`, `lg`) و `theme_scale` (با چک محدود به `sm`, `md`, `lg`) بدون تغییر مایگریشن‌های پیشین به جدول دارای RLS فعال `site_settings` اضافه شدند.
+- کوئری‌های `internal/settings/queries.sql` به‌روزرسانی شده و خروجی‌های sqlc در `settingsdb` بازتولید گردیدند.
+- در `internal/settings/service.go` اعتبارسنجی شناسهٔ قالب (`^[a-z0-9-]{2,40}$`)، شعاع و مقیاس تم پیاده‌سازی شد. نسخهٔ فعال قالب در زمان ذخیره از کاتالوگ فعال استخراج و ثبت می‌شود.
+- در همان تراکنش ذخیرهٔ تنظیمات در `Store.WithTenantTx`، رویداد Outbox برای ابطال کش CDN دامنهٔ تأییدشدهٔ همان کلینیک (`cache.InsertCacheInvalidationEvent`) با مسیرهای متأثر ثبت می‌شود و هدر `Cache-Control: private, no-store` روی پاسخ‌های پنل تنظیم گردید.
+- مشخصات OpenAPI در `packages/contracts/psychology/openapi.yaml` برای مدل‌های `PublicSiteResponse`، `SiteSettingsResponse` و `UpdateSiteSettingsRequest` به‌روزرسانی شده و اینترفیس‌های `@psychology/api-client` با تایپ‌های جدید بازتولید شدند.
+- آزمون‌های اعتبارسنجی، ایزولاسیون چندمستأجری و تست‌های کلاینت در سراسر مونو‌ریپو پیاده‌سازی و اجرا شده و `make verify-psychology` با موفقیت کامل سبز شد.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.2 (ساخت template-catalog.ts برای minimal و clinical و افزودن توکن‌ها و کامپوننت‌های پایه)
+
+- کاتالوگ مرکزی قالب‌ها در `packages/ui/src/template-catalog.ts` ایجاد شد که متادیتای دو قالب اولیه `minimal` (نسخه ۱.۰.۰، تم DaisyUI `minimal`، خلوت و مناسب درمانگران فردی) و `clinical` (نسخه ۱.۰.۰، تم DaisyUI `clinical`، ساختاریافته و مدرن برای کلینیک‌ها) را مطابق قانون ۱۲ `AGENTS.md` با نسخهٔ ثابت و توابع کمکی `isValidTemplateId`، `getTemplateMeta` و fallback امن `resolveTemplateMeta` فراهم می‌کند.
+- تعاریف توکن‌ها در `packages/ui/src/tokens.ts` توسعه یافت: پالت رنگ‌های پیش‌فرض مجاز (`PRESET_PRIMARY_COLORS`) و گزینه‌های شعاع گردی (`RADIUS_OPTIONS`) و مقیاس (`SCALE_OPTIONS`) همراه با اعتبارسنجی مقادیر تم اضافه شدند.
+- کامپوننت‌های پایهٔ مورد نیاز برای صفحهٔ خانه و فرم تنظیمات به پکیج مشترک افزوده شدند:
+  - `Input` و `Textarea`: با کلاس‌های DaisyUI `input-bordered` و `textarea-bordered`، پشتیبانی از وضعیت خطا (`isError`) و اندازه‌ها.
+  - `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`: ساختار معنایی کارت با کلاس‌های DaisyUI و چیدمان RTL منطقی (`card-actions justify-end`).
+  - `Badge`: انواع وضعیت‌ها و رنگ‌های تم با کلاس‌های معنایی DaisyUI.
+  - `Alert`: ساختار هشدار استاندارد با ویژگی دسترسی‌پذیری `role="alert"`.
+  - `EmptyState`: کامپوننت پیام خالی بودن داده‌ها برای لیست‌ها و بخش‌های مختلف.
+- آزمون‌های واحد جامع در `packages/ui/test/render.test.mjs` پیاده‌سازی شدند: اعتبارسنجی متادیتا و fallback امن کاتالوگ، بررسی مقادیر توکن‌ها، و رندر سمت سرور (SSR) تمام کامپوننت‌های ساخته‌شده با بررسی کلاس‌های DaisyUI و عدم خروج استایل نامعتبر.
+- دستورهای `make verify-psychology` و `pnpm lint` با موفقیت کامل سبز شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.1.4 (فعال‌سازی astro check و tsc --noEmit و به‌روزرسانی Dockerfileها برای packages/ui)
+
+- بستهٔ `@astrojs/check` به عنوان وابستگی توسعه به `apps/psychology-site/package.json` و `apps/psychology-admin/package.json` افزوده شد و اسکریپت `typecheck` به `astro check && tsc --noEmit` تغییر یافت.
+- وابستگی `@psychology/api-client` به عنوان وابستگی مستقیم به هردو اپ فرانت‌اند اضافه شد تا خطاهای ماژول در بررسی تشخیصی Astro برطرف گردند.
+- فیلد `lessons_count` به اینترفیس `AdminCourseItem` در کلاینت API و قرارداد OpenAPI افزوده شد و مقادیر شبیه‌سازی در صفحات دوره‌ها اصلاح شدند.
+- کست تایپ‌ها در کامپوننت بلاگ سایت (`apps/psychology-site/src/pages/blog/[slug].astro`) برای سازگاری کامل با کامپایلر JSX استرو بهینه شد و متغیرهای بلااستفاده در پنل مدیریت پاکسازی شدند.
+- فایل‌های Dockerfile هر دو اپلیکیشن (`apps/psychology-site/Dockerfile` و `apps/psychology-admin/Dockerfile`) به‌روزرسانی شدند تا پوشهٔ `packages/ui` را کپی کرده و دستور `pnpm --filter @psychology/ui build` را پیش از بیلد هر اپلیکیشن اجرا کنند.
+- دستورهای `make verify-psychology` و `pnpm lint` با اجرای تست‌های Go و تست‌های کامل SSR و کلاینت در مونو‌ریپو با موفقیت سبز شدند و گروه تسک `PSY-5.1` به طور کامل به پایان رسید.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.1.3 (اتصال psychology-admin به بستهٔ مشترک و @astrojs/react و تأیید رندر SSR کامپوننت)
+
+- بستهٔ `@psychology/ui` به عنوان وابستگی workspace و `@astrojs/react` سازگار با Vite 6 و Astro 5 (`^4.4.2`) همراه با `react` و `react-dom` به `apps/psychology-admin/package.json` اضافه شدند.
+- پیکربندی Astro در `apps/psychology-admin/astro.config.mjs` به ادغام `react()` مجهز شد و تنظیمات JSX (`react-jsx`) در `tsconfig.json` فعال گردید.
+- کامپوننت `Button` از `@psychology/ui` در بخش دسترسی‌های سریع داشبورد پنل (`apps/psychology-admin/src/pages/index.astro`) جایگزین لینک‌های استایل‌دار قبلی شد.
+- آزمون رندر سمت سرور در `apps/psychology-admin/test/ssr-render.test.mjs` پیاده‌سازی شد و خروجی بیلد سروری را با بازگشت پاسخ ۲۰۰ و رندر کامل تگ `<button class="btn btn-primary ...">` تأیید کرد.
+- دستورهای `make verify-psychology` و `pnpm lint` در سراسر مونو‌ریپو با موفقیت کامل سبز شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.1.2 (اتصال psychology-site به بستهٔ مشترک و @astrojs/react و تأیید رندر SSR کامپوننت)
+
+- بستهٔ `@psychology/ui` به عنوان وابستگی workspace و `@astrojs/react` سازگار با Vite 6 و Astro 5 (`^4.4.2`) همراه با `react` و `react-dom` به `apps/psychology-site/package.json` اضافه شدند.
+- پیکربندی Astro در `apps/psychology-site/astro.config.mjs` به ادغام `react()` مجهز شد و تنظیمات JSX (`react-jsx`) در `tsconfig.json` فعال گردید.
+- کامپوننت `Button` از `@psychology/ui` در بخش اکشن‌های صفحهٔ اصلی (`apps/psychology-site/src/pages/index.astro`) جایگزین تگ‌های ثابت شد.
+- آزمون رندر سمت سرور در `apps/psychology-site/test/ssr-render.test.mjs` پیاده‌سازی شد و خروجی بیلد سروری را با بازگشت پاسخ ۲۰۰ و رندر کامل تگ `<button class="btn btn-primary ...">` تأیید کرد.
+- دستورهای `make verify-psychology` و `pnpm lint` در سراسر مونو‌ریپو با موفقیت کامل سبز شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.1.1 (ساخت بستهٔ @psychology/ui با Tailwind CSS v4، DaisyUI v5 و کامپوننت پایه SSR)
+
+- بستهٔ مشترک `packages/ui` با نام `@psychology/ui` در ساختار مونو‌ریپو ایجاد و به `pnpm-workspace.yaml` متصل شد.
+- استایل پایه `src/styles/base.css` با `@import "tailwindcss";` و `@plugin "daisyui";` و مقادیر متغیرهای سفارشی `data-radius` و `data-scale` پیکربندی شد.
+- توکن‌های مجاز تم شامل مقادیر مجاز `theme_radius` (`sm`, `md`, `lg`)، `theme_scale` (`sm`, `md`, `lg`) و اعتبارسنجی هگز رنگ در `src/tokens.ts` پیاده‌سازی شدند.
+- ابزار ادغام ایمن کلاس‌ها (`cn`) با کتابخانه‌های تأییدشده `clsx` و `tailwind-merge` ایجاد شد.
+- کامپوننت پایه `Button` با پشتیبانی از انواع متغیرهای DaisyUI (`primary`, `secondary`, `outline`, ...) و اندازه‌ها بدون هیچ کلاس غیراستاندارد یا وابستگی به جهت‌های فیزیکی (پایبندی کامل به قواعد RTL) پیاده‌سازی شد.
+- تست واحد SSR در `test/render.test.mjs` با `renderToString` رندر بدون خطای سروری کامپوننت و اعتبارسنجی توکن‌ها را تأیید کرد.
+- دستورهای `make verify-psychology` و `pnpm lint` در تمام ۵ پروژهٔ مونو‌ریپو با موفقیت کامل سبز شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.0.2 (اتصال pool نقش runtime، domain.Resolver، auth.Service و settings.Handler در cmd/server/main.go و تأیید روت‌ها)
+
+- در `cmd/server/main.go`، ارتباط با دیتابیس از طریق `pgxpool.Pool`، `db.Store`، `domain.Resolver`، `auth.Service`، `auth.Handler` و `settings.Handler` متصل شد و روت‌های تنظیمات روی شاخهٔ `/v1` سوار شدند (`/v1/public/site` و `/v1/admin/site`).
+- آزمون یکپارچگی ورودی سرور (`TestServer_SettingsEndToEnd_TwoHostsAndAuth`) در `cmd/server/main_test.go` پیاده‌سازی شد:
+  - سناریوی Host A (`omid-psych.ir`) و Host B (`mahan-clinic.ir`): رندر و بازگشت موفق پروفایل عمومی مستقل با کد ۲۰۰.
+  - رد قاطع Host ناشناخته (`unknown.ir`) با خطای ۴۰۴ `DOMAIN_NOT_FOUND`.
+  - رد Host تأییدنشده (`unverified.ir`) با خطای ۴۰۴ `DOMAIN_NOT_VERIFIED`.
+  - رد درخواست‌های پنل بدون احراز هویت با خطای ۴۰۱ `UNAUTHORIZED`.
+  - رد تلاش دستکاری چندمستأجری (مالک کلینیک A با نشست معتبر قصد تغییر کلینیک B را داشته باشد) با خطای ۴۰۳ `FORBIDDEN`.
+  - خواندن و ذخیرهٔ مجاز توسط مالک A روی کلینیک A و مشاهدهٔ بلافاصلهٔ تغییرات در خروجی عمومی Host A، بدون کوچک‌ترین تغییر در پروفایل یا تنظیمات Host B.
+- آزمون اختیاری اتصال زنده `TestServer_LiveSettingsWithRealPool` در محیط دارای `DATABASE_URL` اضافه شد.
+- با تکمیل این زیرتسک، تسک والد `PSY-5.0` به‌طور کامل پایان یافت و تیک خورد.
+- `make verify-psychology` و `pnpm lint` با موفقیت کامل و بدون خطا سبز شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-5.0.1 (اجرای خواندن و نوشتن internal/settings در Store.WithTenantTx و آزمون RLS با نقش runtime)
+
+- سرویس `internal/settings` به اینترفیس `TenantStore` و متد `NewServiceWithStore` مجهز شد تا تمام عملیات خواندن و نوشتن (`GetPublicProfile`، `GetSettings`، `UpdateSettings`) درون `Store.WithTenantTx` و با تنظیم `app.tenant_id` اجرا شوند.
+- مسیر عمومی `handleGetPublicSite` در `internal/settings/http.go` زمینهٔ درخواست را با `tenantctx.With(ctx, tenantID)` غنی کرد تا در سطح درخواست عمومی نیز context دارای شناسهٔ معتبر مستأجر باشد.
+- آزمون‌های نگهبان شِما و ایزولاسیون زنده در `apps/psychology-api/internal/settings/isolation_test.go` پیاده‌سازی شدند:
+  - راستی‌آزمایی اجباری بودن `FORCE ROW LEVEL SECURITY` و خط‌مشی `tenant_isolation` روی جدول `site_settings`.
+  - راستی‌آزمایی ایزولاسیون کامل Tenant A و Tenant B در سناریوی زنده دیتابیس با نقش runtime (`app_user`): عدم دسترسی B به ردیف‌های A، بی‌اثر بودن تلاش‌های UPDATE/DELETE خام (۰ ردیف متأثر)، و خطای ۴۲۵۰۱ در درج متقلبانه.
+  - تست انتشار خطا و اجرای در تراکنش `TestServiceWithStore_ErrorPropagation` در `settings_test.go`.
+- `make verify-psychology` و `pnpm lint` با موفقیت کامل و بدون خطا سبز شدند.
+
+### ۲۰۲۶-۱۱-۲۱ — بازبینی ترتیب و قرارداد فاز PSY-5
+
+- اتصال API تنظیمات و آزمون RLS با نقش runtime به ابتدای فاز منتقل شد. کاتالوگ مشترک، معنای نسخهٔ قالب، بررسی Astro و قرارداد پیش‌نمایش و Outbox در اسناد ثبت شدند. تکمیل و تأیید مسیر اولیه با دو Host پیش‌نیاز مهاجرت سایر صفحات است. [تصمیم‌ها](DECISIONS.md) · [پذیرش](ACCEPTANCE.md)
+- `make verify-psychology` موفق بود. تست Migration زنده به‌دلیل تنظیم نبودن `DATABASE_URL` اجرا نشد. `pnpm lint` با اسکریپت‌های فعلی که بررسی lint انجام نمی‌دهند، موفق بود.
+
+### ۲۰۲۶-۱۱-۲۱ — مستندسازی فاز PSY-5
+
+- الگوی رابط کاربری، مشخصات ماژول، تصمیم `PSY-D09`، تسک‌های `PSY-5.1` تا `PSY-5.9` و سناریوی `PSY-A12` ثبت شدند. [تصمیم‌ها](DECISIONS.md) · [پذیرش](ACCEPTANCE.md)
+- `make verify-psychology` موفق بود. تست Migration روی PostgreSQL واقعی به‌دلیل تنظیم نبودن `DATABASE_URL` اجرا نشد و `pnpm lint` با اسکریپت‌های فعلیِ بدون بررسی موفق بود.
 
 ### ۲۰۲۶-۱۱-۲۱ — اجرای تسک PSY-4.4 (پایان فاز ۴ و نقشه راه · ثبت نتایج پایلوت‌ها، هزینه عملیاتی، قیمت اشتراک و سناریوی پذیرش PSY-A11)
 

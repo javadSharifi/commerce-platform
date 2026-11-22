@@ -1,0 +1,28 @@
+---
+import type { FooterVM } from '../view-models.js';
+
+interface Props extends FooterVM {}
+
+const { clinicName, copyrightYear, phone, address, description } = Astro.props;
+---
+
+<footer class="w-full bg-base-200 border-t border-base-300 mt-auto transition-colors">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-8 border-b border-base-300">
+      <div>
+        <h3 class="text-lg font-semibold text-base-content mb-1">{clinicName}</h3>
+        {description && <p class="text-sm text-base-content/70 max-w-md">{description}</p>}
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-4 sm:gap-8 text-sm text-base-content/80">
+        {phone && <div>تلفن تماس: <span class="font-medium text-base-content">{phone}</span></div>}
+        {address && <div>آدرس: <span class="font-medium text-base-content">{address}</span></div>}
+      </div>
+    </div>
+
+    <div class="pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-base-content/60">
+      <div>تمامی حقوق محفوظ است © {copyrightYear} {clinicName}</div>
+      <div>قالب اختصاصی مینیمال · سامانه مستقل سلامت روان</div>
+    </div>
+  </div>
+</footer>

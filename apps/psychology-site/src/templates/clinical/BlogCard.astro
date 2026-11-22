@@ -1,0 +1,40 @@
+---
+import type { BlogCardVM } from '../view-models.js';
+
+interface Props extends BlogCardVM {}
+
+const { slug, title, excerpt, dateLabel, coverUrl } = Astro.props;
+---
+
+<article class="card bg-base-100 border border-base-300 hover:border-primary/60 transition-all duration-200 overflow-hidden shadow-xs rounded-xl flex flex-col h-full">
+  {coverUrl && (
+    <figure class="aspect-video w-full bg-base-200 overflow-hidden">
+      <img src={coverUrl} alt={title} class="w-full h-full object-cover" loading="lazy" />
+    </figure>
+  )}
+
+  <div class="card-body p-5 flex flex-col flex-1 justify-between">
+    <div>
+      <div class="flex items-center gap-2 text-xs text-base-content/60 mb-2">
+        <span class="w-1.5 h-1.5 rounded-full bg-primary inline-block"></span>
+        <time>{dateLabel}</time>
+      </div>
+
+      <h3 class="card-title text-base sm:text-lg font-bold text-base-content mb-2 line-clamp-2">
+        <a href={`/blog/${slug}`} class="hover:text-primary transition-colors">
+          {title}
+        </a>
+      </h3>
+
+      <p class="text-sm text-base-content/75 line-clamp-3 leading-relaxed mb-4">
+        {excerpt}
+      </p>
+    </div>
+
+    <div class="pt-3 border-t border-base-200">
+      <a href={`/blog/${slug}`} class="text-sm font-semibold text-primary hover:text-primary/80 inline-flex items-center gap-1">
+        مطالعه مقاله تخصصی &larr;
+      </a>
+    </div>
+  </div>
+</article>

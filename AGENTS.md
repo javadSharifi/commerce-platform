@@ -42,7 +42,7 @@
 
 ## ۴. بدون اجازه‌ی من ممنوع
 
-- اضافه‌کردن **dependency جدید** (Go module یا npm package). اول بگو چرا لازم است و جایگزین ساده‌ترش چیست.
+- اضافه‌کردن **dependency جدید** (Go module یا npm package). اول بگو چرا لازم است و جایگزین ساده‌ترش چیست (به‌جز کتابخانه‌های تأییدشده در `docs/patterns/README.md`).
 - اضافه‌کردن **Redis، Kubernetes، Microservices، message queue** یا هر سرویس جدید.
 - **تغییر تصمیم‌های ثبت‌شده** ([تصمیم‌های پروژه](docs/psychology/DECISIONS.md)).
 - **تغییر Schema** خارج از چیزی که تسک خواسته. Migration قدیمی را ویرایش نکن؛ Migration جدید بساز.
@@ -123,7 +123,9 @@
 | `docs/patterns/01-tenant-scoped-module.md` | هر endpoint/سرویس روی داده‌ی tenant-scoped |
 | `docs/patterns/02-migration-rls.md` | هر جدول یا تغییر جدول (Migration + RLS) |
 | `docs/patterns/03-tenant-isolation-test.md` | تست ایزولاسیون و تست‌های نگهبان |
+| `docs/patterns/04-ui-and-templates.md` | سیستم طراحی مشترک، قواعد RTL و ساخت قالب‌های سایت |
 | `docs/psychology/modules/README.md` | فهرست مشخصات ماژول‌ها، سناریوهای تست و پیش‌نیازهای هر ماژول |
+| `docs/psychology/modules/ui-templates.md` | مشخصات فاز `PSY-5`، کامپوننت‌های مشترک، تقویم شمسی و موتور چندقالبی |
 | `docs/psychology/DECISIONS.md` | تصمیم‌های معماری و قواعد محصول |
 | `docs/WORKFLOW.md` | روش کار قدم‌به‌قدم: شروع جلسه، حلقه‌ی تسک، چه موقع بپرسم، دیباگ، Git |
 | `docs/psychology/PROGRESS.md` | وضعیت فعلی و تحویل بین جلسه‌ها *(اگر وجود ندارد، طبق WORKFLOW بخش ۹ بساز)* |

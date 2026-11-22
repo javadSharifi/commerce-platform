@@ -1,5 +1,16 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { fetchPublicSite } from '../../lib/site.js';
+import { resolveTemplate } from '../../templates/registry.js';
+import type { CourseCardVM } from '../../templates/view-models.js';
+import { EmptyState } from '@psychology/ui';
+
+// Edge CDN caching: public courses listing
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
+
+const site = await fetchPublicSite(Astro.request);
+const activeTemplate = resolveTemplate(site.template_id);
+const CourseCard = activeTemplate.components.CourseCard;
 
 // Fallback demo courses for SSR preview
 const fallbackCourses = [
@@ -9,9 +20,10 @@ const fallbackCourses = [
     slug: 'anxiety-management',
     description: 'راهنمای کاربردی و گام‌به‌گام برای شناسایی، مدیریت و کاهش اضطراب و استرس‌های روزمره با تکنیک‌های شناختی-رفتاری.',
     instructor_name: 'دکتر مریم علوی',
-    price_rials: 12500000, // 1,250,000 Tomans
+    price_rials: 12500000,
     status: 'published',
     lessons_count: 8,
+    cover_url: null,
   },
   {
     id: 'c-demo-2',
@@ -19,19 +31,20 @@ const fallbackCourses = [
     slug: 'communication-skills',
     description: 'آموزش اصول گفتگوی سازنده، همدلی فعال و الگوهای پایدار در روابط فردی، شغلی و عاطفی.',
     instructor_name: 'دکتر مریم علوی',
-    price_rials: 9800000, // 980,000 Tomans
+    price_rials: 9800000,
     status: 'published',
     lessons_count: 6,
+    cover_url: null,
   },
 ];
 
 let courses = fallbackCourses;
 
-const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 try {
   const host = Astro.request.headers.get('host') || 'localhost:3000';
   const res = await fetch(`${apiBase}/public/courses`, {
-    headers: { 'Host': host },
+    headers: { Host: host },
     signal: AbortSignal.timeout(1000),
   });
   if (res.ok) {
@@ -49,63 +62,51 @@ function formatPriceTomans(rials: number): string {
   const tomans = Math.floor(rials / 10);
   return tomans.toLocaleString('fa-IR') + ' تومان';
 }
+
+const courseVMs: CourseCardVM[] = courses.map((c) => ({
+  id: c.id,
+  slug: c.slug,
+  title: c.title,
+  instructorName: c.instructor_name || site.title,
+  priceLabel: formatPriceTomans(c.price_rials),
+  lessonsCountLabel: c.lessons_count ? `${c.lessons_count.toLocaleString('fa-IR')} جلسه` : undefined,
+  coverUrl: c.cover_url || null,
+}));
 ---
 
-<BaseLayout title="دوره‌های آموزشی ویدئویی و صوتی" description="دوره‌های تخصصی ضبط‌شده روان‌شناسی با تدریس اساتید و روان‌درمانگران مجرب">
-  <div style="margin-bottom: 2.5rem; text-align: center;">
-    <h1 style="font-size: 2rem; font-weight: 800; color: #0f172a; margin-bottom: 0.75rem;">
-      دوره‌های آموزشی تخصصی
-    </h1>
-    <p style="color: #64748b; font-size: 1.1rem; max-width: 600px; margin: 0 auto;">
-      ویدئوها و جلسات آموزشی ضبط‌شده با دسترسی دائمی، سرفصل‌های علمی و گارانتی بازگشت وجه.
-    </p>
+<BaseLayout
+  title={`دوره‌های آموزشی تخصصی | ${site.title}`}
+  description="دوره‌های تخصصی ضبط‌شده روان‌شناسی با تدریس اساتید و روان‌درمانگران مجرب"
+  primaryColor={site.primary_color}
+  templateId={site.template_id}
+  themeRadius={site.theme_radius}
+  themeScale={site.theme_scale}
+>
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div class="text-start sm:text-center mb-8">
+      <h1 class="text-2xl sm:text-3xl font-extrabold text-base-content mb-3">
+        دوره‌های آموزشی تخصصی
+      </h1>
+      <p class="text-base-content/70 text-base max-w-2xl mx-auto">
+        ویدئوها و جلسات آموزشی ضبط‌شده با دسترسی دائمی، سرفصل‌های علمی و گارانتی بازگشت وجه.
+      </p>
+    </div>
+
+    {courseVMs.length === 0 ? (
+      <EmptyState
+        title="در حال حاضر دوره‌ای منتشر نشده است"
+        description="به زودی دوره‌های آموزشی جدید در این بخش قرار خواهند گرفت."
+      >
+        <a href="/workshops" class="btn btn-primary">
+          مشاهده کارگاه‌های حضوری و آنلاین
+        </a>
+      </EmptyState>
+    ) : (
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {courseVMs.map((vm) => (
+          <CourseCard {...vm} />
+        ))}
+      </div>
+    )}
   </div>
-
-  {courses.length === 0 ? (
-    <div style="background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 1rem; padding: 4rem 2rem; text-align: center; color: #64748b;">
-      <p style="font-size: 1.1rem; margin-bottom: 1rem;">در حال حاضر دوره‌ای برای ثبت‌نام منتشر نشده است.</p>
-      <a href="/workshops" class="btn">مشاهده کارگاه‌های حضوری و آنلاین</a>
-    </div>
-  ) : (
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">
-      {courses.map((c) => (
-        <article style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; overflow: hidden; display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <div style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); height: 160px; display: flex; align-items: center; justify-content: center; position: relative;">
-            <span style="font-size: 3rem;">🎓</span>
-            <div style="position: absolute; bottom: 0.75rem; right: 0.75rem; background: rgba(15, 23, 42, 0.75); color: #ffffff; padding: 0.25rem 0.6rem; border-radius: 0.375rem; font-size: 0.8rem;">
-              {c.lessons_count} جلسه آموزشی
-            </div>
-          </div>
-
-          <div style="padding: 1.5rem; flex: 1; display: flex; flex-direction: column;">
-            <h2 style="font-size: 1.2rem; font-weight: 700; color: #0f172a; margin-bottom: 0.5rem; line-height: 1.4;">
-              <a href={`/courses/${c.slug}`} style="color: inherit;">
-                {c.title}
-              </a>
-            </h2>
-
-            <div style="font-size: 0.9rem; color: #64748b; margin-bottom: 0.75rem;">
-              مدرس: <strong style="color: #334155;">{c.instructor_name}</strong>
-            </div>
-
-            <p style="color: #64748b; font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem; flex: 1; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
-              {c.description}
-            </p>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #f1f5f9; padding-top: 1rem; margin-top: auto;">
-              <div>
-                <span style="font-size: 0.8rem; color: #94a3b8; display: block;">سرمایه‌گذاری دوره:</span>
-                <span style="font-size: 1.15rem; font-weight: 800; color: #0284c7;">
-                  {formatPriceTomans(c.price_rials)}
-                </span>
-              </div>
-              <a href={`/courses/${c.slug}`} class="btn" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
-                مشاهده و ثبت‌نام
-              </a>
-            </div>
-          </div>
-        </article>
-      ))}
-    </div>
-  )}
 </BaseLayout>

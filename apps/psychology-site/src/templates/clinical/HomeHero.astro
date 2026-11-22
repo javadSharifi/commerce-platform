@@ -1,0 +1,55 @@
+---
+import type { HomeHeroVM } from '../view-models.js';
+
+interface Props extends HomeHeroVM {}
+
+const { badgeText, title, description, primaryCta, secondaryCta } = Astro.props;
+---
+
+<section class="py-16 md:py-24 bg-gradient-to-b from-base-200 to-base-100 border-b border-base-200 transition-colors">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl">
+      {badgeText && (
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md text-xs font-semibold bg-primary/10 text-primary mb-6 border border-primary/20">
+          <span class="w-2 h-2 rounded-full bg-primary inline-block"></span>
+          {badgeText}
+        </div>
+      )}
+
+      <h1 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-base-content tracking-tight leading-tight mb-6">
+        {title}
+      </h1>
+
+      <p class="text-base sm:text-lg text-base-content/80 leading-relaxed mb-8">
+        {description}
+      </p>
+
+      <div class="flex flex-wrap items-center gap-4 mb-12">
+        <a href={primaryCta.href} class="btn btn-primary btn-md sm:btn-lg rounded-lg font-semibold shadow-sm">
+          {primaryCta.label}
+        </a>
+        {secondaryCta && (
+          <a href={secondaryCta.href} class="btn btn-outline btn-md sm:btn-lg rounded-lg font-semibold">
+            {secondaryCta.label}
+          </a>
+        )}
+      </div>
+
+      <!-- Trust signals / clinical highlights -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-8 border-t border-base-300 text-xs sm:text-sm text-base-content/70">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-primary">✓</span>
+          <span>رازداری کامل بالینی</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-primary">✓</span>
+          <span>درمانگران دارای پروانه تخصصی</span>
+        </div>
+        <div class="flex items-center gap-2 col-span-2 sm:col-span-1">
+          <span class="font-bold text-primary">✓</span>
+          <span>مشاوره حضوری و آنلاین</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

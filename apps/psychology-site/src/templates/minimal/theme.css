@@ -1,0 +1,16 @@
+/* Minimal Template Theme (Solo practitioner / tranquil) */
+[data-theme="minimal"] {
+  color-scheme: light;
+  --color-base-100: #fafaf9;
+  --color-base-200: #f5f5f4;
+  --color-base-300: #e7e5e4;
+  --color-base-content: #292524;
+  --color-primary: #0284c7;
+  --color-primary-content: #ffffff;
+  --color-secondary: #78716c;
+  --color-secondary-content: #ffffff;
+  --color-accent: #0d9488;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1c1917;
+  --color-neutral-content: #fafaf9;
+}

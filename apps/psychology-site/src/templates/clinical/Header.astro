@@ -1,0 +1,55 @@
+---
+import type { SiteHeaderVM } from '../view-models.js';
+
+interface Props extends SiteHeaderVM {}
+
+const { clinicTitle, navItems, primaryAction } = Astro.props;
+---
+
+<header class="w-full bg-base-100 border-b-2 border-primary/20 shadow-xs transition-colors">
+  <!-- Top bar info -->
+  <div class="bg-base-200 border-b border-base-300 py-1.5 px-4 text-xs text-base-content/70">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <span>مرکز تخصصی روان‌شناسی و مشاوره</span>
+      <span>ارائه خدمات حضوری و آنلاین</span>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-20">
+      <!-- Clinic Title / Brand with clinical badge -->
+      <a href="/" class="flex items-center gap-3 group">
+        <div class="w-10 h-10 rounded-lg bg-primary text-primary-content flex items-center justify-center font-bold text-lg shadow-sm">
+          {clinicTitle.slice(0, 1)}
+        </div>
+        <div class="flex flex-col">
+          <span class="text-lg sm:text-xl font-bold text-base-content group-hover:text-primary transition-colors">
+            {clinicTitle}
+          </span>
+          <span class="text-xs text-base-content/60">کلینیک سلامت روان و مشاوره</span>
+        </div>
+      </a>
+
+      <!-- Navigation Links -->
+      <nav class="hidden md:flex items-center gap-1 text-sm font-medium">
+        {navItems.map((item) => (
+          <a
+            href={item.href}
+            class={`px-3 py-2 rounded-md transition-colors ${item.isActive ? 'bg-primary/10 text-primary font-bold' : 'text-base-content/80 hover:bg-base-200 hover:text-base-content'}`}
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
+      <!-- Primary Action CTA -->
+      {primaryAction && (
+        <div class="flex items-center gap-3">
+          <a href={primaryAction.href} class="btn btn-primary btn-sm sm:btn-md rounded-lg font-semibold shadow-sm">
+            {primaryAction.label}
+          </a>
+        </div>
+      )}
+    </div>
+  </div>
+</header>

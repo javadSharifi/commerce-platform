@@ -2385,6 +2385,10 @@ components:
         - title
         - description
         - primary_color
+        - template_id
+        - template_version
+        - theme_radius
+        - theme_scale
       properties:
         name:
           type: string
@@ -2408,6 +2412,20 @@ components:
           type: string
           nullable: true
           example: "https://storage.iran.liara.space/media/logo.png"
+        template_id:
+          type: string
+          example: "minimal"
+        template_version:
+          type: string
+          example: "1.0.0"
+        theme_radius:
+          type: string
+          enum: [sm, md, lg]
+          example: "md"
+        theme_scale:
+          type: string
+          enum: [sm, md, lg]
+          example: "md"
 
     # ---------------- Admin Auth ----------------
     LoginRequest:
@@ -2495,6 +2513,10 @@ components:
         - phone
         - address
         - primary_color
+        - template_id
+        - template_version
+        - theme_radius
+        - theme_scale
       properties:
         tenant_id:
           type: string
@@ -2513,6 +2535,20 @@ components:
           type: string
           format: uuid
           nullable: true
+        template_id:
+          type: string
+          example: "minimal"
+        template_version:
+          type: string
+          example: "1.0.0"
+        theme_radius:
+          type: string
+          enum: [sm, md, lg]
+          example: "md"
+        theme_scale:
+          type: string
+          enum: [sm, md, lg]
+          example: "md"
 
     UpdateSiteSettingsRequest:
       type: object
@@ -2537,6 +2573,18 @@ components:
           type: string
           format: uuid
           nullable: true
+        template_id:
+          type: string
+          pattern: '^[a-z0-9-]{2,40}$'
+          example: "minimal"
+        theme_radius:
+          type: string
+          enum: [sm, md, lg]
+          example: "md"
+        theme_scale:
+          type: string
+          enum: [sm, md, lg]
+          example: "md"
 
     # ---------------- Buyer / Account ----------------
     BuyerProfileResponse:
@@ -4112,6 +4160,8 @@ components:
         status:
           type: string
           enum: [draft, published, archived]
+        lessons_count:
+          type: integer
         published_at:
           type: string
           format: date-time

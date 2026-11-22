@@ -9,6 +9,7 @@
 | `PSY-2` | نسخهٔ ۲، نوبت‌دهی حضوری |
 | `PSY-3` | نسخهٔ ۳، آپلود، فروش و پخش دورهٔ ضبط‌شده |
 | `PSY-4` | بهره‌برداری و بهینه‌سازی پس از پایلوت |
+| `PSY-5` | سیستم طراحی مشترک (`packages/ui`)، تقویم شمسی استاندارد و موتور چندقالبی |
 
 ## PSY-0 — اسکلت قابل اجرا
 
@@ -80,3 +81,35 @@
 - [x] PSY-4.4 نتیجهٔ پایلوت‌ها، هزینهٔ عملیاتی و سهمیهٔ رسانه را ثبت کن و قیمت اشتراک و محدودهٔ نسخهٔ بعد را با دادهٔ واقعی تعیین کن.
 
 **پایان فاز** — آزمون‌های نسخه‌ها، گزارش پایلوت، بازیابی و رفتار کش ثبت شده‌اند. [سناریوهای پذیرش](ACCEPTANCE.md)
+
+## PSY-5 — سیستم طراحی، یکپارچه‌سازی UI و موتور چندقالبی
+
+[سیستم طراحی و قالب‌ها](modules/ui-templates.md) · [الگوی ۰۴](../patterns/04-ui-and-templates.md)
+
+### مسیر اولیه از پنل تا سایت
+
+- [x] PSY-5.0 اتصال API تنظیمات به سرور واقعی و تأیید ایزولاسیون با دو Host. زیرتسک‌ها به‌ترتیب اجرا می‌شوند.
+  - [x] PSY-5.0.1 اجرای خواندن و نوشتن `internal/settings` در `Store.WithTenantTx` با Tenant تأییدشده. با PostgreSQL و نقش runtime، جدایی تنظیمات A و B را در حالت `FORCE RLS` تأیید کن.
+  - [x] PSY-5.0.2 اتصال pool نقش runtime، `domain.Resolver`، `auth.Service` و `settings.Handler` در `cmd/server/main.go`. `GET /v1/public/site` و خواندن و ذخیرهٔ مجاز در `/v1/admin/site` را از ورودی واقعی سرور با دو Host و نشست معتبر آزمون کن. Host ناشناخته و درخواست پنل بدون مجوز رد شوند.
+- [x] PSY-5.1 زیرساخت مشترک frontend، پس از `PSY-5.0`.
+  - [x] PSY-5.1.1 ساخت `@psychology/ui` با Tailwind CSS v4، DaisyUI v5، توکن‌های پایه و یک کامپوننت قابل رندر در SSR.
+  - [x] PSY-5.1.2 اتصال `psychology-site` به بستهٔ مشترک و `@astrojs/react`. رندر همان کامپوننت را از بیلد سایت بررسی کن.
+  - [x] PSY-5.1.3 اتصال `psychology-admin` به بستهٔ مشترک و `@astrojs/react`. رندر همان کامپوننت را از بیلد پنل بررسی کن.
+  - [x] PSY-5.1.4 فعال‌کردن `astro check && tsc --noEmit` با `@astrojs/check` برای هر دو اپ و به‌روزرسانی هردو Dockerfile برای کپی و بیلد `packages/ui`. بیلد و اجرای هر دو تصویر را بررسی کن.
+- [x] PSY-5.2 ساخت `packages/ui/src/template-catalog.ts` برای `minimal` و `clinical` و افزودن توکن‌ها و کامپوننت‌های لازم برای خانه و فرم تنظیمات همراه با تست واحد.
+- [x] PSY-5.3 افزودن Migration `000008_add_site_template_settings`، به‌روزرسانی `internal/settings`، sqlc، OpenAPI و کلاینت تولیدشده. اعتبارسنجی، ثبت نسخهٔ فعال هنگام ذخیره، RLS و ثبت Outbox در تراکنش را آزمون کن.
+- [x] PSY-5.4 ساخت قرارداد، ViewModelها، رجیستری و دو قالب متمایز `minimal` و `clinical`. برابری دقیق شناسه‌ها با کاتالوگ، رندر SSR در `BaseLayout.astro` و fallback امن به `minimal` را آزمون کن.
+- [x] PSY-5.5 اتصال صفحهٔ خانهٔ `/` به دادهٔ عمومی Tenant و ساخت `/preview` با همان رندر، ورودی معتبر ظاهر، `private, no-store` و `noindex, nofollow`. خانه ظاهر منتشرشده را نمایش دهد.
+- [x] PSY-5.6 اتصال `settings.astro` و بخش لازم از `AdminLayout.astro` به UI مشترک. انتخاب قالب و تنظیم رنگ، گردی و مقیاس را با کاتالوگ، پیش‌نمایش قبل از ذخیره و خواندن و ذخیره از API تکمیل کن.
+- [x] PSY-5.7 اجرای بخش مسیر اولیهٔ [آزمون پذیرش `PSY-A12`](ACCEPTANCE.md#psy-a12--جزئیات-آزمون-فاز-۵) روی دو Host و ثبت شواهد در `PROGRESS.md`. ذخیره، رندر خانه، پیش‌نمایش، fallback و اثر Outbox را بررسی کن. موفقیت این آزمون پیش‌نیاز `PSY-5.8` است.
+
+### مهاجرت سایر صفحات پس از اثبات مسیر اولیه
+
+- [x] PSY-5.8 گسترش `packages/ui` و مهاجرت صفحات در تغییرات کوچک با ثبت آزمون هر گروه.
+  - [x] PSY-5.8.1 تکمیل کامپوننت‌های پایه (`Button`، `Card`، `Input`، `Textarea`، `Badge`، `Alert`، `EmptyState`) و تعاملی (`Modal`، `Select`، `Tabs`، `PersianDatePicker`) با آزمون واحد، React Aria و `@internationalized/date`.
+  - [x] PSY-5.8.2 مهاجرت `courses/`، `workshops/` و `blog/` سایت به رندر مشترک با حفظ SSR و بدون JavaScript اضافه روی صفحات محتوایی.
+  - [x] PSY-5.8.3 مهاجرت `account/courses/`، `appointments/` و `booking/` با حفظ `no-store` در پاسخ‌های خصوصی و استفاده از `PersianDatePicker` در رزرو به صورت Astro Island.
+  - [x] PSY-5.8.4 مهاجرت تدریجی `index.astro`، `workshops/`، `courses/`، `blog/`، `media/`، `payments/` و `appointments/` پنل به کامپوننت‌های مشترک و حذف استایل‌های تکراری.
+- [x] PSY-5.9 اجرای کامل `PSY-A12` شامل رگرسیون صفحات محتوایی، RTL، موبایل و تقویم شمسی. نتیجهٔ `make verify-psychology` و `pnpm lint` و شواهد آزمون را در `PROGRESS.md` ثبت کن.
+
+**پایان فاز** — هر مطب می‌تواند قالب خودش را پیش‌نمایش و منتشر کند، سایت و پنل از دیزاین سیستم و کاتالوگ مشترک استفاده می‌کنند و مسیر اولیه و رگرسیون‌ها طبق `PSY-A12` تأیید شده‌اند.

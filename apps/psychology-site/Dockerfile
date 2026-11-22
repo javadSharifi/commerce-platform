@@ -7,10 +7,12 @@ RUN npm install -g pnpm@10.5.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/psychology-api-client ./packages/psychology-api-client
+COPY packages/ui ./packages/ui
 COPY apps/psychology-site ./apps/psychology-site
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @psychology/api-client build
+RUN pnpm --filter @psychology/ui build
 RUN pnpm --filter psychology-site build
 
 FROM node:22-alpine AS runner

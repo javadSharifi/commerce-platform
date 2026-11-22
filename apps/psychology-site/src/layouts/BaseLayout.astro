@@ -1,99 +1,94 @@
 ---
-import { defaultTheme } from '../theme/theme.js';
+import '@psychology/ui/styles/base.css';
+import '../templates/minimal/theme.css';
+import '../templates/clinical/theme.css';
+
+import {
+  DEFAULT_PRIMARY_COLOR,
+  DEFAULT_RADIUS,
+  DEFAULT_SCALE,
+  isValidHexColor,
+  isValidRadius,
+  isValidScale,
+} from '@psychology/ui';
+import { resolveTemplate } from '../templates/registry.js';
+import type { SiteHeaderVM, FooterVM } from '../templates/view-models.js';
 
 interface Props {
   title?: string;
   description?: string;
   primaryColor?: string;
+  templateId?: string | null;
+  themeRadius?: string | null;
+  themeScale?: string | null;
+  hideHeaderFooter?: boolean;
+  robots?: string;
 }
 
 const {
   title = 'مرکز خدمات روان‌شناختی و مشاوره',
   description = 'سامانه تخصصی مشاوره، کارگاه‌ها و آموزش روان‌شناسی',
-  primaryColor = defaultTheme.defaultPrimaryColor,
+  primaryColor,
+  templateId,
+  themeRadius,
+  themeScale,
+  hideHeaderFooter = false,
+  robots,
 } = Astro.props;
+
+const activeTemplate = resolveTemplate(templateId);
+const HeaderComponent = activeTemplate.components.Header;
+const FooterComponent = activeTemplate.components.Footer;
+
+const safePrimaryColor = primaryColor && isValidHexColor(primaryColor) ? primaryColor : DEFAULT_PRIMARY_COLOR;
+const safeRadius = themeRadius && isValidRadius(themeRadius) ? themeRadius : DEFAULT_RADIUS;
+const safeScale = themeScale && isValidScale(themeScale) ? themeScale : DEFAULT_SCALE;
+
+const currentPath = Astro.url?.pathname || '/';
+const headerVM: SiteHeaderVM = {
+  clinicTitle: title,
+  navItems: [
+    { label: 'صفحه اصلی', href: '/', isActive: currentPath === '/' },
+    { label: 'دوره‌ها', href: '/courses', isActive: currentPath.startsWith('/courses') },
+    { label: 'کارگاه‌ها', href: '/workshops', isActive: currentPath.startsWith('/workshops') },
+    { label: 'وبلاگ', href: '/blog', isActive: currentPath.startsWith('/blog') },
+    { label: 'درخواست نوبت', href: '/booking', isActive: currentPath.startsWith('/booking') },
+    { label: 'حساب کاربری', href: '/account/courses', isActive: currentPath.startsWith('/account') },
+  ],
+  primaryAction: {
+    label: 'دریافت نوبت',
+    href: '/booking',
+  },
+};
+
+const footerVM: FooterVM = {
+  clinicName: title,
+  copyrightYear: new Date().toLocaleDateString('fa-IR', { year: 'numeric' }),
+  description,
+};
 ---
 
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html
+  lang="fa"
+  dir="rtl"
+  data-theme={activeTemplate.meta.daisyTheme}
+  data-radius={safeRadius}
+  data-scale={safeScale}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <style define:vars={{ primaryColor, fontFamily: defaultTheme.fontFamily }}>
-      :root {
-        --primary: var(--primaryColor);
-        --font-base: var(--fontFamily);
-      }
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-      body {
-        font-family: var(--font-base);
-        background-color: #f8fafc;
-        color: #1e293b;
-        line-height: 1.6;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-      }
-      a {
-        color: var(--primary);
-        text-decoration: none;
-      }
-      .container {
-        max-width: 1024px;
-        margin: 0 auto;
-        padding: 0 1.5rem;
-        width: 100%;
-      }
-      .btn {
-        display: inline-block;
-        padding: 0.6rem 1.25rem;
-        border-radius: 0.5rem;
-        background-color: var(--primary);
-        color: #ffffff;
-        font-weight: 500;
-        border: none;
-        cursor: pointer;
-        transition: opacity 0.2s ease;
-      }
-      .btn:hover {
-        opacity: 0.9;
-      }
-    </style>
+    {robots && <meta name="robots" content={robots} />}
+    <style is:inline set:html={`:root { --color-primary: ${safePrimaryColor}; }`} />
   </head>
-  <body>
-    <header style="background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 1rem 0;">
-      <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="font-weight: 700; font-size: 1.25rem; color: var(--primary);">
-          {title}
-        </div>
-        <nav style="display: flex; gap: 1.5rem; font-size: 0.95rem;">
-          <a href="/">صفحه اصلی</a>
-          <a href="/courses">دوره‌های آموزشی</a>
-          <a href="/workshops">کارگاه‌ها</a>
-          <a href="/blog">مطالب و مقالات</a>
-          <a href="/booking">درخواست نوبت</a>
-          <a href="/account/courses">دوره‌های من</a>
-        </nav>
-      </div>
-    </header>
-
-    <main style="flex: 1; padding: 2rem 0;">
-      <div class="container">
-        <slot />
-      </div>
+  <body class="min-h-screen flex flex-col bg-base-100 text-base-content font-sans antialiased">
+    {!hideHeaderFooter && <HeaderComponent {...headerVM} />}
+    <main class="flex-1 w-full">
+      <slot />
     </main>
-
-    <footer style="background: #0f172a; color: #94a3b8; padding: 2rem 0; margin-top: auto; border-top: 1px solid #1e293b;">
-      <div class="container" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
-        <div>تمامی حقوق محفوظ است © {new Date().toLocaleDateString('fa-IR', { year: 'numeric' })}</div>
-        <div>پلتفرم اختصاصی سایت‌ساز روان‌شناسان و کلینیک‌ها</div>
-      </div>
-    </footer>
+    {!hideHeaderFooter && <FooterComponent {...footerVM} />}
   </body>
 </html>

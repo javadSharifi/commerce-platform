@@ -11,6 +11,7 @@
 | `01-tenant-scoped-module.md` | ساخت هر endpoint/سرویس که به داده tenant-scoped دست می‌زند (Handler → Service → sqlc → `WithTenantTx`) | P1، P2 |
 | `02-migration-rls.md` | ساخت هر جدول جدید یا تغییر جدول (Migration + `tenant_id` + RLS + Grant) | P1، P2 |
 | `03-tenant-isolation-test.md` | نوشتن تست ایزولاسیون و «تست‌های نگهبان» (RLS روی همه جدول‌ها، نقش دیتابیس) | P1، P2 |
+| `04-ui-and-templates.md` | ساخت یا تغییر کامپوننت‌های `packages/ui`، ریفکتور صفحات سایت/پنل، یا افزودن قالب جدید | `PSY-5` و بعد |
 
 *الگوهای بعدی در فاز مربوط نوشته می‌شوند. Domain Resolver، Outbox و Worker، هدر کش Astro و URL purge در آروان، کامپوننت قالب و `PaymentProvider`.*
 **اگر الگویی برای کارت وجود ندارد، شبیه‌سازی نکن؛ بپرس.**
@@ -30,6 +31,19 @@
 | `github.com/google/uuid` | نوع UUID (مطابق تصمیم‌های پروژه) |
 
 > برای تست‌ها از خود `testing` استفاده کن؛ کتابخانه assertion اضافه نکن.
+
+## کتابخانه‌های فرانت‌اند (از قبل تأییدشده برای `PSY-5`)
+
+فقط این بسته‌های npm بدون پرسیدن مجازند؛ هر بستهٔ دیگر طبق `AGENTS.md` تأیید می‌خواهد:
+
+| بسته | کاربرد |
+| --- | --- |
+| `tailwindcss`، `@tailwindcss/vite` | موتور استایل Utility در زمان Build |
+| `daisyui` (v5) | توکن‌های معنایی، لایه استایل پایه و سیستم `data-theme` |
+| `@astrojs/react`، `react`، `react-dom`، `@types/react`، `@types/react-dom` | رندر کامپوننت‌های `@psychology/ui` و Astro Islands |
+| `@astrojs/check` | بررسی نوع و خطاهای فایل‌های `.astro` در سایت و پنل با `astro check` |
+| `react-aria-components`، `@internationalized/date` | کامپوننت‌های تعاملی Headless و تقویم شمسی استاندارد (RTL + A11y) |
+| `clsx`، `tailwind-merge` | ترکیب ایمن کلاس‌های CSS در `packages/ui` |
 
 ## قراردادهای مشترک
 

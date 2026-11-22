@@ -8,15 +8,24 @@
     "build": "astro build",
     "preview": "astro preview",
     "lint": "node -e \"process.exit(0)\"",
-    "typecheck": "tsc --noEmit",
-    "test": "node -e \"process.exit(0)\""
+    "typecheck": "astro check && tsc --noEmit",
+    "test": "node --test test/ssr-render.test.mjs test/templates.test.mjs test/preview.test.mjs test/acceptance-a12.test.mjs test/content-pages.test.mjs test/interactive-pages.test.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^9.1.2",
-    "astro": "^5.4.2"
+    "@astrojs/react": "^4.4.2",
+    "@psychology/api-client": "workspace:*",
+    "@psychology/ui": "workspace:*",
+    "astro": "^5.4.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^22.13.9",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
     "typescript": "^5.8.2"
   }
 }

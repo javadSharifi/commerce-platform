@@ -1,21 +1,34 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
 
 	"psychology/api/internal/auth"
+	"psychology/api/internal/auth/authdb"
 	"psychology/api/internal/booking"
 	"psychology/api/internal/courses"
+	"psychology/api/internal/domain"
+	"psychology/api/internal/domain/domaindb"
+	"psychology/api/internal/platform/db"
 	"psychology/api/internal/reports"
+	"psychology/api/internal/settings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func setupRouter(authHandler *auth.Handler, bookingHandler *booking.Handler, coursesHandler *courses.Handler, reportsHandler *reports.Handler) http.Handler {
+func setupRouter(
+	authHandler *auth.Handler,
+	bookingHandler *booking.Handler,
+	coursesHandler *courses.Handler,
+	reportsHandler *reports.Handler,
+	settingsHandler *settings.Handler,
+) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -48,6 +61,9 @@ func setupRouter(authHandler *auth.Handler, bookingHandler *booking.Handler, cou
 		if coursesHandler != nil {
 			coursesHandler.MountRoutes(v1)
 		}
+		if settingsHandler != nil {
+			settingsHandler.MountRoutes(v1)
+		}
 	})
 
 	if coursesHandler != nil {
@@ -70,7 +86,34 @@ func main() {
 		port = "8080"
 	}
 
-	router := setupRouter(nil, nil, nil, nil)
+	var (
+		authHandler     *auth.Handler
+		bookingHandler  *booking.Handler
+		coursesHandler  *courses.Handler
+		reportsHandler  *reports.Handler
+		settingsHandler *settings.Handler
+	)
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL != "" {
+		ctx := context.Background()
+		pool, err := pgxpool.New(ctx, dbURL)
+		if err != nil {
+			logger.Error("failed to connect to database", "error", err)
+			os.Exit(1)
+		}
+		defer pool.Close()
+
+		store := db.NewStore(pool)
+		domainResolver := domain.NewResolver(domaindb.New(pool))
+		authService := auth.NewService(authdb.New(pool))
+		authHandler = auth.NewHandler(authService)
+
+		settingsService := settings.NewServiceWithStore(store)
+		settingsHandler = settings.NewHandler(settingsService, domainResolver, authService)
+	}
+
+	router := setupRouter(authHandler, bookingHandler, coursesHandler, reportsHandler, settingsHandler)
 
 	logger.Info("starting psychology API server", "port", port)
 	if err := http.ListenAndServe(":"+port, router); err != nil {

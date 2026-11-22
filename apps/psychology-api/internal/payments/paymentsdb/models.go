@@ -190,6 +190,18 @@ type Membership struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type OutboxEvent struct {
+	ID          pgtype.UUID
+	TenantID    pgtype.UUID
+	EventType   string
+	Payload     []byte
+	Status      string
+	RetryCount  int32
+	LastError   pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	ProcessedAt pgtype.Timestamptz
+}
+
 type PanelIdentity struct {
 	ID           pgtype.UUID
 	Email        string
@@ -259,15 +271,19 @@ type Refund struct {
 }
 
 type SiteSetting struct {
-	TenantID     pgtype.UUID
-	Title        string
-	Description  string
-	Phone        string
-	Address      string
-	PrimaryColor string
-	LogoMediaID  pgtype.UUID
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	TenantID        pgtype.UUID
+	Title           string
+	Description     string
+	Phone           string
+	Address         string
+	PrimaryColor    string
+	LogoMediaID     pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	TemplateID      string
+	TemplateVersion string
+	ThemeRadius     string
+	ThemeScale      string
 }
 
 type Tenant struct {

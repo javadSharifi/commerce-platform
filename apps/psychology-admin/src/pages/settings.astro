@@ -1,96 +1,506 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
+import {
+  TEMPLATE_CATALOG,
+  PRESET_PRIMARY_COLORS,
+  RADIUS_OPTIONS,
+  SCALE_OPTIONS,
+  DEFAULT_PRIMARY_COLOR,
+  DEFAULT_RADIUS,
+  DEFAULT_SCALE,
+} from '@psychology/ui';
+import type { SiteSettingsResponse } from '@psychology/api-client';
 
-// Settings data model representation:
-const settings = {
+const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const publicSiteBase = import.meta.env.PUBLIC_SITE_URL || 'http://localhost:3000';
+const sessionToken = Astro.cookies.get('session_token')?.value;
+
+const defaultSettings: SiteSettingsResponse = {
+  tenant_id: 'default',
   title: 'دکتر مریم علوی - روان‌درمانگر و مشاور خانواده',
   description: 'مرکز تخصصی روان‌درمانی فردی، اضطراب و زوج‌درمانی',
   phone: '۰۲۱-۸۸۸۸۸۸۸۸',
   address: 'تهران، خیابان ولیعصر، بالاتر از میدان ونک',
-  primaryColor: '#0284c7',
+  primary_color: DEFAULT_PRIMARY_COLOR,
+  template_id: 'minimal',
+  template_version: '1.0.0',
+  theme_radius: DEFAULT_RADIUS,
+  theme_scale: DEFAULT_SCALE,
 };
+
+let settings = defaultSettings;
+
+if (sessionToken) {
+  try {
+    const res = await fetch(`${apiBase}/admin/site`, {
+      headers: {
+        Cookie: `session_token=${sessionToken}`,
+        'X-Tenant-ID': Astro.cookies.get('tenant_id')?.value || '',
+        Host: Astro.request.headers.get('host') || 'localhost:3001',
+      },
+      signal: AbortSignal.timeout(1500),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.title) {
+        settings = { ...defaultSettings, ...data };
+      }
+    }
+  } catch {
+    // Keep fallback settings for dev/preview
+  }
+}
 ---
 
-<AdminLayout title="تنظیمات و هویت بصری کلینیک" currentNav="settings">
-  <div class="card" style="max-width: 720px;">
-    <h2 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 1.5rem;">
-      مشخصات و ظاهر وب‌سایت مطب
-    </h2>
-
-    <form style="display: flex; flex-direction: column; gap: 1.25rem;">
+<AdminLayout title="تنظیمات قالب و هویت بصری وب‌سایت" currentNav="settings">
+  <div class="max-w-4xl mx-auto space-y-8" data-public-base={publicSiteBase}>
+    <!-- Header title and summary -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-base-300">
       <div>
-        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-          عنوان وب‌سایت مطب / درمانگر
-        </label>
-        <input
-          type="text"
-          value={settings.title}
-          style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
-          placeholder="مثال: دکتر علوی - روان‌درمانگر"
-        />
+        <h2 class="text-xl font-bold text-base-content">ظاهر و تنظیمات وب‌سایت کلینیک</h2>
+        <p class="text-xs text-base-content/70 mt-1">
+          انتخاب قالب، تم رنگی، گردی گوشه‌ها، مقیاس قلم و مشخصات عمومی مطب
+        </p>
       </div>
 
-      <div>
-        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-          توضیح کوتاه و بیوگرافی معرفی
-        </label>
-        <textarea
-          rows="3"
-          style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-family: inherit;"
-        >{settings.description}</textarea>
+      <div class="flex items-center gap-3">
+        <a
+          id="preview-btn-top"
+          href={`${publicSiteBase}/preview?template=${settings.template_id}&primary=${encodeURIComponent(settings.primary_color)}&radius=${settings.theme_radius}&scale=${settings.theme_scale}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-outline btn-sm gap-2"
+        >
+          <span>👁️ پیش‌نمایش زنده در وب‌سایت</span>
+        </a>
       </div>
+    </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-        <div>
-          <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-            تلفن تماس عمومی
-          </label>
-          <input
-            type="text"
-            value={settings.phone}
-            style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
-            placeholder="۰۲۱..."
-          />
+    <!-- Feedback alerts -->
+    <div id="alert-success" class="alert alert-success hidden text-sm font-medium shadow-xs">
+      <span>✓ تنظیمات با موفقیت ذخیره و منتشر شد. تغییرات بلافاصله در وب‌سایت اعمال شدند.</span>
+    </div>
+
+    <div id="alert-error" class="alert alert-error hidden text-sm font-medium shadow-xs">
+      <span id="alert-error-msg">خطا در ذخیره تنظیمات.</span>
+    </div>
+
+    <form id="settings-form" class="space-y-8">
+      <!-- 1. Template selection section -->
+      <div class="card bg-base-100 border border-base-300 shadow-xs p-6">
+        <div class="mb-4">
+          <h3 class="text-base font-bold text-base-content">۱. انتخاب قالب وب‌سایت</h3>
+          <p class="text-xs text-base-content/70 mt-0.5">
+            قالب بصری مورد نظر خود را از میان طراحی‌های تأییدشده پلتفرم انتخاب کنید.
+          </p>
         </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="template-options">
+          {TEMPLATE_CATALOG.map((tpl) => {
+            const isSelected = settings.template_id === tpl.id;
+            return (
+              <label
+                class={`flex flex-col justify-between p-5 rounded-xl border-2 cursor-pointer transition-all ${
+                  isSelected
+                    ? 'border-primary bg-primary/5 shadow-xs'
+                    : 'border-base-200 hover:border-base-300 bg-base-100'
+                }`}
+              >
+                <div class="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-base text-base-content">{tpl.labelFa}</span>
+                      <span class="badge badge-xs badge-neutral">نسخه {tpl.version}</span>
+                    </div>
+                    <p class="text-xs text-base-content/75 mt-2 leading-relaxed">
+                      {tpl.descriptionFa}
+                    </p>
+                  </div>
+                  <input
+                    type="radio"
+                    name="template_id"
+                    value={tpl.id}
+                    checked={isSelected}
+                    class="radio radio-primary radio-sm mt-1"
+                  />
+                </div>
+                <div class="pt-3 border-t border-base-200/60 flex items-center justify-between text-[11px] text-base-content/60">
+                  <span>تم اختصاصی: {tpl.daisyTheme}</span>
+                  <span class="text-primary font-medium">مشاهده جزئیات &larr;</span>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <!-- 2. Brand Color & Theme Tokens -->
+      <div class="card bg-base-100 border border-base-300 shadow-xs p-6 space-y-6">
         <div>
-          <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-            رنگ اصلی پوسته (برند مطب)
+          <h3 class="text-base font-bold text-base-content">۲. هویت بصری و تم اختصاصی</h3>
+          <p class="text-xs text-base-content/70 mt-0.5">
+            تنظیم رنگ سازمانی برند، انحنای گوشه‌ها و مقیاس اندازه عناصر و نوشته‌ها
+          </p>
+        </div>
+
+        <!-- Color customization -->
+        <div class="space-y-3">
+          <label class="block text-sm font-semibold text-base-content">
+            رنگ اصلی برند (Primary Color)
           </label>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
+
+          <!-- Preset swatches -->
+          <div class="flex flex-wrap gap-2.5" id="preset-colors">
+            {PRESET_PRIMARY_COLORS.map((preset) => (
+              <button
+                type="button"
+                data-color={preset.value}
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-base-300 text-xs text-base-content/85 hover:border-primary transition-colors cursor-pointer bg-base-100"
+              >
+                <span
+                  class="w-4 h-4 rounded-full border border-black/10 inline-block"
+                  style={`background-color: ${preset.value};`}
+                ></span>
+                <span>{preset.labelFa}</span>
+              </button>
+            ))}
+          </div>
+
+          <!-- Custom color input -->
+          <div class="flex items-center gap-3 pt-2 max-w-xs">
             <input
               type="color"
-              value={settings.primaryColor}
-              style="width: 48px; height: 38px; border: 1px solid #cbd5e1; border-radius: 0.375rem; cursor: pointer;"
+              id="color-picker"
+              value={settings.primary_color}
+              class="w-10 h-10 rounded-lg border border-base-300 cursor-pointer p-0.5 bg-base-100"
             />
             <input
               type="text"
-              value={settings.primaryColor}
-              style="flex: 1; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-family: monospace;"
+              id="color-hex"
+              name="primary_color"
+              value={settings.primary_color}
+              class="input input-sm input-bordered flex-1 font-mono text-center text-sm"
+              placeholder="#0284c7"
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-base-200">
+          <!-- Radius options -->
+          <div class="space-y-3">
+            <label class="block text-sm font-semibold text-base-content">
+              انحنای گوشه دکمه‌ها و کادرها (Border Radius)
+            </label>
+            <div class="space-y-2" id="radius-options">
+              {RADIUS_OPTIONS.map((opt) => {
+                const isSelected = settings.theme_radius === opt.value;
+                return (
+                  <label
+                    class={`flex items-center justify-between p-3 rounded-lg border cursor-pointer text-xs transition-colors ${
+                      isSelected
+                        ? 'border-primary bg-primary/5 font-semibold text-primary'
+                        : 'border-base-200 hover:border-base-300 text-base-content/80'
+                    }`}
+                  >
+                    <div class="flex flex-col">
+                      <span>{opt.labelFa}</span>
+                      <span class="text-[11px] text-base-content/60 font-normal">{opt.descriptionFa}</span>
+                    </div>
+                    <input
+                      type="radio"
+                      name="theme_radius"
+                      value={opt.value}
+                      checked={isSelected}
+                      class="radio radio-primary radio-xs"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <!-- Scale options -->
+          <div class="space-y-3">
+            <label class="block text-sm font-semibold text-base-content">
+              مقیاس و اندازه متون و اجزا (UI Scale)
+            </label>
+            <div class="space-y-2" id="scale-options">
+              {SCALE_OPTIONS.map((opt) => {
+                const isSelected = settings.theme_scale === opt.value;
+                return (
+                  <label
+                    class={`flex items-center justify-between p-3 rounded-lg border cursor-pointer text-xs transition-colors ${
+                      isSelected
+                        ? 'border-primary bg-primary/5 font-semibold text-primary'
+                        : 'border-base-200 hover:border-base-300 text-base-content/80'
+                    }`}
+                  >
+                    <div class="flex flex-col">
+                      <span>{opt.labelFa}</span>
+                      <span class="text-[11px] text-base-content/60 font-normal">{opt.descriptionFa}</span>
+                    </div>
+                    <input
+                      type="radio"
+                      name="theme_scale"
+                      value={opt.value}
+                      checked={isSelected}
+                      class="radio radio-primary radio-xs"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. General Clinic Information -->
+      <div class="card bg-base-100 border border-base-300 shadow-xs p-6 space-y-4">
+        <div>
+          <h3 class="text-base font-bold text-base-content">۳. مشخصات عمومی وب‌سایت مطب</h3>
+          <p class="text-xs text-base-content/70 mt-0.5">
+            عناوینی که در هدر، فوتر و صفحه اصلی وب‌سایت به مراجعین نمایش داده می‌شوند.
+          </p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
+            عنوان وب‌سایت مطب / درمانگر
+          </label>
+          <input
+            type="text"
+            name="title"
+            value={settings.title}
+            class="input input-bordered w-full text-sm"
+            placeholder="مثال: دکتر علوی - متخصص روان‌درمانی و مشاوره"
+            required
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
+            توضیحات کوتاه و بیوگرافی معرفی
+          </label>
+          <textarea
+            name="description"
+            rows="3"
+            class="textarea textarea-bordered w-full text-sm font-sans"
+            placeholder="معرفی تخصص‌ها، رویکرد درمانی و سوابق کلینیک..."
+          >{settings.description}</textarea>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
+              تلفن تماس عمومی مطب
+            </label>
+            <input
+              type="text"
+              name="phone"
+              value={settings.phone || ''}
+              class="input input-bordered w-full text-sm"
+              placeholder="۰۲۱-۸۸۸۸۸۸۸۸"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
+              نشانی مطب / کلینیک
+            </label>
+            <input
+              type="text"
+              name="address"
+              value={settings.address || ''}
+              class="input input-bordered w-full text-sm"
+              placeholder="شهر، خیابان..."
             />
           </div>
         </div>
       </div>
 
-      <div>
-        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-          آدرس مطب / کلینیک
-        </label>
-        <input
-          type="text"
-          value={settings.address}
-          style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
-          placeholder="شهر، خیابان..."
-        />
-      </div>
+      <!-- 4. Save and Preview Actions -->
+      <div class="card bg-base-100 border border-base-300 shadow-xs p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="text-xs text-base-content/70 text-center sm:text-start">
+          <span>تغییرات با کلیک بر روی ذخیره بلافاصله در وب‌سایت منتشر و کش بازنشانی می‌شود.</span>
+        </div>
 
-      <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
-        <button
-          type="button"
-          style="padding: 0.7rem 1.5rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer;"
-        >
-          ذخیره تغییرات تنظیمات
-        </button>
+        <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <a
+            id="preview-btn-bottom"
+            href={`${publicSiteBase}/preview?template=${settings.template_id}&primary=${encodeURIComponent(settings.primary_color)}&radius=${settings.theme_radius}&scale=${settings.theme_scale}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-outline btn-md flex-1 sm:flex-initial"
+          >
+            پیش‌نمایش قبل از ذخیره
+          </a>
+
+          <button
+            type="submit"
+            id="save-btn"
+            class="btn btn-primary btn-md flex-1 sm:flex-initial font-semibold"
+          >
+            ذخیره و انتشار تغییرات
+          </button>
+        </div>
       </div>
     </form>
   </div>
+
+  <script>
+    const form = document.getElementById('settings-form') as HTMLFormElement;
+    const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
+    const previewBtnTop = document.getElementById('preview-btn-top') as HTMLAnchorElement;
+    const previewBtnBottom = document.getElementById('preview-btn-bottom') as HTMLAnchorElement;
+    const alertSuccess = document.getElementById('alert-success') as HTMLElement;
+    const alertError = document.getElementById('alert-error') as HTMLElement;
+    const alertErrorMsg = document.getElementById('alert-error-msg') as HTMLElement;
+
+    const colorPicker = document.getElementById('color-picker') as HTMLInputElement;
+    const colorHex = document.getElementById('color-hex') as HTMLInputElement;
+    const container = document.querySelector('[data-public-base]') as HTMLElement;
+    const publicBase = container?.dataset.publicBase || 'http://localhost:3000';
+
+    function getFormValues() {
+      const formData = new FormData(form);
+      const templateId = (formData.get('template_id') as string) || 'minimal';
+      const primaryColor = (formData.get('primary_color') as string) || '#0284c7';
+      const themeRadius = (formData.get('theme_radius') as string) || 'md';
+      const themeScale = (formData.get('theme_scale') as string) || 'md';
+      const title = (formData.get('title') as string) || '';
+      const description = (formData.get('description') as string) || '';
+      const phone = (formData.get('phone') as string) || '';
+      const address = (formData.get('address') as string) || '';
+
+      return {
+        template_id: templateId,
+        primary_color: primaryColor,
+        theme_radius: themeRadius,
+        theme_scale: themeScale,
+        title,
+        description,
+        phone,
+        address,
+      };
+    }
+
+    function updatePreviewLinks() {
+      const vals = getFormValues();
+      const previewUrl = `${publicBase}/preview?template=${vals.template_id}&primary=${encodeURIComponent(vals.primary_color)}&radius=${vals.theme_radius}&scale=${vals.theme_scale}`;
+      if (previewBtnTop) previewBtnTop.href = previewUrl;
+      if (previewBtnBottom) previewBtnBottom.href = previewUrl;
+    }
+
+    // Color synchronization
+    if (colorPicker && colorHex) {
+      colorPicker.addEventListener('input', () => {
+        colorHex.value = colorPicker.value;
+        updatePreviewLinks();
+      });
+
+      colorHex.addEventListener('input', () => {
+        if (/^#[0-9a-fA-F]{6}$/.test(colorHex.value)) {
+          colorPicker.value = colorHex.value;
+        }
+        updatePreviewLinks();
+      });
+    }
+
+    // Preset color buttons
+    document.querySelectorAll('#preset-colors button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const color = (btn as HTMLElement).dataset.color;
+        if (color) {
+          colorPicker.value = color;
+          colorHex.value = color;
+          updatePreviewLinks();
+        }
+      });
+    });
+
+    // Template, radius, scale changes
+    form.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.name === 'template_id') {
+        document.querySelectorAll('#template-options label').forEach((lbl) => {
+          const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
+          if (radio && radio.checked) {
+            lbl.classList.add('border-primary', 'bg-primary/5', 'shadow-xs');
+            lbl.classList.remove('border-base-200');
+          } else {
+            lbl.classList.remove('border-primary', 'bg-primary/5', 'shadow-xs');
+            lbl.classList.add('border-base-200');
+          }
+        });
+      }
+      if (target.name === 'theme_radius') {
+        document.querySelectorAll('#radius-options label').forEach((lbl) => {
+          const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
+          if (radio && radio.checked) {
+            lbl.classList.add('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
+            lbl.classList.remove('border-base-200');
+          } else {
+            lbl.classList.remove('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
+            lbl.classList.add('border-base-200');
+          }
+        });
+      }
+      if (target.name === 'theme_scale') {
+        document.querySelectorAll('#scale-options label').forEach((lbl) => {
+          const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
+          if (radio && radio.checked) {
+            lbl.classList.add('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
+            lbl.classList.remove('border-base-200');
+          } else {
+            lbl.classList.remove('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
+            lbl.classList.add('border-base-200');
+          }
+        });
+      }
+      updatePreviewLinks();
+    });
+
+    // Form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertSuccess.classList.add('hidden');
+      alertError.classList.add('hidden');
+
+      const values = getFormValues();
+
+      if (!/^#[0-9a-fA-F]{6}$/.test(values.primary_color)) {
+        alertErrorMsg.textContent = 'کد رنگ واردشده نامعتبر است. فرمت صحیح: #0284c7';
+        alertError.classList.remove('hidden');
+        return;
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'در حال ذخیره...';
+
+      try {
+        const res = await fetch('/api/admin/site', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(values),
+        });
+
+        if (res.ok) {
+          alertSuccess.classList.remove('hidden');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          const err = await res.json().catch(() => ({ message: 'خطای ناشناخته رخ داد' }));
+          alertErrorMsg.textContent = err.message || 'خطا در ثبت تنظیمات';
+          alertError.classList.remove('hidden');
+        }
+      } catch (err: any) {
+        alertErrorMsg.textContent = 'خطای ارتباط با سرور: ' + (err?.message || 'عدم دسترسی');
+        alertError.classList.remove('hidden');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'ذخیره و انتشار تغییرات';
+      }
+    });
+  </script>
 </AdminLayout>

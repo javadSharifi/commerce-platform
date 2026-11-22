@@ -1,7 +1,12 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { fetchPublicSite } from '../../lib/site.js';
+
+// Edge CDN caching: published public course detail
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
 
 const { slug } = Astro.params;
+const site = await fetchPublicSite(Astro.request);
 
 // Fallback demo course for SSR preview
 const fallbackCourse = {
@@ -10,7 +15,7 @@ const fallbackCourse = {
   slug: slug || 'anxiety-management',
   description: 'در این دوره تخصصی، به صورت کاربردی و گام‌به‌گام با ریشه‌های روانی و فیزیولوژیک استرس آشنا شده و تکنیک‌های استاندارد درمان شناختی رفتاری (CBT) و ذهن‌آگاهی را برای مدیریت موقعیت‌های تنش‌زا فرا می‌گیرید.',
   instructor_name: 'دکتر مریم علوی',
-  price_rials: 12500000, // 1,250,000 Tomans
+  price_rials: 12500000,
   status: 'published',
   lessons: [
     {
@@ -42,11 +47,11 @@ const fallbackCourse = {
 
 let course = fallbackCourse;
 
-const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 try {
   const host = Astro.request.headers.get('host') || 'localhost:3000';
-  const res = await fetch(`${apiBase}/public/courses/${slug}`, {
-    headers: { 'Host': host },
+  const res = await fetch(`${apiBase}/public/courses/${encodeURIComponent(slug || '')}`, {
+    headers: { Host: host },
     signal: AbortSignal.timeout(1000),
   });
   if (res.ok) {
@@ -67,169 +72,180 @@ function formatPriceTomans(rials: number): string {
 
 function formatDuration(seconds: number): string {
   const mins = Math.round(seconds / 60);
-  return `${mins} دقیقه`;
+  return `${mins.toLocaleString('fa-IR')} دقیقه`;
 }
 ---
 
-<BaseLayout title={course.title} description={course.description}>
-  <div style="margin-bottom: 1.5rem;">
-    <a href="/courses" style="font-size: 0.9rem; color: #64748b; display: inline-flex; align-items: center; gap: 0.35rem;">
-      <span>←</span> بازگشت به لیست دوره‌ها
-    </a>
-  </div>
+<BaseLayout
+  title={`${course.title} | ${site.title}`}
+  description={course.description}
+  primaryColor={site.primary_color}
+  templateId={site.template_id}
+  themeRadius={site.theme_radius}
+  themeScale={site.theme_scale}
+>
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6">
+      <a href="/courses" class="text-sm text-base-content/70 hover:text-primary transition-colors inline-flex items-center gap-1.5">
+        <span>&larr;</span> بازگشت به لیست دوره‌ها
+      </a>
+    </div>
 
-  <div style="display: grid; grid-template-columns: 1fr; lg:grid-template-columns: 2fr 1fr; gap: 2rem; align-items: start;">
-    <div style="display: flex; flex-direction: column; gap: 2rem;">
-      <!-- Hero card -->
-      <section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <div style="display: inline-block; padding: 0.25rem 0.75rem; background: #e0f2fe; color: var(--primary); border-radius: 9999px; font-size: 0.85rem; font-weight: 600; margin-bottom: 1rem;">
-          دوره آموزشی ضبط‌شده
-        </div>
-        <h1 style="font-size: 1.85rem; font-weight: 800; color: #0f172a; margin-bottom: 1rem; line-height: 1.35;">
-          {course.title}
-        </h1>
-        <div style="font-size: 1rem; color: #64748b; margin-bottom: 1.5rem;">
-          مدرس و روان‌درمانگر: <strong style="color: #1e293b;">{course.instructor_name}</strong>
-        </div>
-        <p style="font-size: 1.05rem; color: #475569; line-height: 1.8; white-space: pre-line;">
-          {course.description}
-        </p>
-      </section>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+      <div class="lg:col-span-2 flex flex-col gap-6">
+        <!-- Hero section -->
+        <section class="card bg-base-100 border border-base-200 p-6 sm:p-8 rounded-box shadow-xs">
+          <div class="mb-4">
+            <span class="badge badge-primary badge-outline text-xs font-semibold">
+              دوره آموزشی ضبط‌شده
+            </span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold text-base-content mb-4 leading-tight">
+            {course.title}
+          </h1>
+          <div class="text-sm text-base-content/70 mb-6">
+            مدرس و روان‌درمانگر: <strong class="text-base-content">{course.instructor_name}</strong>
+          </div>
+          <p class="text-base text-base-content/80 leading-relaxed whitespace-pre-line">
+            {course.description}
+          </p>
+        </section>
 
-      <!-- Syllabus / Lessons Outline -->
-      <section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <h2 style="font-size: 1.3rem; font-weight: 700; color: #0f172a; margin-bottom: 1.25rem;">
-          سرفصل‌ها و جلسات دوره ({course.lessons.length} جلسه)
-        </h2>
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          {course.lessons.map((lesson) => (
-            <div style="border: 1px solid #f1f5f9; background: #f8fafc; border-radius: 0.75rem; padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-              <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <span style="background: #e2e8f0; color: #475569; font-weight: 700; font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                  {lesson.display_order}
-                </span>
-                <div>
-                  <h3 style="font-size: 1rem; font-weight: 600; color: #1e293b; margin-bottom: 0.2rem;">
-                    {lesson.title}
-                  </h3>
-                  {lesson.description && (
-                    <p style="font-size: 0.85rem; color: #64748b;">{lesson.description}</p>
+        <!-- Syllabus / Lessons Outline -->
+        <section class="card bg-base-100 border border-base-200 p-6 sm:p-8 rounded-box shadow-xs">
+          <h2 class="text-lg sm:text-xl font-bold text-base-content mb-5">
+            سرفصل‌ها و جلسات دوره ({course.lessons.length.toLocaleString('fa-IR')} جلسه)
+          </h2>
+          <div class="flex flex-col gap-3">
+            {course.lessons.map((lesson) => (
+              <div class="border border-base-200 bg-base-200/40 rounded-box p-4 flex justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                  <span class="w-8 h-8 rounded-full bg-base-300 text-base-content font-bold text-xs flex items-center justify-center shrink-0">
+                    {lesson.display_order.toLocaleString('fa-IR')}
+                  </span>
+                  <div>
+                    <h3 class="text-sm sm:text-base font-semibold text-base-content mb-0.5">
+                      {lesson.title}
+                    </h3>
+                    {lesson.description && (
+                      <p class="text-xs text-base-content/70">{lesson.description}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-3 shrink-0">
+                  <span class="text-xs text-base-content/60">
+                    {formatDuration(lesson.duration_seconds)}
+                  </span>
+                  {lesson.is_free_preview ? (
+                    <span class="badge badge-success badge-sm text-xs">
+                      پیش‌نمایش رایگان
+                    </span>
+                  ) : (
+                    <span class="badge badge-ghost badge-sm text-xs">
+                      🔒 قفل
+                    </span>
                   )}
                 </div>
               </div>
+            ))}
+          </div>
+        </section>
+      </div>
 
-              <div style="display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
-                <span style="font-size: 0.85rem; color: #64748b;">
-                  {formatDuration(lesson.duration_seconds)}
-                </span>
-                {lesson.is_free_preview ? (
-                  <span style="background: #dcfce7; color: #15803d; padding: 0.2rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600;">
-                    پیش‌نمایش رایگان
-                  </span>
-                ) : (
-                  <span style="background: #f1f5f9; color: #94a3b8; padding: 0.2rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem;">
-                    🔒 قفل
-                  </span>
-                )}
+      <!-- Sticky Checkout Sidebar -->
+      <aside class="card bg-base-100 border border-base-200 rounded-box p-6 shadow-sm sticky top-6">
+        <div class="mb-5 pb-5 border-b border-base-200">
+          <span class="text-xs text-base-content/70 block mb-1">
+            شهریه ثبت‌نام و دسترسی دائمی:
+          </span>
+          <div class="text-2xl font-black text-primary">
+            {formatPriceTomans(course.price_rials)}
+          </div>
+          <span class="text-xs text-base-content/60 block mt-1">
+            مبلغ بر حسب ریال: {course.price_rials.toLocaleString('fa-IR')} ریال
+          </span>
+        </div>
+
+        <!-- Checkout Container handled by Client JS -->
+        <div id="checkout-root" data-slug={course.slug} data-price-rials={course.price_rials}>
+          <div id="checkout-auth-checking" class="text-center text-base-content/60 text-xs py-4">
+            در حال بررسی وضعیت کاربری...
+          </div>
+
+          <!-- Authenticated State -->
+          <div id="checkout-authed" class="hidden">
+            <div class="alert alert-success text-xs py-2 mb-4">
+              ورود با حساب: <strong id="buyer-phone-display"></strong>
+            </div>
+            <button id="btn-start-checkout" class="btn btn-primary w-full text-sm font-bold">
+              خرید و ثبت‌نام در دوره
+            </button>
+          </div>
+
+          <!-- Unauthenticated OTP Login Form -->
+          <div id="checkout-unauthed" class="hidden">
+            <p class="text-xs text-base-content/80 mb-3">
+              برای خرید دوره و فعال‌سازی دسترسی، شماره موبایل خود را وارد نمایید:
+            </p>
+            <div id="otp-step-phone">
+              <div class="mb-3">
+                <label class="label-text text-xs font-semibold text-base-content block mb-1">
+                  شماره موبایل
+                </label>
+                <input
+                  type="tel"
+                  id="buyer-phone-input"
+                  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                  dir="ltr"
+                  class="input input-bordered w-full text-base-content bg-base-100 text-sm"
+                />
               </div>
+              <button id="btn-send-otp" class="btn btn-primary w-full btn-sm">
+                دریافت کد تأیید ورود
+              </button>
             </div>
-          ))}
+
+            <div id="otp-step-verify" class="hidden">
+              <div class="mb-3">
+                <label class="label-text text-xs font-semibold text-base-content block mb-1">
+                  کد ۵ رقمی ارسال‌شده
+                </label>
+                <input
+                  type="text"
+                  id="buyer-code-input"
+                  placeholder="کد یک‌بارمصرف"
+                  dir="ltr"
+                  maxlength="6"
+                  class="input input-bordered w-full text-base-content bg-base-100 text-center tracking-widest text-sm"
+                />
+              </div>
+              <button id="btn-verify-otp" class="btn btn-primary w-full btn-sm">
+                تأیید و ادامه خرید
+              </button>
+            </div>
+          </div>
+
+          <div id="checkout-msg" class="mt-3 text-xs hidden"></div>
         </div>
-      </section>
+
+        <!-- Value Props -->
+        <div class="mt-6 pt-5 border-t border-base-200 flex flex-col gap-2.5 text-xs text-base-content/70">
+          <div class="flex items-center gap-2">
+            <span class="text-success font-bold">✓</span> دسترسی مادام‌العمر به جلسات و آپدیت‌ها
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-success font-bold">✓</span> فعال‌سازی خودکار و آنی دسترسی پس از پرداخت
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-success font-bold">✓</span> درگاه پرداخت امن بانکی شاپرک (زرین‌پال)
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-success font-bold">✓</span> گارانتی بازگشت وجه طبق قوانین کلینیک
+          </div>
+        </div>
+      </aside>
     </div>
-
-    <!-- Sticky Checkout Sidebar -->
-    <aside style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); position: sticky; top: 1.5rem;">
-      <div style="margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid #f1f5f9;">
-        <span style="font-size: 0.9rem; color: #64748b; display: block; margin-bottom: 0.25rem;">
-          شهریه ثبت‌نام و دریافت آنی:
-        </span>
-        <div style="font-size: 1.6rem; font-weight: 800; color: #0284c7;">
-          {formatPriceTomans(course.price_rials)}
-        </div>
-        <span style="font-size: 0.8rem; color: #94a3b8; display: block; margin-top: 0.25rem;">
-          مبلغ بر حسب ریال: {course.price_rials.toLocaleString('fa-IR')} ریال
-        </span>
-      </div>
-
-      <!-- Checkout Container handled by Client JS -->
-      <div id="checkout-root" data-slug={course.slug} data-price-rials={course.price_rials}>
-        <div id="checkout-auth-checking" style="text-align: center; color: #64748b; font-size: 0.9rem; padding: 1rem 0;">
-          در حال بررسی وضعیت کاربری...
-        </div>
-
-        <!-- Authenticated State -->
-        <div id="checkout-authed" style="display: none;">
-          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem; padding: 0.75rem; font-size: 0.85rem; color: #166534; margin-bottom: 1.25rem;">
-            ورود با حساب: <strong id="buyer-phone-display"></strong>
-          </div>
-          <button id="btn-start-checkout" class="btn" style="width: 100%; font-size: 1rem; padding: 0.75rem; font-weight: 700;">
-            خرید و ثبت‌نام در دوره
-          </button>
-        </div>
-
-        <!-- Unauthenticated OTP Login Form -->
-        <div id="checkout-unauthed" style="display: none;">
-          <p style="font-size: 0.9rem; color: #475569; margin-bottom: 1rem;">
-            برای خرید دوره و فعال‌سازی دسترسی، شماره موبایل خود را وارد نمایید:
-          </p>
-          <div id="otp-step-phone">
-            <div style="margin-bottom: 1rem;">
-              <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
-                شماره موبایل
-              </label>
-              <input
-                type="tel"
-                id="buyer-phone-input"
-                placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-                dir="ltr"
-                style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 1rem;"
-              />
-            </div>
-            <button id="btn-send-otp" class="btn" style="width: 100%; padding: 0.65rem;">
-              دریافت کد تأیید ورود
-            </button>
-          </div>
-
-          <div id="otp-step-verify" style="display: none;">
-            <div style="margin-bottom: 1rem;">
-              <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
-                کد ۵ رقمی ارسال‌شده
-              </label>
-              <input
-                type="text"
-                id="buyer-code-input"
-                placeholder="کد یک‌بارمصرف"
-                dir="ltr"
-                maxlength="6"
-                style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 1.1rem; text-align: center; letter-spacing: 0.25rem;"
-              />
-            </div>
-            <button id="btn-verify-otp" class="btn" style="width: 100%; padding: 0.65rem;">
-              تأیید و ادامه خرید
-            </button>
-          </div>
-        </div>
-
-        <div id="checkout-msg" style="margin-top: 1rem; font-size: 0.85rem; display: none;"></div>
-      </div>
-
-      <!-- Value Props -->
-      <div style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid #f1f5f9; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.85rem; color: #64748b;">
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="color: #10b981;">✓</span> دسترسی مادام‌العمر به جلسات و آپدیت‌ها
-        </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="color: #10b981;">✓</span> فعال‌سازی خودکار و آنی دسترسی پس از پرداخت
-        </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="color: #10b981;">✓</span> درگاه پرداخت امن بانکی شاپرک (زرین‌پال)
-        </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="color: #10b981;">✓</span> گارانتی بازگشت وجه طبق قوانین کلینیک
-        </div>
-      </div>
-    </aside>
   </div>
 </BaseLayout>
 
@@ -255,8 +271,8 @@ function formatDuration(seconds: number): string {
 
     function showMessage(text: string, isError = true) {
       if (!msgEl) return;
-      msgEl.style.display = 'block';
-      msgEl.style.color = isError ? '#dc2626' : '#16a34a';
+      msgEl.classList.remove('hidden', 'text-error', 'text-success');
+      msgEl.classList.add(isError ? 'text-error' : 'text-success');
       msgEl.textContent = text;
     }
 
@@ -265,18 +281,18 @@ function formatDuration(seconds: number): string {
         const res = await fetch('/account/auth/me');
         if (res.ok) {
           const buyer = await res.json();
-          if (checkingEl) checkingEl.style.display = 'none';
-          if (authedEl) authedEl.style.display = 'block';
-          if (unauthedEl) unauthedEl.style.display = 'none';
+          if (checkingEl) checkingEl.classList.add('hidden');
+          if (authedEl) authedEl.classList.remove('hidden');
+          if (unauthedEl) unauthedEl.classList.add('hidden');
           if (phoneDisplay) phoneDisplay.textContent = buyer.phone;
           return;
         }
       } catch {
         // Not logged in
       }
-      if (checkingEl) checkingEl.style.display = 'none';
-      if (authedEl) authedEl.style.display = 'none';
-      if (unauthedEl) unauthedEl.style.display = 'block';
+      if (checkingEl) checkingEl.classList.add('hidden');
+      if (authedEl) authedEl.classList.add('hidden');
+      if (unauthedEl) unauthedEl.classList.remove('hidden');
     }
 
     checkBuyerSession();
@@ -298,8 +314,8 @@ function formatDuration(seconds: number): string {
         const data = await res.json();
         if (res.ok) {
           showMessage('کد تأیید به شماره شما پیامک شد.', false);
-          if (stepPhone) stepPhone.style.display = 'none';
-          if (stepVerify) stepVerify.style.display = 'block';
+          if (stepPhone) stepPhone.classList.add('hidden');
+          if (stepVerify) stepVerify.classList.remove('hidden');
         } else {
           showMessage(data.message || 'خطا در ارسال کد تأیید.');
           btnSendOtp.disabled = false;

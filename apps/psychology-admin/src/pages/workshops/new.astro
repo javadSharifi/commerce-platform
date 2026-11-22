@@ -3,28 +3,28 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 ---
 
 <AdminLayout title="تعریف کارگاه جدید" currentNav="workshops">
-  <div style="max-width: 800px; margin: 0 auto;">
-    <div style="margin-bottom: 1.5rem;">
-      <a href="/workshops" style="color: #64748b; font-size: 0.9rem; text-decoration: none;">
+  <div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+      <a href="/workshops" class="btn btn-ghost btn-xs text-base-content/70">
         ← بازگشت به فهرست کارگاه‌ها
       </a>
-      <h2 style="font-size: 1.35rem; font-weight: 700; color: #0f172a; margin-top: 0.5rem;">
+      <h2 class="text-xl font-bold text-base-content mt-2 mb-1">
         مشخصات کارگاه جدید
       </h2>
-      <p style="color: #64748b; font-size: 0.9rem;">
+      <p class="text-xs text-base-content/70">
         کارگاه پس از ایجاد در وضعیت «پیش‌نویس» قرار می‌گیرد و پس از بررسی نهایی می‌توانید آن را منتشر نمایید.
       </p>
     </div>
 
-    <div class="card">
-      <form id="create-workshop-form" style="display: flex; flex-direction: column; gap: 1.25rem;">
-        <div id="form-error" style="display: none; background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #991b1b; font-size: 0.9rem;"></div>
-        <div id="form-success" style="display: none; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #166534; font-size: 0.9rem;"></div>
+    <div class="card bg-base-100 border border-base-200 rounded-box p-6 sm:p-8 shadow-xs">
+      <form id="create-workshop-form" class="flex flex-col gap-5">
+        <div id="form-error" class="hidden alert alert-error text-xs font-medium"></div>
+        <div id="form-success" class="hidden alert alert-success text-xs font-medium"></div>
 
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
-          <div>
-            <label for="title" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              عنوان کامل کارگاه <span style="color: #ef4444;">*</span>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label for="title" class="block text-xs font-semibold text-base-content/80 mb-1">
+              عنوان کامل کارگاه <span class="text-error">*</span>
             </label>
             <input
               id="title"
@@ -32,12 +32,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               type="text"
               required
               placeholder="مثال: کارگاه خودآگاهی و مدیریت استرس"
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+              class="input input-bordered input-sm w-full"
             />
           </div>
           <div>
-            <label for="slug" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              نامک انگلیسی (Slug) <span style="color: #ef4444;">*</span>
+            <label for="slug" class="block text-xs font-semibold text-base-content/80 mb-1">
+              نامک انگلیسی (Slug) <span class="text-error">*</span>
             </label>
             <input
               id="slug"
@@ -46,15 +46,15 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               dir="ltr"
               required
               placeholder="stress-management-workshop"
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; font-family: monospace;"
+              class="input input-bordered input-sm w-full font-mono text-xs"
             />
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label for="instructor_name" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              نام مدرس / سخنران <span style="color: #ef4444;">*</span>
+            <label for="instructor_name" class="block text-xs font-semibold text-base-content/80 mb-1">
+              نام مدرس / سخنران <span class="text-error">*</span>
             </label>
             <input
               id="instructor_name"
@@ -62,12 +62,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               type="text"
               required
               placeholder="مثال: دکتر مریم علوی"
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+              class="input input-bordered input-sm w-full"
             />
           </div>
           <div>
-            <label for="location" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              محل برگزاری کارگاه <span style="color: #ef4444;">*</span>
+            <label for="location" class="block text-xs font-semibold text-base-content/80 mb-1">
+              محل برگزاری کارگاه <span class="text-error">*</span>
             </label>
             <input
               id="location"
@@ -75,54 +75,54 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               type="text"
               required
               placeholder="مثال: سالن شماره یک کلینیک مهر"
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+              class="input input-bordered input-sm w-full"
             />
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label for="starts_at" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              تاریخ و ساعت شروع <span style="color: #ef4444;">*</span>
+            <label for="starts_at" class="block text-xs font-semibold text-base-content/80 mb-1">
+              تاریخ و ساعت شروع <span class="text-error">*</span>
             </label>
             <input
               id="starts_at"
               name="starts_at"
               type="datetime-local"
               required
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; font-family: inherit;"
+              class="input input-bordered input-sm w-full text-xs font-sans"
             />
           </div>
           <div>
-            <label for="ends_at" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              تاریخ و ساعت پایان <span style="color: #ef4444;">*</span>
+            <label for="ends_at" class="block text-xs font-semibold text-base-content/80 mb-1">
+              تاریخ و ساعت پایان <span class="text-error">*</span>
             </label>
             <input
               id="ends_at"
               name="ends_at"
               type="datetime-local"
               required
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; font-family: inherit;"
+              class="input input-bordered input-sm w-full text-xs font-sans"
             />
           </div>
           <div>
-            <label for="registration_deadline" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              مهلت ثبت‌نام <span style="color: #ef4444;">*</span>
+            <label for="registration_deadline" class="block text-xs font-semibold text-base-content/80 mb-1">
+              مهلت ثبت‌نام <span class="text-error">*</span>
             </label>
             <input
               id="registration_deadline"
               name="registration_deadline"
               type="datetime-local"
               required
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; font-family: inherit;"
+              class="input input-bordered input-sm w-full text-xs font-sans"
             />
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label for="capacity" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              ظرفیت صندلی‌ها (نفر) <span style="color: #ef4444;">*</span>
+            <label for="capacity" class="block text-xs font-semibold text-base-content/80 mb-1">
+              ظرفیت صندلی‌ها (نفر) <span class="text-error">*</span>
             </label>
             <input
               id="capacity"
@@ -131,12 +131,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               min="1"
               value="20"
               required
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+              class="input input-bordered input-sm w-full"
             />
           </div>
           <div>
-            <label for="price_rials" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
-              شهریه ثبت‌نام (ریال) <span style="color: #ef4444;">*</span>
+            <label for="price_rials" class="block text-xs font-semibold text-base-content/80 mb-1">
+              شهریه ثبت‌نام (ریال) <span class="text-error">*</span>
             </label>
             <input
               id="price_rials"
@@ -146,36 +146,32 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               step="10000"
               value="0"
               required
-              style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;"
+              class="input input-bordered input-sm w-full"
             />
-            <span id="price-toman-preview" style="display: block; font-size: 0.85rem; color: #0284c7; margin-top: 0.25rem; font-weight: 600;">
+            <span id="price-toman-preview" class="block text-xs text-primary font-bold mt-1">
               معادل: رایگان
             </span>
           </div>
         </div>
 
         <div>
-          <label for="description" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; color: #334155;">
+          <label for="description" class="block text-xs font-semibold text-base-content/80 mb-1">
             توضیحات، سرفصل‌ها و شرایط شرکت در کارگاه
           </label>
           <textarea
             id="description"
             name="description"
-            rows="5"
+            rows="4"
             placeholder="سرفصل‌های کارگاه، پیش‌نیازها و توضیحات تکمیلی..."
-            style="width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; font-family: inherit;"
+            class="textarea textarea-bordered textarea-sm w-full"
           ></textarea>
         </div>
 
-        <div style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 1rem;">
-          <a href="/workshops" style="padding: 0.7rem 1.25rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; color: #475569; font-weight: 600; text-decoration: none;">
+        <div class="mt-2 flex justify-end gap-3">
+          <a href="/workshops" class="btn btn-ghost btn-sm font-medium">
             انصراف
           </a>
-          <button
-            id="submit-btn"
-            type="submit"
-            style="padding: 0.7rem 1.5rem; background: #0284c7; color: #ffffff; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer;"
-          >
+          <button id="submit-btn" type="submit" class="btn btn-primary btn-sm font-medium">
             ذخیره و ایجاد کارگاه
           </button>
         </div>
@@ -222,8 +218,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (errorBox) errorBox.style.display = 'none';
-        if (successBox) successBox.style.display = 'none';
+        if (errorBox) errorBox.classList.add('hidden');
+        if (successBox) successBox.classList.add('hidden');
 
         const startsAtVal = (document.getElementById('starts_at') as HTMLInputElement).value;
         const endsAtVal = (document.getElementById('ends_at') as HTMLInputElement).value;
@@ -283,13 +279,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
           if (successBox) {
             successBox.textContent = 'کارگاه با موفقیت ایجاد گردید. در حال انتقال...';
-            successBox.style.display = 'block';
+            successBox.classList.remove('hidden');
           }
 
           setTimeout(() => {
             window.location.href = `/workshops/${data.id || ''}`;
           }, 800);
-        } catch (err) {
+        } catch {
           showError('خطا در برقراری ارتباط با سرور.');
           submitBtn.disabled = false;
           submitBtn.textContent = 'ذخیره و ایجاد کارگاه';
@@ -300,7 +296,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     function showError(msg: string) {
       if (errorBox) {
         errorBox.textContent = msg;
-        errorBox.style.display = 'block';
+        errorBox.classList.remove('hidden');
       }
     }
   </script>

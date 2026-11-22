@@ -87,101 +87,100 @@ function formatDatePersian(dateStr?: string | null) {
 ---
 
 <AdminLayout title="مدیریت رسانه‌ها و فضای ذخیره‌سازی" currentNav="media">
-  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+  <div class="flex flex-col gap-6">
     <!-- Storage Quota Header Card -->
-    <div class="card" style="display: flex; flex-direction: column; gap: 1rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div class="card bg-base-100 border border-base-200 rounded-box p-6 shadow-xs flex flex-col gap-4">
+      <div class="flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h2 style="font-size: 1.25rem; font-weight: 700; color: #0f172a;">سهمیه فضای ابری کلینیک</h2>
-          <p style="font-size: 0.9rem; color: #64748b; margin-top: 0.25rem;">
+          <h2 class="text-xl font-bold text-base-content">سهمیه فضای ابری کلینیک</h2>
+          <p class="text-xs text-base-content/70 mt-1">
             میزان مصرف باکت اختصاصی پارس‌پک (سقف ۱۰ گیگابایت برای هر کلینیک)
           </p>
         </div>
-        <div style="display: flex; align-items: baseline; gap: 0.5rem;">
-          <span style="font-size: 1.5rem; font-weight: 800; color: #0284c7;">{usedGiB} گیگابایت</span>
-          <span style="color: #64748b; font-size: 0.95rem;">از {totalGiB} گیگابایت ({percentUsed}٪ مصرف شده)</span>
+        <div class="flex items-baseline gap-2">
+          <span class="text-2xl font-bold text-primary">{usedGiB} گیگابایت</span>
+          <span class="text-xs text-base-content/70">از {totalGiB} گیگابایت ({percentUsed}٪ مصرف شده)</span>
         </div>
       </div>
 
       <!-- Progress bar -->
-      <div style="background: #e2e8f0; height: 10px; border-radius: 9999px; overflow: hidden;">
-        <div
-          style={`background: ${percentUsed > 85 ? '#ef4444' : '#0284c7'}; width: ${Math.max(1, percentUsed)}%; height: 100%; transition: width 0.3s ease;`}
-        ></div>
-      </div>
+      <progress
+        class={`progress w-full ${percentUsed > 85 ? 'progress-error' : 'progress-primary'}`}
+        value={Math.max(1, percentUsed)}
+        max="100"
+      ></progress>
 
-      <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #64748b;">
+      <div class="flex justify-between text-xs text-base-content/60">
         <span>تعداد فایل‌های تأییدشده: {mediaData.items.length} فایل</span>
         <span>فضای آزاد: {(10 - Number(usedGiB)).toFixed(2)} گیگابایت</span>
       </div>
     </div>
 
     <!-- Upload Card -->
-    <div class="card" style="background: #f8fafc; border: 1px dashed #cbd5e1; text-align: center; padding: 2rem 1.5rem;">
-      <h3 style="font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 0.5rem;">
+    <div class="card bg-base-200/50 border border-dashed border-base-300 rounded-box p-8 text-center shadow-xs">
+      <h3 class="text-base font-bold text-base-content mb-1">
         بارگذاری مستقیم فایل رسانه‌ای جدید
       </h3>
-      <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem;">
+      <p class="text-xs text-base-content/70 mb-5">
         تصاویر تا ۵MB (JPEG, PNG, WebP) · صوت بلاگ تا ۳۲MB (MP3) · ویدئو بلاگ تا ۱۲۸MB (MP4)
       </p>
 
-      <div style="display: flex; justify-content: center; gap: 1rem; align-items: center; flex-wrap: wrap;">
+      <div class="flex justify-center gap-4 items-center flex-wrap">
         <input type="file" id="media-file-input" style="display: none;" accept="image/jpeg,image/png,image/webp,audio/mpeg,video/mp4" />
-        <button type="button" id="btn-upload-direct" class="btn-primary">
+        <button type="button" id="btn-upload-direct" class="btn btn-primary btn-sm font-medium">
           📤 انتخاب و بارگذاری فایل به پارس‌پک
         </button>
-        <span id="upload-progress-text" style="font-size: 0.85rem; color: #475569;"></span>
+        <span id="upload-progress-text" class="text-xs text-base-content/80 font-medium"></span>
       </div>
     </div>
 
     <!-- Media Table -->
-    <div class="card" style="padding: 0; overflow-x: auto;">
-      <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+    <div class="card bg-base-100 border border-base-200 rounded-box shadow-xs overflow-x-auto">
+      <table class="table table-zebra w-full text-start text-xs">
         <thead>
-          <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569;">
-            <th style="padding: 1rem 1.25rem;">نام فایل</th>
-            <th style="padding: 1rem 1.25rem;">نوع و پسوند</th>
-            <th style="padding: 1rem 1.25rem;">کلاس دسترسی</th>
-            <th style="padding: 1rem 1.25rem;">حجم</th>
-            <th style="padding: 1rem 1.25rem;">تاریخ بارگذاری</th>
-            <th style="padding: 1rem 1.25rem; text-align: center;">عملیات</th>
+          <tr class="bg-base-200/50 text-base-content/70">
+            <th>نام فایل</th>
+            <th>نوع و پسوند</th>
+            <th>کلاس دسترسی</th>
+            <th>حجم</th>
+            <th>تاریخ بارگذاری</th>
+            <th class="text-center">عملیات</th>
           </tr>
         </thead>
         <tbody>
           {mediaData.items.length === 0 ? (
             <tr>
-              <td colspan="6" style="padding: 3rem; text-align: center; color: #94a3b8;">
+              <td colspan="6" class="py-8 text-center text-base-content/60">
                 هنوز فایلی در کتابخانه رسانه‌ها بارگذاری نشده است.
               </td>
             </tr>
           ) : (
-            mediaData.items.map((item) => (
-              <tr style="border-bottom: 1px solid #f1f5f9;">
-                <td style="padding: 1rem 1.25rem; font-weight: 600; color: #0f172a;">
+            mediaData.items.map((item: any) => (
+              <tr class="hover">
+                <td class="font-bold text-base-content text-sm">
                   {item.original_name}
                 </td>
-                <td style="padding: 1rem 1.25rem; font-family: monospace; color: #64748b; font-size: 0.85rem;">
+                <td class="font-mono text-base-content/70" dir="ltr">
                   {item.mime_type}
                 </td>
-                <td style="padding: 1rem 1.25rem;">
+                <td>
                   <span
-                    style={`display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; background: ${item.access_class === 'public' ? '#e0f2fe' : '#fef3c7'}; color: ${item.access_class === 'public' ? '#0369a1' : '#92400e'};`}
+                    class={`badge ${item.access_class === 'public' ? 'badge-info' : 'badge-warning'} badge-sm font-medium`}
                   >
                     {item.access_class === 'public' ? 'عمومی (بلاگ/سایت)' : 'خصوصی (درس)'}
                   </span>
                 </td>
-                <td style="padding: 1rem 1.25rem; color: #475569;">
+                <td class="text-base-content/80 font-mono">
                   {formatBytes(item.size_bytes)}
                 </td>
-                <td style="padding: 1rem 1.25rem; color: #64748b;">
+                <td class="text-base-content/70">
                   {formatDatePersian(item.created_at)}
                 </td>
-                <td style="padding: 1rem 1.25rem; text-align: center;">
+                <td class="text-center">
                   <button
-                    class="btn-copy-id"
+                    class="btn-copy-id btn btn-ghost btn-xs text-primary font-medium"
                     data-id={item.id}
                     title="کپی شناسه رسانه"
-                    style="padding: 0.3rem 0.6rem; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 0.375rem; cursor: pointer; font-size: 0.8rem;"
                   >
                     📋 کپی ID
                   </button>
@@ -281,23 +280,4 @@ function formatDatePersian(dateStr?: string | null) {
       });
     });
   </script>
-
-  <style>
-    .btn-primary {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: #0284c7;
-      color: #ffffff;
-      padding: 0.55rem 1.25rem;
-      border-radius: 0.5rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      border: none;
-      cursor: pointer;
-    }
-    .btn-primary:hover {
-      background: #0369a1;
-    }
-  </style>
 </AdminLayout>

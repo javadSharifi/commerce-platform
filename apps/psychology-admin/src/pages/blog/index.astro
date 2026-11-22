@@ -75,68 +75,67 @@ function formatDatePersian(dateStr?: string | null) {
 function getStatusBadge(status: BlogPostStatus) {
   switch (status) {
     case 'published':
-      return { text: 'منتشرشده', bg: '#dcfce7', color: '#166534', border: '#bbf7d0' };
+      return { text: 'منتشرشده', badgeClass: 'badge-success' };
     case 'draft':
-      return { text: 'پیش‌نویس', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
+      return { text: 'پیش‌نویس', badgeClass: 'badge-ghost' };
     default:
-      return { text: status, bg: '#f3f4f6', color: '#374151', border: '#e5e7eb' };
+      return { text: status, badgeClass: 'badge-ghost' };
   }
 }
 ---
 
 <AdminLayout title="مدیریت مقالات و بلاگ" currentNav="blog">
-  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+  <div class="flex flex-col gap-6">
     <!-- Top Action Bar -->
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <span style="font-weight: 600; font-size: 0.95rem; color: #475569;">فیلتر وضعیت:</span>
+    <div class="flex justify-between items-center flex-wrap gap-4">
+      <div class="tabs tabs-boxed bg-base-100 p-1 border border-base-200 rounded-lg w-fit">
         <a
           href="/blog"
-          class={`filter-pill ${!statusFilter ? 'active' : ''}`}
+          class={`tab text-xs sm:text-sm font-medium ${!statusFilter ? 'tab-active !bg-primary !text-primary-content' : 'text-base-content/70'}`}
         >
           همه ({fallbackPosts.length})
         </a>
         <a
           href="/blog?status=published"
-          class={`filter-pill ${statusFilter === 'published' ? 'active' : ''}`}
+          class={`tab text-xs sm:text-sm font-medium ${statusFilter === 'published' ? 'tab-active !bg-primary !text-primary-content' : 'text-base-content/70'}`}
         >
           منتشرشده
         </a>
         <a
           href="/blog?status=draft"
-          class={`filter-pill ${statusFilter === 'draft' ? 'active' : ''}`}
+          class={`tab text-xs sm:text-sm font-medium ${statusFilter === 'draft' ? 'tab-active !bg-primary !text-primary-content' : 'text-base-content/70'}`}
         >
           پیش‌نویس
         </a>
       </div>
 
-      <div style="display: flex; gap: 0.75rem;">
-        <a href="/media" class="btn-secondary">
+      <div class="flex gap-2">
+        <a href="/media" class="btn btn-ghost btn-sm text-base-content/80 font-medium">
           📁 کتابخانه رسانه‌ها
         </a>
-        <a href="/blog/new" class="btn-primary">
+        <a href="/blog/new" class="btn btn-primary btn-sm rounded-lg font-medium">
           ✍️ نوشتن مقاله جدید
         </a>
       </div>
     </div>
 
     <!-- Posts Table -->
-    <div class="card" style="padding: 0; overflow-x: auto;">
-      <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+    <div class="card bg-base-100 border border-base-200 rounded-box shadow-xs overflow-x-auto">
+      <table class="table table-zebra w-full text-start text-xs">
         <thead>
-          <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569;">
-            <th style="padding: 1rem 1.25rem;">عنوان مقاله</th>
-            <th style="padding: 1rem 1.25rem;">نامک (Slug)</th>
-            <th style="padding: 1rem 1.25rem;">وضعیت</th>
-            <th style="padding: 1rem 1.25rem;">تاریخ انتشار</th>
-            <th style="padding: 1rem 1.25rem;">تاریخ ایجاد</th>
-            <th style="padding: 1rem 1.25rem; text-align: center;">عملیات</th>
+          <tr class="bg-base-200/50 text-base-content/70">
+            <th>عنوان مقاله</th>
+            <th>نامک (Slug)</th>
+            <th>وضعیت</th>
+            <th>تاریخ انتشار</th>
+            <th>تاریخ ایجاد</th>
+            <th class="text-center">عملیات</th>
           </tr>
         </thead>
         <tbody>
           {posts.length === 0 ? (
             <tr>
-              <td colspan="6" style="padding: 3rem; text-align: center; color: #94a3b8;">
+              <td colspan="6" class="py-8 text-center text-base-content/60">
                 مقاله‌ای با این مشخصات یافت نشد.
               </td>
             </tr>
@@ -144,58 +143,53 @@ function getStatusBadge(status: BlogPostStatus) {
             posts.map((post) => {
               const badge = getStatusBadge(post.status);
               return (
-                <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s ease;">
-                  <td style="padding: 1rem 1.25rem; font-weight: 600; color: #0f172a;">
-                    <a href={`/blog/${post.id}`} style="color: inherit; text-decoration: none;">
+                <tr class="hover">
+                  <td class="font-bold text-base-content text-sm">
+                    <a href={`/blog/${post.id}`} class="hover:text-primary transition-colors">
                       {post.title}
                     </a>
                   </td>
-                  <td style="padding: 1rem 1.25rem; font-family: monospace; color: #64748b; font-size: 0.85rem;">
+                  <td class="font-mono text-base-content/70" dir="ltr">
                     {post.slug}
                   </td>
-                  <td style="padding: 1rem 1.25rem;">
-                    <span
-                      style={`display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; background: ${badge.bg}; color: ${badge.color}; border: 1px solid ${badge.border};`}
-                    >
+                  <td>
+                    <span class={`badge ${badge.badgeClass} badge-sm font-medium`}>
                       {badge.text}
                     </span>
                   </td>
-                  <td style="padding: 1rem 1.25rem; color: #475569;">
+                  <td class="text-base-content/70">
                     {formatDatePersian(post.published_at)}
                   </td>
-                  <td style="padding: 1rem 1.25rem; color: #64748b;">
+                  <td class="text-base-content/70">
                     {formatDatePersian(post.created_at)}
                   </td>
-                  <td style="padding: 1rem 1.25rem; text-align: center;">
-                    <div style="display: flex; gap: 0.4rem; justify-content: center;">
+                  <td class="text-center">
+                    <div class="flex gap-1 justify-center items-center">
                       <a
                         href={`/blog/${post.id}`}
-                        style="padding: 0.3rem 0.6rem; background: #e0f2fe; color: #0369a1; border-radius: 0.375rem; text-decoration: none; font-size: 0.8rem;"
+                        class="btn btn-ghost btn-xs text-primary font-medium"
                       >
                         ویرایش
                       </a>
                       {post.status === 'published' ? (
                         <button
-                          class="action-btn-unpublish"
+                          class="action-btn-unpublish btn btn-warning btn-xs font-medium"
                           data-id={post.id}
-                          style="padding: 0.3rem 0.6rem; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 0.375rem; cursor: pointer; font-size: 0.8rem;"
                         >
                           لغو انتشار
                         </button>
                       ) : (
                         <button
-                          class="action-btn-publish"
+                          class="action-btn-publish btn btn-success btn-xs font-medium"
                           data-id={post.id}
-                          style="padding: 0.3rem 0.6rem; background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; border-radius: 0.375rem; cursor: pointer; font-size: 0.8rem;"
                         >
                           انتشار
                         </button>
                       )}
                       <button
-                        class="action-btn-delete"
+                        class="action-btn-delete btn btn-error btn-outline btn-xs font-medium"
                         data-id={post.id}
                         data-title={post.title}
-                        style="padding: 0.3rem 0.6rem; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; border-radius: 0.375rem; cursor: pointer; font-size: 0.8rem;"
                       >
                         حذف
                       </button>
@@ -211,145 +205,71 @@ function getStatusBadge(status: BlogPostStatus) {
   </div>
 
   <script>
-    const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
-
-    // Publish
     document.querySelectorAll('.action-btn-publish').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         const id = (e.currentTarget as HTMLElement).dataset.id;
-        if (!confirm('آیا از انتشار این مقاله اطمینان دارید؟ پس از انتشار، در سایت عمومی کلینیک قابل مشاهده خواهد بود.')) return;
-
         try {
-          const res = await fetch(`${apiBase}/admin/blog/${id}/publish`, {
+          const res = await fetch(`/admin/blog/${id}/publish`, {
             method: 'POST',
-            headers: {
-              'X-Requested-With': 'XMLHttpRequest',
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
           });
           if (res.ok) {
-            alert('مقاله با موفقیت منتشر شد.');
+            alert('مقاله با موفقیت منتشر شد و بلافاصله به سایت عمومی و سایت‌مپ اضافه گردید.');
             window.location.reload();
           } else {
             const err = await res.json();
-            alert(`خطا در انتشار مقاله: ${err.message || 'مشکلی رخ داد.'}`);
+            alert('خطا در انتشار: ' + (err.message || 'خطا'));
           }
         } catch {
-          alert('خطا در برقراری ارتباط با سرور.');
+          alert('خطای ارتباط با سرور.');
         }
       });
     });
 
-    // Unpublish
     document.querySelectorAll('.action-btn-unpublish').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         const id = (e.currentTarget as HTMLElement).dataset.id;
-        if (!confirm('آیا از لغو انتشار اطمینان دارید؟ مقاله بلافاصله از سایت عمومی و sitemap خارج خواهد شد.')) return;
-
         try {
-          const res = await fetch(`${apiBase}/admin/blog/${id}/unpublish`, {
+          const res = await fetch(`/admin/blog/${id}/unpublish`, {
             method: 'POST',
-            headers: {
-              'X-Requested-With': 'XMLHttpRequest',
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
           });
           if (res.ok) {
-            alert('انتشار مقاله با موفقیت لغو و به وضعیت پیش‌نویس منتقل شد.');
+            alert('مقاله از حالت انتشار خارج شد و از سایت عمومی و سایت‌مپ حذف گردید.');
             window.location.reload();
           } else {
             const err = await res.json();
-            alert(`خطا در لغو انتشار: ${err.message || 'مشکلی رخ داد.'}`);
+            alert('خطا در لغو انتشار: ' + (err.message || 'خطا'));
           }
         } catch {
-          alert('خطا در برقراری ارتباط با سرور.');
+          alert('خطای ارتباط با سرور.');
         }
       });
     });
 
-    // Delete
     document.querySelectorAll('.action-btn-delete').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         const target = e.currentTarget as HTMLElement;
         const id = target.dataset.id;
         const title = target.dataset.title;
-        if (!confirm(`آیا از حذف کامل مقاله "${title}" اطمینان دارید؟ این عملیات غیرقابل بازگشت است.`)) return;
+        if (!confirm(`آیا از حذف مقاله "${title}" اطمینان دارید؟`)) return;
 
         try {
-          const res = await fetch(`${apiBase}/admin/blog/${id}`, {
+          const res = await fetch(`/admin/blog/${id}`, {
             method: 'DELETE',
-            headers: {
-              'X-Requested-With': 'XMLHttpRequest',
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
           });
           if (res.ok) {
             alert('مقاله حذف شد.');
             window.location.reload();
           } else {
             const err = await res.json();
-            alert(`خطا در حذف مقاله: ${err.message || 'مشکلی رخ داد.'}`);
+            alert('خطا در حذف: ' + (err.message || 'خطا'));
           }
         } catch {
-          alert('خطا در برقراری ارتباط با سرور.');
+          alert('خطای ارتباط با سرور.');
         }
       });
     });
   </script>
-
-  <style>
-    .filter-pill {
-      padding: 0.35rem 0.85rem;
-      border-radius: 9999px;
-      font-size: 0.85rem;
-      text-decoration: none;
-      color: #64748b;
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      transition: all 0.15s ease;
-    }
-    .filter-pill:hover {
-      background: #f1f5f9;
-      color: #1e293b;
-    }
-    .filter-pill.active {
-      background: #0284c7;
-      color: #ffffff;
-      border-color: #0284c7;
-      font-weight: 600;
-    }
-    .btn-primary {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: #0284c7;
-      color: #ffffff;
-      padding: 0.55rem 1.25rem;
-      border-radius: 0.5rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      text-decoration: none;
-      transition: background 0.15s ease;
-    }
-    .btn-primary:hover {
-      background: #0369a1;
-    }
-    .btn-secondary {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: #ffffff;
-      color: #334155;
-      border: 1px solid #cbd5e1;
-      padding: 0.55rem 1.25rem;
-      border-radius: 0.5rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      text-decoration: none;
-      transition: background 0.15s ease;
-    }
-    .btn-secondary:hover {
-      background: #f8fafc;
-    }
-  </style>
 </AdminLayout>

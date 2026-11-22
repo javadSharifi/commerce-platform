@@ -188,6 +188,40 @@ func TestOutboxEventsTableRLSAndConstraints(t *testing.T) {
 	}
 }
 
+func TestSiteTemplateSettingsMigration(t *testing.T) {
+	upContentBytes, err := os.ReadFile("000008_add_site_template_settings.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000008_add_site_template_settings.up.sql: %v", err)
+	}
+	upContent := string(upContentBytes)
+
+	requiredColumns := []string{
+		"template_id",
+		"template_version",
+		"theme_radius",
+		"theme_scale",
+	}
+
+	for _, col := range requiredColumns {
+		if !strings.Contains(upContent, col) {
+			t.Errorf("expected 000008 to add column %s", col)
+		}
+	}
+
+	if !strings.Contains(upContent, "CHECK (theme_radius IN ('sm', 'md', 'lg'))") {
+		t.Errorf("000008 missing CHECK constraint for theme_radius")
+	}
+	if !strings.Contains(upContent, "CHECK (theme_scale IN ('sm', 'md', 'lg'))") {
+		t.Errorf("000008 missing CHECK constraint for theme_scale")
+	}
+	if !strings.Contains(upContent, "DEFAULT 'minimal'") {
+		t.Errorf("000008 missing DEFAULT 'minimal' for template_id")
+	}
+	if !strings.Contains(upContent, "DEFAULT '1.0.0'") {
+		t.Errorf("000008 missing DEFAULT '1.0.0' for template_version")
+	}
+}
+
 func TestMigrationUpDownUpLive(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {

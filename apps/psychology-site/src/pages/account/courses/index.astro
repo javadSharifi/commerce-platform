@@ -1,45 +1,57 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { fetchPublicSite } from '../../../lib/site.js';
 
 // Strict private no-store header: buyer courses dashboard
 Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+
+const site = await fetchPublicSite(Astro.request);
 ---
 
-<BaseLayout title="دوره‌های من - پنل کاربری" description="مشاهده و دسترسی به دوره‌های آموزشی خریداری‌شده">
-  <div style="max-width: 900px; margin: 0 auto;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 1rem;">
+<BaseLayout
+  title={`دوره‌های من | ${site.title}`}
+  description="مشاهده و دسترسی به دوره‌های آموزشی خریداری‌شده"
+  primaryColor={site.primary_color}
+  templateId={site.template_id}
+  themeRadius={site.theme_radius}
+  themeScale={site.theme_scale}
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 border-b border-base-200 pb-5">
       <div>
-        <h1 style="font-size: 1.75rem; font-weight: 800; color: #0f172a; margin-bottom: 0.35rem;">
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-base-content mb-1">
           دوره‌های من
         </h1>
-        <p style="font-size: 0.95rem; color: #64748b;">
+        <p class="text-sm text-base-content/70">
           لیست دوره‌های آموزشی خریداری‌شده با امکان تماشا و استریم آنلاین
         </p>
       </div>
-      <div id="buyer-badge" style="display: none; background: #e0f2fe; color: #0369a1; padding: 0.4rem 0.85rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 600;">
+      <div id="buyer-badge" class="hidden items-center gap-2 bg-base-200 text-base-content px-3 py-1.5 rounded-full text-xs font-semibold">
         <span id="buyer-phone-label"></span>
-        <button id="btn-logout" style="background: none; border: none; color: #dc2626; margin-right: 0.5rem; cursor: pointer; font-size: 0.8rem; text-decoration: underline;">خروج</button>
+        <button id="btn-logout" class="text-error hover:underline cursor-pointer text-xs ms-2">خروج</button>
       </div>
     </div>
 
     <!-- State 1: Checking Authentication -->
-    <div id="state-checking" style="text-align: center; padding: 4rem 2rem; color: #64748b;">
-      <div style="display: inline-block; width: 32px; height: 32px; border: 3px solid #cbd5e1; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 1rem;"></div>
-      <p style="font-size: 1rem;">در حال بررسی وضعیت ورود به حساب کاربری...</p>
+    <div id="state-checking" class="text-center py-16 text-base-content/60">
+      <span class="loading loading-spinner loading-lg text-primary mb-3"></span>
+      <p class="text-sm">در حال بررسی وضعیت ورود به حساب کاربری...</p>
     </div>
 
     <!-- State 2: Unauthenticated - Login Form -->
-    <div id="state-unauthed" style="display: none; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2.5rem; max-width: 480px; margin: 2rem auto; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: center;">
-      <div style="font-size: 2.5rem; margin-bottom: 1rem;">🎓</div>
-      <h2 style="font-size: 1.3rem; font-weight: 700; color: #1e293b; margin-bottom: 0.5rem;">ورود به حساب جهت مشاهده دوره‌ها</h2>
-      <p style="font-size: 0.9rem; color: #64748b; margin-bottom: 1.5rem; line-height: 1.6;">
+    <div id="state-unauthed" class="hidden card bg-base-100 border border-base-200 rounded-box p-6 sm:p-8 max-w-md mx-auto shadow-sm text-center my-8">
+      <div class="text-4xl mb-3">🎓</div>
+      <h2 class="text-lg sm:text-xl font-bold text-base-content mb-2">
+        ورود به حساب جهت مشاهده دوره‌ها
+      </h2>
+      <p class="text-xs text-base-content/70 mb-6 leading-relaxed">
         جهت دسترسی به جلسات و تماشای دوره‌های خریداری‌شده، لطفاً با شماره موبایلی که با آن ثبت‌نام کرده‌اید وارد شوید.
       </p>
 
       <!-- Step 1: Phone Input -->
       <div id="login-step-phone">
-        <div style="margin-bottom: 1rem; text-align: right;">
-          <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+        <div class="mb-4 text-start">
+          <label class="label-text text-xs font-semibold text-base-content block mb-1">
             شماره موبایل
           </label>
           <input
@@ -47,18 +59,18 @@ Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate
             id="login-phone-input"
             placeholder="۰۹۱۲۳۴۵۶۷۸۹"
             dir="ltr"
-            style="width: 100%; padding: 0.65rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 1rem; text-align: center;"
+            class="input input-bordered w-full text-base-content bg-base-100 text-center text-sm"
           />
         </div>
-        <button id="btn-login-send-otp" class="btn" style="width: 100%; padding: 0.7rem; font-weight: 600;">
+        <button id="btn-login-send-otp" class="btn btn-primary w-full text-sm font-semibold">
           دریافت کد تأیید ورود
         </button>
       </div>
 
       <!-- Step 2: OTP Verification -->
-      <div id="login-step-verify" style="display: none;">
-        <div style="margin-bottom: 1rem; text-align: right;">
-          <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 0.35rem;">
+      <div id="login-step-verify" class="hidden">
+        <div class="mb-4 text-start">
+          <label class="label-text text-xs font-semibold text-base-content block mb-1">
             کد تأیید ارسال‌شده
           </label>
           <input
@@ -67,55 +79,40 @@ Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate
             placeholder="کد ۵ رقمی"
             dir="ltr"
             maxlength="6"
-            style="width: 100%; padding: 0.65rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 1.2rem; text-align: center; letter-spacing: 0.25rem;"
+            class="input input-bordered w-full text-base-content bg-base-100 text-center tracking-widest text-sm"
           />
         </div>
-        <button id="btn-login-verify-otp" class="btn" style="width: 100%; padding: 0.7rem; font-weight: 600;">
+        <button id="btn-login-verify-otp" class="btn btn-primary w-full text-sm font-semibold">
           ورود و مشاهده دوره‌ها
         </button>
       </div>
 
-      <div id="login-msg" style="margin-top: 1rem; font-size: 0.85rem; display: none;"></div>
+      <div id="login-msg" class="mt-3 text-xs hidden"></div>
     </div>
 
     <!-- State 3: Authenticated - Courses List -->
-    <div id="state-authed" style="display: none;">
+    <div id="state-authed" class="hidden">
       <!-- Empty State -->
-      <div id="courses-empty" style="display: none; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 3rem; text-align: center;">
-        <div style="font-size: 3rem; margin-bottom: 1rem; color: #94a3b8;">📚</div>
-        <h3 style="font-size: 1.2rem; font-weight: 700; color: #1e293b; margin-bottom: 0.5rem;">هنوز در دوره‌ای ثبت‌نام نکرده‌اید</h3>
-        <p style="font-size: 0.95rem; color: #64748b; margin-bottom: 1.5rem;">
+      <div id="courses-empty" class="hidden card bg-base-100 border border-base-200 rounded-box p-10 text-center">
+        <div class="text-4xl text-base-content/40 mb-3">📚</div>
+        <h3 class="text-lg font-bold text-base-content mb-1">هنوز در دوره‌ای ثبت‌نام نکرده‌اید</h3>
+        <p class="text-xs text-base-content/70 mb-5">
           دوره‌های آموزشی ارائه‌شده توسط متخصصین روان‌شناسی را مشاهده و ثبت‌نام کنید.
         </p>
-        <a href="/courses" class="btn" style="padding: 0.65rem 1.5rem;">
-          مشاهده لیست دوره‌های آموزشی
-        </a>
+        <div>
+          <a href="/courses" class="btn btn-primary btn-sm">
+            مشاهده لیست دوره‌های آموزشی
+          </a>
+        </div>
       </div>
 
       <!-- Courses Grid -->
-      <div id="courses-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
-      </div>
+      <div id="courses-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
     </div>
   </div>
 </BaseLayout>
 
-<style>
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-</style>
-
 <script>
-  interface CourseEntitlement {
-    id: string;
-    course_id: string;
-    course_slug?: string;
-    course_title_snapshot: string;
-    price_rials_snapshot: number;
-    status: 'active' | 'revoked';
-    granted_at: string;
-  }
-
   const stateChecking = document.getElementById('state-checking');
   const stateUnauthed = document.getElementById('state-unauthed');
   const stateAuthed = document.getElementById('state-authed');
@@ -131,127 +128,49 @@ Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate
   const btnVerifyOtp = document.getElementById('btn-login-verify-otp') as HTMLButtonElement;
   const loginMsg = document.getElementById('login-msg');
 
-  const coursesEmpty = document.getElementById('courses-empty');
   const coursesGrid = document.getElementById('courses-grid');
+  const coursesEmpty = document.getElementById('courses-empty');
 
   function showLoginMsg(text: string, isError = true) {
     if (!loginMsg) return;
-    loginMsg.style.display = 'block';
-    loginMsg.style.color = isError ? '#dc2626' : '#16a34a';
+    loginMsg.classList.remove('hidden', 'text-error', 'text-success');
+    loginMsg.classList.add(isError ? 'text-error' : 'text-success');
     loginMsg.textContent = text;
   }
 
-  function formatPriceTomans(rials: number): string {
-    if (rials <= 0) return 'رایگان';
-    const tomans = Math.floor(rials / 10);
-    return tomans.toLocaleString('fa-IR') + ' تومان';
-  }
-
-  function formatDateFa(isoString: string): string {
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString('fa-IR', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
-    } catch {
-      return isoString;
-    }
-  }
-
-  async function checkBuyerSession() {
+  async function checkAuth() {
     try {
       const res = await fetch('/account/auth/me');
       if (res.ok) {
         const buyer = await res.json();
-        if (stateChecking) stateChecking.style.display = 'none';
-        if (stateUnauthed) stateUnauthed.style.display = 'none';
-        if (stateAuthed) stateAuthed.style.display = 'block';
-        if (buyerBadge) buyerBadge.style.display = 'inline-flex';
-        if (buyerPhoneLabel) buyerPhoneLabel.textContent = `حساب: ${buyer.phone}`;
+        if (stateChecking) stateChecking.classList.add('hidden');
+        if (stateUnauthed) stateUnauthed.classList.add('hidden');
+        if (stateAuthed) stateAuthed.classList.remove('hidden');
+        if (buyerBadge) {
+          buyerBadge.classList.remove('hidden');
+          buyerBadge.classList.add('flex');
+        }
+        if (buyerPhoneLabel) buyerPhoneLabel.textContent = buyer.phone;
         await loadMyCourses();
         return;
       }
     } catch {
-      // Not logged in
+      // not logged in
     }
-    if (stateChecking) stateChecking.style.display = 'none';
-    if (stateAuthed) stateAuthed.style.display = 'none';
-    if (stateUnauthed) stateUnauthed.style.display = 'block';
-    if (buyerBadge) buyerBadge.style.display = 'none';
+    if (stateChecking) stateChecking.classList.add('hidden');
+    if (stateUnauthed) stateUnauthed.classList.remove('hidden');
+    if (stateAuthed) stateAuthed.classList.add('hidden');
+    if (buyerBadge) buyerBadge.classList.add('hidden');
   }
 
-  async function loadMyCourses() {
-    if (!coursesGrid || !coursesEmpty) return;
-    coursesGrid.innerHTML = '';
+  checkAuth();
+
+  btnLogout?.addEventListener('click', async () => {
     try {
-      const res = await fetch('/account/courses');
-      if (!res.ok) {
-        if (res.status === 401) {
-          await checkBuyerSession();
-          return;
-        }
-        throw new Error('Failed to load courses');
-      }
-      const courses: CourseEntitlement[] = await res.json();
-      if (!courses || courses.length === 0) {
-        coursesEmpty.style.display = 'block';
-        coursesGrid.style.display = 'none';
-        return;
-      }
-
-      coursesEmpty.style.display = 'none';
-      coursesGrid.style.display = 'grid';
-
-      courses.forEach((item) => {
-        const card = document.createElement('div');
-        card.style.background = '#ffffff';
-        card.style.border = '1px solid #e2e8f0';
-        card.style.borderRadius = '1rem';
-        card.style.padding = '1.5rem';
-        card.style.display = 'flex';
-        card.style.flexDirection = 'column';
-        card.style.justifyContent = 'space-between';
-        card.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-
-        const isActive = item.status === 'active';
-        const statusBadge = isActive
-          ? `<span style="background: #dcfce7; color: #15803d; padding: 0.2rem 0.6rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600;">دسترسی فعال</span>`
-          : `<span style="background: #fee2e2; color: #b91c1c; padding: 0.2rem 0.6rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600;">لغوشده / مرجوعی</span>`;
-
-        const actionBtn = isActive
-          ? `<a href="/account/courses/${encodeURIComponent(item.course_id)}" class="btn" style="text-align: center; padding: 0.6rem; font-size: 0.95rem; font-weight: 600;">
-              مشاهده و پخش دوره
-            </a>`
-          : `<button disabled style="width: 100%; padding: 0.6rem; background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; border-radius: 0.5rem; font-size: 0.9rem; cursor: not-allowed;">
-              دسترسی غیرفعال است
-            </button>`;
-
-        card.innerHTML = `
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; margin-bottom: 0.75rem;">
-              <span style="font-size: 0.8rem; color: #64748b;">تاریخ ثبت: ${formatDateFa(item.granted_at)}</span>
-              ${statusBadge}
-            </div>
-            <h3 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 0.75rem; line-height: 1.4;">
-              ${item.course_title_snapshot}
-            </h3>
-            <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem;">
-              مبلغ پرداختی: <span style="font-weight: 600; color: #1e293b;">${formatPriceTomans(item.price_rials_snapshot)}</span>
-            </div>
-          </div>
-          <div>
-            ${actionBtn}
-          </div>
-        `;
-        coursesGrid.appendChild(card);
-      });
-    } catch {
-      coursesEmpty.style.display = 'block';
-      coursesGrid.style.display = 'none';
-    }
-  }
+      await fetch('/account/auth/logout', { method: 'POST' });
+    } catch {}
+    window.location.reload();
+  });
 
   btnSendOtp?.addEventListener('click', async () => {
     const phone = phoneInput?.value.trim();
@@ -269,9 +188,9 @@ Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate
       });
       const data = await res.json();
       if (res.ok) {
-        showLoginMsg('کد تأیید پیامک شد.', false);
-        if (stepPhone) stepPhone.style.display = 'none';
-        if (stepVerify) stepVerify.style.display = 'block';
+        showLoginMsg('کد تأیید به شماره شما پیامک شد.', false);
+        if (stepPhone) stepPhone.classList.add('hidden');
+        if (stepVerify) stepVerify.classList.remove('hidden');
       } else {
         showLoginMsg(data.message || 'خطا در ارسال کد تأیید.');
         btnSendOtp.disabled = false;
@@ -288,11 +207,11 @@ Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate
     const phone = phoneInput?.value.trim();
     const code = codeInput?.value.trim();
     if (!code) {
-      showLoginMsg('لطفاً کد تأیید را وارد نمایید.');
+      showLoginMsg('لطفاً کد ۵ رقمی را وارد نمایید.');
       return;
     }
     btnVerifyOtp.disabled = true;
-    btnVerifyOtp.textContent = 'در حال ورود...';
+    btnVerifyOtp.textContent = 'در حال تأیید...';
     try {
       const res = await fetch('/account/auth/otp/verify', {
         method: 'POST',
@@ -301,28 +220,52 @@ Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate
       });
       const data = await res.json();
       if (res.ok) {
-        showLoginMsg('ورود موفقیت‌آمیز بود.', false);
-        await checkBuyerSession();
+        showLoginMsg('ورود با موفقیت انجام شد.', false);
+        await checkAuth();
       } else {
         showLoginMsg(data.message || 'کد واردشده نامعتبر یا منقضی است.');
         btnVerifyOtp.disabled = false;
         btnVerifyOtp.textContent = 'ورود و مشاهده دوره‌ها';
       }
     } catch {
-      showLoginMsg('خطا در ارتباط با سرور.');
+      showLoginMsg('خطا در برقراری ارتباط با سرور.');
       btnVerifyOtp.disabled = false;
       btnVerifyOtp.textContent = 'ورود و مشاهده دوره‌ها';
     }
   });
 
-  btnLogout?.addEventListener('click', async () => {
+  async function loadMyCourses() {
+    if (!coursesGrid) return;
+    coursesGrid.innerHTML = '';
     try {
-      await fetch('/account/auth/logout', { method: 'POST' });
-    } catch {
-      // Ignore
-    }
-    window.location.reload();
-  });
-
-  checkBuyerSession();
+      const res = await fetch('/account/courses/my');
+      if (res.ok) {
+        const items = await res.json();
+        if (Array.isArray(items) && items.length > 0) {
+          if (coursesEmpty) coursesEmpty.classList.add('hidden');
+          items.forEach((c) => {
+            const card = document.createElement('article');
+            card.className = 'card bg-base-100 border border-base-200 rounded-box p-5 shadow-xs flex flex-col justify-between';
+            card.innerHTML = `
+              <div>
+                <div class="badge badge-success badge-sm text-xs mb-3">دسترسی فعال</div>
+                <h3 class="font-bold text-base text-base-content mb-2 leading-snug">
+                  ${c.title}
+                </h3>
+                <div class="text-xs text-base-content/70 mb-4">مدرس: ${c.instructor_name || 'مرکز روان‌شناسی'}</div>
+              </div>
+              <div class="pt-4 border-t border-base-200">
+                <a href="/account/courses/${c.id}" class="btn btn-primary btn-sm w-full">
+                  ورود به کلاس و پخش آنلاین
+                </a>
+              </div>
+            `;
+            coursesGrid.appendChild(card);
+          });
+          return;
+        }
+      }
+    } catch {}
+    if (coursesEmpty) coursesEmpty.classList.remove('hidden');
+  }
 </script>
