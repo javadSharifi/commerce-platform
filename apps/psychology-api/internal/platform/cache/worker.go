@@ -131,3 +131,26 @@ func (w *OutboxWorker) ProcessBatch(ctx context.Context, batchSize int) (int, er
 
 	return successCount, nil
 }
+
+// Run starts a background loop that processes pending outbox events every interval until ctx is cancelled.
+func (w *OutboxWorker) Run(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 3 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for {
+				n, err := w.ProcessBatch(ctx, 50)
+				if err != nil || n == 0 {
+					break
+				}
+			}
+		}
+	}
+}

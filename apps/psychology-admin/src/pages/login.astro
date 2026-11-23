@@ -1,0 +1,151 @@
+---
+import '@psychology/ui/styles/base.css';
+
+const title = 'ورود به پنل مدیریت مطب';
+
+// If already authenticated, redirect to dashboard
+const sessionToken = Astro.cookies.get('session_token')?.value;
+if (sessionToken) {
+  return Astro.redirect('/');
+}
+
+Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+---
+
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} | سامانه مدیریت روان‌شناسی</title>
+    <meta name="robots" content="noindex, nofollow" />
+  </head>
+  <body class="bg-base-200 text-base-content min-h-screen flex items-center justify-center p-4 font-sans antialiased">
+    <div class="card w-full max-w-md bg-base-100 shadow-xl border border-base-300">
+      <div class="card-body p-6 sm:p-8">
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary text-2xl mb-3 shadow-inner">
+            🔐
+          </div>
+          <h1 class="text-xl font-bold text-base-content">ورود به پنل مدیریت</h1>
+          <p class="text-xs text-base-content/60 mt-1.5">
+            سامانه یکپارچه مدیریت مطب و کلینیک روان‌شناسی
+          </p>
+        </div>
+
+        <div id="login-error-alert" class="alert alert-error text-xs mb-4 hidden py-2.5 px-3">
+          <span id="login-error-text">ایمیل یا رمز عبور اشتباه است.</span>
+        </div>
+
+        <form id="login-form" class="flex flex-col gap-4">
+          <div class="form-control">
+            <label class="label pt-0 pb-1.5" for="email">
+              <span class="label-text text-xs font-medium">پست الکترونیک (ایمیل)</span>
+            </label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="admin@clinic.ir"
+              class="input input-bordered w-full text-xs ltr:text-left focus:input-primary"
+            />
+          </div>
+
+          <div class="form-control">
+            <label class="label pt-0 pb-1.5" for="password">
+              <span class="label-text text-xs font-medium">رمز عبور</span>
+            </label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              autocomplete="current-password"
+              placeholder="••••••••"
+              class="input input-bordered w-full text-xs focus:input-primary"
+            />
+          </div>
+
+          <button
+            type="submit"
+            id="login-submit-btn"
+            class="btn btn-primary w-full mt-2 text-xs font-medium"
+          >
+            ورود به حساب کاربری
+          </button>
+        </form>
+
+        <div class="text-center mt-6 pt-4 border-t border-base-200 text-[11px] text-base-content/50">
+          دسترسی فقط مختص روان‌شناس، مدیر و پرسنل مجاز مطب می‌باشد.
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById('login-form') as HTMLFormElement | null;
+      const emailInput = document.getElementById('email') as HTMLInputElement | null;
+      const passwordInput = document.getElementById('password') as HTMLInputElement | null;
+      const submitBtn = document.getElementById('login-submit-btn') as HTMLButtonElement | null;
+      const errorAlert = document.getElementById('login-error-alert');
+      const errorText = document.getElementById('login-error-text');
+      const apiBase = import.meta.env.PUBLIC_API_URL || '';
+
+      form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (errorAlert) errorAlert.classList.add('hidden');
+
+        const email = emailInput?.value.trim() || '';
+        const password = passwordInput?.value || '';
+
+        if (!email || !password) {
+          if (errorText) errorText.textContent = 'لطفاً ایمیل و رمز عبور را وارد نمایید.';
+          if (errorAlert) errorAlert.classList.remove('hidden');
+          return;
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'در حال بررسی اطلاعات...';
+        }
+
+        try {
+          const loginUrl = apiBase ? `${apiBase}/v1/admin/auth/login` : '/v1/admin/auth/login';
+          const res = await fetch(loginUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+          });
+
+          if (res.ok) {
+            const data = await res.json().catch(() => ({}));
+            if (data?.token) {
+              document.cookie = `session_token=${data.token}; path=/; SameSite=Lax;`;
+            }
+            window.location.href = '/';
+            return;
+          }
+
+          const data = await res.json().catch(() => ({}));
+          if (errorText) {
+            errorText.textContent = data.message || 'ایمیل یا رمز عبور اشتباه است.';
+          }
+          if (errorAlert) errorAlert.classList.remove('hidden');
+        } catch {
+          if (errorText) {
+            errorText.textContent = 'خطا در برقراری ارتباط با سرور.';
+          }
+          if (errorAlert) errorAlert.classList.remove('hidden');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'ورود به حساب کاربری';
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

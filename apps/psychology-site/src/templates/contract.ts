@@ -10,5 +10,6 @@ export interface SiteTemplate {
     CourseCard: AstroComponentFactory;
     WorkshopCard: AstroComponentFactory;
     BlogCard: AstroComponentFactory;
+    Shell?: AstroComponentFactory;
   };
 }

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"psychology/api/internal/auth"
@@ -45,15 +47,34 @@ func fromPgUUID(p pgtype.UUID) uuid.UUID {
 	return u
 }
 
-func (m *mockSettingsQuerier) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (settingsdb.SiteSetting, error) {
+func (m *mockSettingsQuerier) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (settingsdb.GetSiteSettingsRow, error) {
 	s, ok := m.settings[fromPgUUID(tenantID).String()]
 	if !ok {
-		return settingsdb.SiteSetting{}, pgx.ErrNoRows
+		return settingsdb.GetSiteSettingsRow{}, pgx.ErrNoRows
 	}
-	return s, nil
+	paletteID := s.PaletteID
+	if paletteID == "" {
+		paletteID = "calm-sage"
+	}
+	return settingsdb.GetSiteSettingsRow{
+		TenantID:        s.TenantID,
+		Title:           s.Title,
+		Description:     s.Description,
+		Phone:           s.Phone,
+		Address:         s.Address,
+		PrimaryColor:    s.PrimaryColor,
+		LogoMediaID:     s.LogoMediaID,
+		TemplateID:      s.TemplateID,
+		TemplateVersion: s.TemplateVersion,
+		ThemeRadius:     s.ThemeRadius,
+		ThemeScale:      s.ThemeScale,
+		PaletteID:       paletteID,
+		CreatedAt:       s.CreatedAt,
+		UpdatedAt:       s.UpdatedAt,
+	}, nil
 }
 
-func (m *mockSettingsQuerier) UpsertSiteSettings(ctx context.Context, arg settingsdb.UpsertSiteSettingsParams) (settingsdb.SiteSetting, error) {
+func (m *mockSettingsQuerier) UpsertSiteSettings(ctx context.Context, arg settingsdb.UpsertSiteSettingsParams) (settingsdb.UpsertSiteSettingsRow, error) {
 	s := settingsdb.SiteSetting{
 		TenantID:        arg.TenantID,
 		Title:           arg.Title,
@@ -66,9 +87,112 @@ func (m *mockSettingsQuerier) UpsertSiteSettings(ctx context.Context, arg settin
 		TemplateVersion: arg.TemplateVersion,
 		ThemeRadius:     arg.ThemeRadius,
 		ThemeScale:      arg.ThemeScale,
+		PaletteID:       arg.PaletteID,
 	}
 	m.settings[fromPgUUID(arg.TenantID).String()] = s
-	return s, nil
+	return settingsdb.UpsertSiteSettingsRow{
+		TenantID:        s.TenantID,
+		Title:           s.Title,
+		Description:     s.Description,
+		Phone:           s.Phone,
+		Address:         s.Address,
+		PrimaryColor:    s.PrimaryColor,
+		LogoMediaID:     s.LogoMediaID,
+		TemplateID:      s.TemplateID,
+		TemplateVersion: s.TemplateVersion,
+		ThemeRadius:     s.ThemeRadius,
+		ThemeScale:      s.ThemeScale,
+		PaletteID:       s.PaletteID,
+		CreatedAt:       s.CreatedAt,
+		UpdatedAt:       s.UpdatedAt,
+	}, nil
+}
+
+func (m *mockSettingsQuerier) GetSiteAppearance(ctx context.Context, tenantID pgtype.UUID) (settingsdb.GetSiteAppearanceRow, error) {
+	s, ok := m.settings[fromPgUUID(tenantID).String()]
+	if !ok {
+		return settingsdb.GetSiteAppearanceRow{}, pgx.ErrNoRows
+	}
+	paletteID := s.PaletteID
+	if paletteID == "" {
+		paletteID = "calm-sage"
+	}
+	return settingsdb.GetSiteAppearanceRow{
+		TenantID:        s.TenantID,
+		TemplateID:      s.TemplateID,
+		TemplateVersion: s.TemplateVersion,
+		PaletteID:       paletteID,
+		ThemeRadius:     s.ThemeRadius,
+		ThemeScale:      s.ThemeScale,
+		CreatedAt:       s.CreatedAt,
+		UpdatedAt:       s.UpdatedAt,
+	}, nil
+}
+
+func (m *mockSettingsQuerier) UpsertSiteAppearance(ctx context.Context, arg settingsdb.UpsertSiteAppearanceParams) (settingsdb.UpsertSiteAppearanceRow, error) {
+	key := fromPgUUID(arg.TenantID).String()
+	s := m.settings[key]
+	s.TenantID = arg.TenantID
+	s.TemplateID = arg.TemplateID
+	s.TemplateVersion = arg.TemplateVersion
+	s.PaletteID = arg.PaletteID
+	s.ThemeRadius = arg.ThemeRadius
+	s.ThemeScale = arg.ThemeScale
+	m.settings[key] = s
+	return settingsdb.UpsertSiteAppearanceRow{
+		TenantID:        s.TenantID,
+		TemplateID:      s.TemplateID,
+		TemplateVersion: s.TemplateVersion,
+		PaletteID:       s.PaletteID,
+		ThemeRadius:     s.ThemeRadius,
+		ThemeScale:      s.ThemeScale,
+		CreatedAt:       s.CreatedAt,
+		UpdatedAt:       s.UpdatedAt,
+	}, nil
+}
+
+func (m *mockSettingsQuerier) UpsertSiteProfile(ctx context.Context, arg settingsdb.UpsertSiteProfileParams) (settingsdb.UpsertSiteProfileRow, error) {
+	key := fromPgUUID(arg.TenantID).String()
+	s := m.settings[key]
+	s.TenantID = arg.TenantID
+	s.Title = arg.Title
+	s.Description = arg.Description
+	s.Phone = arg.Phone
+	s.Address = arg.Address
+	s.PrimaryColor = arg.PrimaryColor
+	s.LogoMediaID = arg.LogoMediaID
+	if s.TemplateID == "" {
+		s.TemplateID = "minimal"
+	}
+	if s.TemplateVersion == "" {
+		s.TemplateVersion = "1.0.0"
+	}
+	if s.ThemeRadius == "" {
+		s.ThemeRadius = "md"
+	}
+	if s.ThemeScale == "" {
+		s.ThemeScale = "md"
+	}
+	if s.PaletteID == "" {
+		s.PaletteID = "calm-sage"
+	}
+	m.settings[key] = s
+	return settingsdb.UpsertSiteProfileRow{
+		TenantID:        s.TenantID,
+		Title:           s.Title,
+		Description:     s.Description,
+		Phone:           s.Phone,
+		Address:         s.Address,
+		PrimaryColor:    s.PrimaryColor,
+		LogoMediaID:     s.LogoMediaID,
+		TemplateID:      s.TemplateID,
+		TemplateVersion: s.TemplateVersion,
+		ThemeRadius:     s.ThemeRadius,
+		ThemeScale:      s.ThemeScale,
+		PaletteID:       s.PaletteID,
+		CreatedAt:       s.CreatedAt,
+		UpdatedAt:       s.UpdatedAt,
+	}, nil
 }
 
 func (m *mockSettingsQuerier) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (settingsdb.GetPublicSiteProfileRow, error) {
@@ -87,7 +211,12 @@ func (m *mockSettingsQuerier) GetPublicSiteProfile(ctx context.Context, id pgtyp
 			TemplateVersion: "1.0.0",
 			ThemeRadius:     "md",
 			ThemeScale:      "md",
+			PaletteID:       "calm-sage",
 		}, nil
+	}
+	paletteID := s.PaletteID
+	if paletteID == "" {
+		paletteID = "calm-sage"
 	}
 	return settingsdb.GetPublicSiteProfileRow{
 		ClinicName:      clinicName,
@@ -101,6 +230,7 @@ func (m *mockSettingsQuerier) GetPublicSiteProfile(ctx context.Context, id pgtyp
 		TemplateVersion: s.TemplateVersion,
 		ThemeRadius:     s.ThemeRadius,
 		ThemeScale:      s.ThemeScale,
+		PaletteID:       paletteID,
 	}, nil
 }
 
@@ -262,77 +392,84 @@ func TestAdminUpdateSiteSettingsValidationAndIsolation(t *testing.T) {
 	r := chi.NewRouter()
 	handler.MountRoutes(r)
 
-	// 1. Invalid color format -> 400
-	invalidColorBody, _ := json.Marshal(map[string]string{
-		"title":         "کلینیک جدید",
-		"primary_color": "not-a-hex",
-	})
-	reqInvalidColor := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(invalidColorBody))
-	reqInvalidColor.Header.Set("Authorization", "Bearer valid-token-a")
-	reqInvalidColor.Header.Set("X-Tenant-ID", tenantAID.String())
-	reqInvalidColor.Header.Set("Content-Type", "application/json")
-	rrInvalidColor := httptest.NewRecorder()
-	r.ServeHTTP(rrInvalidColor, reqInvalidColor)
-	if rrInvalidColor.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for invalid color, got %d", rrInvalidColor.Code)
+	// 1. Rejection of appearance fields on PUT /admin/site -> 400 APPEARANCE_FIELDS_NOT_ALLOWED
+	appearanceFieldTests := []struct {
+		name string
+		body map[string]string
+	}{
+		{
+			name: "primary_color is rejected",
+			body: map[string]string{
+				"title":         "کلینیک جدید",
+				"primary_color": "#0ea5e9",
+			},
+		},
+		{
+			name: "template_id is rejected",
+			body: map[string]string{
+				"title":       "کلینیک جدید",
+				"template_id": "clinical",
+			},
+		},
+		{
+			name: "palette_id is rejected",
+			body: map[string]string{
+				"title":      "کلینیک جدید",
+				"palette_id": "calm-sage",
+			},
+		},
+		{
+			name: "theme_radius is rejected",
+			body: map[string]string{
+				"title":        "کلینیک جدید",
+				"theme_radius": "lg",
+			},
+		},
+		{
+			name: "theme_scale is rejected",
+			body: map[string]string{
+				"title":       "کلینیک جدید",
+				"theme_scale": "sm",
+			},
+		},
 	}
 
-	// 1.b Invalid template_id -> 400
-	invalidTplBody, _ := json.Marshal(map[string]string{
-		"title":         "کلینیک جدید",
-		"primary_color": "#0ea5e9",
-		"template_id":   "INVALID_CAPS!",
-	})
-	reqInvalidTpl := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(invalidTplBody))
-	reqInvalidTpl.Header.Set("Authorization", "Bearer valid-token-a")
-	reqInvalidTpl.Header.Set("X-Tenant-ID", tenantAID.String())
-	reqInvalidTpl.Header.Set("Content-Type", "application/json")
-	rrInvalidTpl := httptest.NewRecorder()
-	r.ServeHTTP(rrInvalidTpl, reqInvalidTpl)
-	if rrInvalidTpl.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for invalid template_id, got %d", rrInvalidTpl.Code)
+	for _, tc := range appearanceFieldTests {
+		b, _ := json.Marshal(tc.body)
+		req := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(b))
+		req.Header.Set("Authorization", "Bearer valid-token-a")
+		req.Header.Set("X-Tenant-ID", tenantAID.String())
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("[%s] expected 400 Bad Request, got %d: %s", tc.name, rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "APPEARANCE_FIELDS_NOT_ALLOWED") {
+			t.Fatalf("[%s] expected code APPEARANCE_FIELDS_NOT_ALLOWED, got: %s", tc.name, rr.Body.String())
+		}
 	}
 
-	// 1.c Invalid theme_radius -> 400
-	invalidRadiusBody, _ := json.Marshal(map[string]string{
-		"title":         "کلینیک جدید",
-		"primary_color": "#0ea5e9",
-		"theme_radius":  "xl",
+	// 1.b Content validation: empty title -> 400
+	emptyTitleBody, _ := json.Marshal(map[string]string{
+		"title": "",
 	})
-	reqInvalidRadius := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(invalidRadiusBody))
-	reqInvalidRadius.Header.Set("Authorization", "Bearer valid-token-a")
-	reqInvalidRadius.Header.Set("X-Tenant-ID", tenantAID.String())
-	reqInvalidRadius.Header.Set("Content-Type", "application/json")
-	rrInvalidRadius := httptest.NewRecorder()
-	r.ServeHTTP(rrInvalidRadius, reqInvalidRadius)
-	if rrInvalidRadius.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for invalid theme_radius, got %d", rrInvalidRadius.Code)
+	reqEmptyTitle := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(emptyTitleBody))
+	reqEmptyTitle.Header.Set("Authorization", "Bearer valid-token-a")
+	reqEmptyTitle.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqEmptyTitle.Header.Set("Content-Type", "application/json")
+	rrEmptyTitle := httptest.NewRecorder()
+	r.ServeHTTP(rrEmptyTitle, reqEmptyTitle)
+	if rrEmptyTitle.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty title, got %d", rrEmptyTitle.Code)
 	}
 
-	// 1.d Invalid theme_scale -> 400
-	invalidScaleBody, _ := json.Marshal(map[string]string{
-		"title":         "کلینیک جدید",
-		"primary_color": "#0ea5e9",
-		"theme_scale":   "2xl",
-	})
-	reqInvalidScale := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(invalidScaleBody))
-	reqInvalidScale.Header.Set("Authorization", "Bearer valid-token-a")
-	reqInvalidScale.Header.Set("X-Tenant-ID", tenantAID.String())
-	reqInvalidScale.Header.Set("Content-Type", "application/json")
-	rrInvalidScale := httptest.NewRecorder()
-	r.ServeHTTP(rrInvalidScale, reqInvalidScale)
-	if rrInvalidScale.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for invalid theme_scale, got %d", rrInvalidScale.Code)
-	}
-
-	// 2. Valid Update for Tenant A by Owner -> 200
+	// 2. Valid Content Update for Tenant A by Owner -> 200
 	validBody, _ := json.Marshal(map[string]string{
-		"title":         "کلینیک تخصصی مهر",
-		"description":   "روان‌شناسی سلامت",
-		"primary_color": "#0ea5e9",
-		"template_id":   "clinical",
-		"theme_radius":  "lg",
-		"theme_scale":   "sm",
+		"title":       "کلینیک تخصصی مهر",
+		"description": "روان‌شناسی سلامت",
+		"phone":       "02188887777",
+		"address":     "تهران، میدان ونک",
 	})
 	reqValid := httptest.NewRequest(http.MethodPut, "/admin/site", bytes.NewBuffer(validBody))
 	reqValid.Header.Set("Authorization", "Bearer valid-token-a")
@@ -347,13 +484,13 @@ func TestAdminUpdateSiteSettingsValidationAndIsolation(t *testing.T) {
 		t.Fatalf("expected Cache-Control: private, no-store, got %s", rrValid.Header().Get("Cache-Control"))
 	}
 
-	// Verify Tenant A settings are stored with template and active version
+	// Verify Tenant A content settings are stored
 	sA, err := settingsService.GetSettings(context.Background(), tenantAID)
 	if err != nil || sA.Title != "کلینیک تخصصی مهر" {
 		t.Fatalf("expected title 'کلینیک تخصصی مهر', got %v", sA)
 	}
-	if sA.TemplateID != "clinical" || sA.TemplateVersion != "1.0.0" || sA.ThemeRadius != "lg" || sA.ThemeScale != "sm" {
-		t.Fatalf("expected template fields clinical/1.0.0/lg/sm, got %+v", sA)
+	if sA.Description != "روان‌شناسی سلامت" || sA.Phone != "02188887777" || sA.Address != "تهران، میدان ونک" {
+		t.Fatalf("expected content fields updated, got %+v", sA)
 	}
 
 	// 3. User A attempts to update Tenant B -> 403 Forbidden
@@ -423,5 +560,450 @@ func TestServiceWithStore_ErrorPropagation(t *testing.T) {
 	}
 	if spy.calledTenant != tenantID {
 		t.Fatalf("expected tenant %v, got %v", tenantID, spy.calledTenant)
+	}
+}
+
+func TestAdminAppearance_GuardValidationAndIsolation(t *testing.T) {
+	tenantAID := uuid.New()
+	tenantBID := uuid.New()
+	ownerUserID := uuid.New()
+	regularUserID := uuid.New()
+
+	mockSettings := newMockSettingsQuerier()
+	mockAuth := &mockAuthQuerier{
+		identities: map[string]authdb.PanelIdentity{
+			ownerUserID.String(): {
+				ID:       toPgUUID(ownerUserID),
+				Email:    "appearance-owner@platform.ir",
+				FullName: "مالک پلتفرم",
+				Status:   "active",
+			},
+			regularUserID.String(): {
+				ID:       toPgUUID(regularUserID),
+				Email:    "regular-owner@clinic-a.ir",
+				FullName: "پزشک مطب الف",
+				Status:   "active",
+			},
+		},
+		sessions: map[string]authdb.PanelSession{
+			auth.HashToken("token-appearance-owner"): {
+				ID:        toPgUUID(uuid.New()),
+				UserID:    toPgUUID(ownerUserID),
+				TokenHash: auth.HashToken("token-appearance-owner"),
+			},
+			auth.HashToken("token-regular-user"): {
+				ID:        toPgUUID(uuid.New()),
+				UserID:    toPgUUID(regularUserID),
+				TokenHash: auth.HashToken("token-regular-user"),
+			},
+		},
+		memberships: map[string]authdb.Membership{
+			ownerUserID.String() + ":" + tenantAID.String(): {
+				ID:       toPgUUID(uuid.New()),
+				TenantID: toPgUUID(tenantAID),
+				UserID:   toPgUUID(ownerUserID),
+				Role:     "owner",
+			},
+			regularUserID.String() + ":" + tenantAID.String(): {
+				ID:       toPgUUID(uuid.New()),
+				TenantID: toPgUUID(tenantAID),
+				UserID:   toPgUUID(regularUserID),
+				Role:     "owner",
+			},
+		},
+	}
+
+	settingsService := settings.NewService(mockSettings)
+	authService := auth.NewService(mockAuth)
+	handler := settings.NewHandler(settingsService, nil, authService)
+
+	// Set Appearance Owner User ID
+	handler.SetAppearanceOwnerUserID(ownerUserID)
+
+	r := chi.NewRouter()
+	handler.MountRoutes(r)
+
+	// --- GET /admin/site/appearance tests ---
+
+	// 1. Without session -> 401 UNAUTHORIZED
+	reqNoAuth := httptest.NewRequest(http.MethodGet, "/admin/site/appearance", nil)
+	reqNoAuth.Header.Set("X-Tenant-ID", tenantAID.String())
+	rrNoAuth := httptest.NewRecorder()
+	r.ServeHTTP(rrNoAuth, reqNoAuth)
+	if rrNoAuth.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without session, got %d", rrNoAuth.Code)
+	}
+
+	// 2. Without X-Tenant-ID -> 400 MISSING_TENANT
+	reqNoTenant := httptest.NewRequest(http.MethodGet, "/admin/site/appearance", nil)
+	reqNoTenant.Header.Set("Authorization", "Bearer token-appearance-owner")
+	rrNoTenant := httptest.NewRecorder()
+	r.ServeHTTP(rrNoTenant, reqNoTenant)
+	if rrNoTenant.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 without X-Tenant-ID, got %d", rrNoTenant.Code)
+	}
+
+	// 3. User is not a member of Tenant B -> 403 FORBIDDEN
+	reqNotMember := httptest.NewRequest(http.MethodGet, "/admin/site/appearance", nil)
+	reqNotMember.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqNotMember.Header.Set("X-Tenant-ID", tenantBID.String())
+	rrNotMember := httptest.NewRecorder()
+	r.ServeHTTP(rrNotMember, reqNotMember)
+	if rrNotMember.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when not a member of tenant, got %d", rrNotMember.Code)
+	}
+
+	// 4. User is a member of Tenant A, but is NOT the configured appearance owner -> 403 FORBIDDEN
+	reqNotOwner := httptest.NewRequest(http.MethodGet, "/admin/site/appearance", nil)
+	reqNotOwner.Header.Set("Authorization", "Bearer token-regular-user")
+	reqNotOwner.Header.Set("X-Tenant-ID", tenantAID.String())
+	rrNotOwner := httptest.NewRecorder()
+	r.ServeHTTP(rrNotOwner, reqNotOwner)
+	if rrNotOwner.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-appearance owner, got %d", rrNotOwner.Code)
+	}
+
+	// 5. Valid appearance owner -> 200 OK with default appearance
+	reqValidGet := httptest.NewRequest(http.MethodGet, "/admin/site/appearance", nil)
+	reqValidGet.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqValidGet.Header.Set("X-Tenant-ID", tenantAID.String())
+	rrValidGet := httptest.NewRecorder()
+	r.ServeHTTP(rrValidGet, reqValidGet)
+	if rrValidGet.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid appearance owner, got %d: %s", rrValidGet.Code, rrValidGet.Body.String())
+	}
+	if rrValidGet.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("expected Cache-Control: private, no-store, got %q", rrValidGet.Header().Get("Cache-Control"))
+	}
+
+	var initResp map[string]string
+	_ = json.Unmarshal(rrValidGet.Body.Bytes(), &initResp)
+	if initResp["template_id"] != "minimal" || initResp["palette_id"] != "calm-sage" || initResp["theme_radius"] != "md" || initResp["theme_scale"] != "md" {
+		t.Fatalf("expected default appearance fields, got %+v", initResp)
+	}
+
+	// --- PUT /admin/site/appearance tests ---
+
+	// 6. CSRF Detection: Sec-Fetch-Site cross-site -> 403
+	bodyValid, _ := json.Marshal(map[string]string{
+		"template_id": "mobile-app",
+		"palette_id":  "ocean-trust",
+	})
+	reqCSRF := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyValid))
+	reqCSRF.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqCSRF.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqCSRF.Header.Set("Content-Type", "application/json")
+	reqCSRF.Header.Set("Sec-Fetch-Site", "cross-site")
+	rrCSRF := httptest.NewRecorder()
+	r.ServeHTTP(rrCSRF, reqCSRF)
+	if rrCSRF.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 on CSRF cross-site, got %d", rrCSRF.Code)
+	}
+
+	// 7. Invalid Content-Type -> 415
+	reqMediaType := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyValid))
+	reqMediaType.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqMediaType.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqMediaType.Header.Set("Content-Type", "text/plain")
+	rrMediaType := httptest.NewRecorder()
+	r.ServeHTTP(rrMediaType, reqMediaType)
+	if rrMediaType.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected 415 on invalid content-type, got %d", rrMediaType.Code)
+	}
+
+	// 8. Reject template_version (out of contract field) -> 400
+	bodyWithVersion, _ := json.Marshal(map[string]string{
+		"template_id":      "mobile-app",
+		"palette_id":       "ocean-trust",
+		"template_version": "1.0.0",
+	})
+	reqVersion := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyWithVersion))
+	reqVersion.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqVersion.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqVersion.Header.Set("Content-Type", "application/json")
+	rrVersion := httptest.NewRecorder()
+	r.ServeHTTP(rrVersion, reqVersion)
+	if rrVersion.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when sending template_version, got %d: %s", rrVersion.Code, rrVersion.Body.String())
+	}
+
+	// 9. Reject extra out-of-contract field -> 400
+	bodyWithExtra, _ := json.Marshal(map[string]any{
+		"template_id": "mobile-app",
+		"palette_id":  "ocean-trust",
+		"title":       "should be rejected",
+	})
+	reqExtra := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyWithExtra))
+	reqExtra.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqExtra.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqExtra.Header.Set("Content-Type", "application/json")
+	rrExtra := httptest.NewRecorder()
+	r.ServeHTTP(rrExtra, reqExtra)
+	if rrExtra.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when sending unknown field, got %d", rrExtra.Code)
+	}
+
+	// 10. Missing template_id -> 400
+	bodyNoTpl, _ := json.Marshal(map[string]string{
+		"palette_id": "ocean-trust",
+	})
+	reqNoTpl := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyNoTpl))
+	reqNoTpl.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqNoTpl.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqNoTpl.Header.Set("Content-Type", "application/json")
+	rrNoTpl := httptest.NewRecorder()
+	r.ServeHTTP(rrNoTpl, reqNoTpl)
+	if rrNoTpl.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on missing template_id, got %d", rrNoTpl.Code)
+	}
+
+	// 11. Missing palette_id -> 400
+	bodyNoPal, _ := json.Marshal(map[string]string{
+		"template_id": "mobile-app",
+	})
+	reqNoPal := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyNoPal))
+	reqNoPal.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqNoPal.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqNoPal.Header.Set("Content-Type", "application/json")
+	rrNoPal := httptest.NewRecorder()
+	r.ServeHTTP(rrNoPal, reqNoPal)
+	if rrNoPal.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on missing palette_id, got %d", rrNoPal.Code)
+	}
+
+	// 12. Invalid template_id -> 400
+	bodyInvTpl, _ := json.Marshal(map[string]string{
+		"template_id": "nonexistent-template",
+		"palette_id":  "ocean-trust",
+	})
+	reqInvTpl := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyInvTpl))
+	reqInvTpl.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqInvTpl.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqInvTpl.Header.Set("Content-Type", "application/json")
+	rrInvTpl := httptest.NewRecorder()
+	r.ServeHTTP(rrInvTpl, reqInvTpl)
+	if rrInvTpl.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on invalid template_id, got %d", rrInvTpl.Code)
+	}
+
+	// 13. Invalid palette_id -> 400
+	bodyInvPal, _ := json.Marshal(map[string]string{
+		"template_id": "mobile-app",
+		"palette_id":  "neon-pink",
+	})
+	reqInvPal := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyInvPal))
+	reqInvPal.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqInvPal.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqInvPal.Header.Set("Content-Type", "application/json")
+	rrInvPal := httptest.NewRecorder()
+	r.ServeHTTP(rrInvPal, reqInvPal)
+	if rrInvPal.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on invalid palette_id, got %d", rrInvPal.Code)
+	}
+
+	// 14. Invalid theme_radius -> 400
+	bodyInvRad, _ := json.Marshal(map[string]string{
+		"template_id":  "mobile-app",
+		"palette_id":   "ocean-trust",
+		"theme_radius": "xl",
+	})
+	reqInvRad := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyInvRad))
+	reqInvRad.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqInvRad.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqInvRad.Header.Set("Content-Type", "application/json")
+	rrInvRad := httptest.NewRecorder()
+	r.ServeHTTP(rrInvRad, reqInvRad)
+	if rrInvRad.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on invalid theme_radius, got %d", rrInvRad.Code)
+	}
+
+	// 15. Valid PUT appearance: template_id and palette_id, radius and scale omitted -> 200 OK
+	reqValidPut := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyValid))
+	reqValidPut.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqValidPut.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqValidPut.Header.Set("Content-Type", "application/json")
+	rrValidPut := httptest.NewRecorder()
+	r.ServeHTTP(rrValidPut, reqValidPut)
+	if rrValidPut.Code != http.StatusOK {
+		t.Fatalf("expected 200 on valid PUT appearance, got %d: %s", rrValidPut.Code, rrValidPut.Body.String())
+	}
+	if rrValidPut.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("expected Cache-Control: private, no-store, got %q", rrValidPut.Header().Get("Cache-Control"))
+	}
+
+	var putResp map[string]string
+	_ = json.Unmarshal(rrValidPut.Body.Bytes(), &putResp)
+	if putResp["template_id"] != "mobile-app" || putResp["palette_id"] != "ocean-trust" || putResp["theme_radius"] != "md" || putResp["theme_scale"] != "md" {
+		t.Fatalf("unexpected PUT response: %+v", putResp)
+	}
+
+	// 16. Update with specific radius and scale -> 200 OK
+	bodyWithRadScale, _ := json.Marshal(map[string]string{
+		"template_id":  "clinical",
+		"palette_id":   "warm-sand",
+		"theme_radius": "lg",
+		"theme_scale":  "sm",
+	})
+	reqRadScale := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyWithRadScale))
+	reqRadScale.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqRadScale.Header.Set("X-Tenant-ID", tenantAID.String())
+	reqRadScale.Header.Set("Content-Type", "application/json")
+	rrRadScale := httptest.NewRecorder()
+	r.ServeHTTP(rrRadScale, reqRadScale)
+	if rrRadScale.Code != http.StatusOK {
+		t.Fatalf("expected 200 on radius/scale update, got %d: %s", rrRadScale.Code, rrRadScale.Body.String())
+	}
+
+	var radScaleResp map[string]string
+	_ = json.Unmarshal(rrRadScale.Body.Bytes(), &radScaleResp)
+	if radScaleResp["template_id"] != "clinical" || radScaleResp["palette_id"] != "warm-sand" || radScaleResp["theme_radius"] != "lg" || radScaleResp["theme_scale"] != "sm" {
+		t.Fatalf("unexpected radius/scale update response: %+v", radScaleResp)
+	}
+
+	// 17. Verify Subsequent GET reflects updated appearance
+	reqGetUpdated := httptest.NewRequest(http.MethodGet, "/admin/site/appearance", nil)
+	reqGetUpdated.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqGetUpdated.Header.Set("X-Tenant-ID", tenantAID.String())
+	rrGetUpdated := httptest.NewRecorder()
+	r.ServeHTTP(rrGetUpdated, reqGetUpdated)
+	if rrGetUpdated.Code != http.StatusOK {
+		t.Fatalf("expected 200 on subsequent GET, got %d", rrGetUpdated.Code)
+	}
+	var getUpResp map[string]string
+	_ = json.Unmarshal(rrGetUpdated.Body.Bytes(), &getUpResp)
+	if getUpResp["template_id"] != "clinical" || getUpResp["palette_id"] != "warm-sand" || getUpResp["theme_radius"] != "lg" || getUpResp["theme_scale"] != "sm" {
+		t.Fatalf("GET appearance mismatch: %+v", getUpResp)
+	}
+
+	// 18. Cross-tenant isolation on PUT: attempt to update Tenant B without membership -> 403
+	reqCrossPut := httptest.NewRequest(http.MethodPut, "/admin/site/appearance", bytes.NewBuffer(bodyValid))
+	reqCrossPut.Header.Set("Authorization", "Bearer token-appearance-owner")
+	reqCrossPut.Header.Set("X-Tenant-ID", tenantBID.String())
+	reqCrossPut.Header.Set("Content-Type", "application/json")
+	rrCrossPut := httptest.NewRecorder()
+	r.ServeHTTP(rrCrossPut, reqCrossPut)
+	if rrCrossPut.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 on cross-tenant PUT appearance, got %d", rrCrossPut.Code)
+	}
+}
+
+// TestGuard_CatalogAndVersionConsistency verifies PSY-6.5.3:
+// 1. Matches Go active template IDs and versions against packages/ui/src/template-catalog.ts.
+// 2. Matches Go active palette IDs against packages/ui/src/palette-catalog.ts.
+// 3. Verifies OpenAPI contract schemas define palette_id and appearance routes.
+// 4. Verifies rejection of uncatalogued IDs in Go service.
+func TestGuard_CatalogAndVersionConsistency(t *testing.T) {
+	// 1. Verify template-catalog.ts matches Go active templates
+	candidatesTpl := []string{
+		"../../../../packages/ui/src/template-catalog.ts",
+		"../../../packages/ui/src/template-catalog.ts",
+		"packages/ui/src/template-catalog.ts",
+	}
+	var tplContent string
+	for _, c := range candidatesTpl {
+		if data, err := os.ReadFile(c); err == nil {
+			tplContent = string(data)
+			break
+		}
+	}
+	if tplContent == "" {
+		t.Fatalf("could not read template-catalog.ts")
+	}
+
+	expectedTemplates := map[string]string{
+		"minimal":    "1.0.0",
+		"clinical":   "1.0.0",
+		"mobile-app": "1.0.0",
+		"editorial":  "1.0.0",
+	}
+	for id, ver := range expectedTemplates {
+		if !strings.Contains(tplContent, "id: '"+id+"'") {
+			t.Fatalf("template-catalog.ts missing template id %q", id)
+		}
+		if !strings.Contains(tplContent, "version: '"+ver+"'") {
+			t.Fatalf("template-catalog.ts missing template version %q for %q", ver, id)
+		}
+	}
+
+	// 2. Verify palette-catalog.ts matches Go active palettes
+	candidatesPal := []string{
+		"../../../../packages/ui/src/palette-catalog.ts",
+		"../../../packages/ui/src/palette-catalog.ts",
+		"packages/ui/src/palette-catalog.ts",
+	}
+	var palContent string
+	for _, c := range candidatesPal {
+		if data, err := os.ReadFile(c); err == nil {
+			palContent = string(data)
+			break
+		}
+	}
+	if palContent == "" {
+		t.Fatalf("could not read palette-catalog.ts")
+	}
+
+	expectedPalettes := []string{
+		"calm-sage",
+		"ocean-trust",
+		"warm-sand",
+		"royal-plum",
+	}
+	for _, pid := range expectedPalettes {
+		if !strings.Contains(palContent, "id: '"+pid+"'") {
+			t.Fatalf("palette-catalog.ts missing palette id %q", pid)
+		}
+	}
+
+	// 3. Verify OpenAPI contract specifies appearance routes and palette_id
+	candidatesOpenAPI := []string{
+		"../../../../packages/contracts/psychology/openapi.yaml",
+		"../../../packages/contracts/psychology/openapi.yaml",
+		"packages/contracts/psychology/openapi.yaml",
+	}
+	var openapiContent string
+	for _, c := range candidatesOpenAPI {
+		if data, err := os.ReadFile(c); err == nil {
+			openapiContent = string(data)
+			break
+		}
+	}
+	if openapiContent == "" {
+		t.Fatalf("could not read openapi.yaml")
+	}
+
+	requiredOpenAPISnippets := []string{
+		"/admin/site/appearance:",
+		"operationId: getAdminAppearance",
+		"operationId: updateAdminAppearance",
+		"SiteAppearanceResponse:",
+		"UpdateSiteAppearanceRequest:",
+		"palette_id:",
+	}
+	for _, s := range requiredOpenAPISnippets {
+		if !strings.Contains(openapiContent, s) {
+			t.Fatalf("openapi.yaml missing required appearance schema/route snippet: %q", s)
+		}
+	}
+
+	// 4. Verify Go service rejects any uncatalogued template or palette
+	svc := settings.NewService(newMockSettingsQuerier())
+	tenantID := uuid.New()
+
+	// Invalid template
+	_, err := svc.UpdateAppearance(context.Background(), tenantID, settings.UpdateAppearanceParams{
+		TemplateID: "unknown-tpl-404",
+		PaletteID:  "calm-sage",
+	})
+	if !errors.Is(err, settings.ErrInvalidTemplateID) {
+		t.Fatalf("expected ErrInvalidTemplateID for unknown template, got %v", err)
+	}
+
+	// Invalid palette
+	_, err = svc.UpdateAppearance(context.Background(), tenantID, settings.UpdateAppearanceParams{
+		TemplateID: "minimal",
+		PaletteID:  "unknown-palette-404",
+	})
+	if !errors.Is(err, settings.ErrInvalidPaletteID) {
+		t.Fatalf("expected ErrInvalidPaletteID for unknown palette, got %v", err)
 	}
 }

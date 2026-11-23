@@ -22,6 +22,14 @@ export interface SiteHeaderVM {
   };
 }
 
+export interface SiteShellVM {
+  clinicTitle: string;
+  headerVM: SiteHeaderVM;
+  footerVM: FooterVM;
+  currentPath: string;
+  hideHeaderFooter?: boolean;
+}
+
 export interface FooterVM {
   clinicName: string;
   copyrightYear: string;

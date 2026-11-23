@@ -1,0 +1,48 @@
+---
+import type { FooterVM } from '../view-models.js';
+
+interface Props extends FooterVM {}
+
+const { clinicName, copyrightYear, description } = Astro.props;
+---
+
+<footer class="w-full bg-base-200/70 border-t border-base-300 mt-auto transition-colors">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+      <!-- Clinic Brand & Overview -->
+      <div class="space-y-3">
+        <h3 class="text-lg font-bold text-base-content">{clinicName}</h3>
+        {description && (
+          <p class="text-sm text-base-content/75 leading-relaxed">
+            {description}
+          </p>
+        )}
+      </div>
+
+      <!-- Quick Links -->
+      <div class="space-y-2">
+        <h4 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">دسترسی سریع</h4>
+        <ul class="space-y-1.5 text-sm">
+          <li><a href="/courses" class="text-base-content/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">دوره‌های آموزشی</a></li>
+          <li><a href="/workshops" class="text-base-content/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">کارگاه‌های تخصصی</a></li>
+          <li><a href="/blog" class="text-base-content/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">وبلاگ و مقالات</a></li>
+          <li><a href="/booking" class="text-base-content/80 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">درخواست نوبت مشاوره</a></li>
+        </ul>
+      </div>
+
+      <!-- Contact & Trust -->
+      <div class="space-y-2">
+        <h4 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">اطلاعات و پشتیبانی</h4>
+        <p class="text-sm text-base-content/75 leading-relaxed">
+          کلیه خدمات زیر نظر متخصصین دارای پروانه معتبر سازمان نظام روان‌شناسی و مشاوره ارائه می‌شود.
+        </p>
+      </div>
+    </div>
+
+    <!-- Bottom Copyright -->
+    <div class="border-t border-base-300 pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-base-content/60 gap-4">
+      <p>© {copyrightYear} {clinicName}. تمامی حقوق محفوظ است.</p>
+      <p>سامانه تخصصی روان‌شناسی و مشاوره</p>
+    </div>
+  </div>
+</footer>

@@ -1,0 +1,21 @@
+/* Editorial Template Theme (Warm, human-centric, psychologist journal aesthetic - PSY-7.1) */
+[data-theme="editorial"] {
+  color-scheme: light;
+  --font-sans: "Vazirmatn", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-base-100: #faf9f6; /* Warm Alabaster */
+  --color-base-200: #f3efe9; /* Surface Warm */
+  --color-base-300: #eae6df; /* Subtle Outline */
+  --color-base-content: #1e2422; /* Deep Charcoal Ink */
+  --color-primary: #2d4f43; /* Deep Calming Sage Green */
+  --color-primary-content: #ffffff;
+  --color-secondary: #c9825b; /* Muted Terracotta */
+  --color-secondary-content: #ffffff;
+  --color-accent: #e8dfd5; /* Warm Sand */
+  --color-accent-content: #1e2422;
+  --color-neutral: #1e2422;
+  --color-neutral-content: #faf9f6;
+}
+
+[data-theme="editorial"] .editorial-shell {
+  font-family: var(--font-sans);
+}

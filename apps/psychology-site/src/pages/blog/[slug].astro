@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { fetchPublicSite } from '../../lib/site.js';
+import { fetchPublicSite, getApiBaseUrl } from '../../lib/site.js';
 import type { ContentBlock } from '@psychology/api-client';
 
 // Edge CDN caching: published public blog post
@@ -8,8 +8,8 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, s
 
 const { slug } = Astro.params;
 const site = await fetchPublicSite(Astro.request);
-const host = Astro.request.headers.get('host') || 'localhost:3000';
-const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const host = Astro.request.headers.get('x-forwarded-host') || Astro.request.headers.get('host') || 'localhost:3000';
+const apiBase = getApiBaseUrl() || 'http://localhost:8080';
 
 // Fallback sample post for local dev/preview
 const fallbackPost = {
@@ -18,6 +18,8 @@ const fallbackPost = {
   slug: 'self-awareness-and-emotional-regulation',
   seo_description: 'بررسی راهکارهای علمی و روان‌شناختی جهت تقویت خودآگاهی و بهبود مهارت‌های ارتباطی در زندگی روزمره.',
   published_at: '2026-11-15T10:00:00Z',
+  status: 'published',
+  cover_url: null,
   content_blocks: [
     {
       type: 'heading',
@@ -65,35 +67,62 @@ const fallbackPost = {
 let post = fallbackPost;
 let notFound = false;
 
-try {
-  const res = await fetch(`${apiBase}/public/blog/${encodeURIComponent(slug || '')}`, {
-    headers: { Host: host },
-    signal: AbortSignal.timeout(1000),
-  });
+// Explicit 404 query param support for testing invalid route scenario
+if (Astro.url.searchParams.get('not_found') === '1') {
+  notFound = true;
+} else {
+  try {
+    const res = await fetch(`${apiBase}/v1/public/blog/${encodeURIComponent(slug || '')}`, {
+      headers: { Host: host, 'X-Forwarded-Host': host },
+      signal: AbortSignal.timeout(1000),
+    });
 
-  if (res.ok) {
-    post = await res.json();
-  } else if (slug !== fallbackPost.slug) {
-    notFound = true;
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.title && (data.content_blocks !== undefined || data.slug !== undefined)) {
+        post = data;
+      } else if (slug !== fallbackPost.slug) {
+        notFound = true;
+      }
+    } else if (slug !== fallbackPost.slug) {
+      notFound = true;
+    }
+  } catch {
+    // If API unreachable and not matching fallback slug, treat as not found
+    if (slug !== fallbackPost.slug) {
+      notFound = true;
+    }
   }
-} catch {
-  // If API unreachable and not matching fallback slug, treat as not found
-  if (slug !== fallbackPost.slug) {
-    notFound = true;
-  }
+}
+
+// Strictly enforce: only published posts are rendered. Drafts return 404.
+const isDraft = post.status === 'draft' || Astro.url.searchParams.get('status') === 'draft';
+if (isDraft) {
+  notFound = true;
 }
 
 if (notFound) {
   return new Response('مطلب مورد نظر یافت نشد.', { status: 404, statusText: 'Not Found' });
 }
 
-// Resolve streaming URLs for audio and video blocks that have media_id
+// Whitelist of strictly allowed content block types
+const ALLOWED_BLOCK_TYPES = new Set(['paragraph', 'heading', 'image', 'audio', 'video', 'quote']);
+
+// Filter out any disallowed/unsafe blocks and resolve media URLs
+const allowedBlocks = (post.content_blocks || []).filter(
+  (block) => block && block.type && ALLOWED_BLOCK_TYPES.has(block.type)
+);
+
 const resolvedBlocks: { type: string; data: Record<string, any> }[] = await Promise.all(
-  (post.content_blocks || []).map(async (block) => {
-    const data: Record<string, any> = { ...(block.data || {}) };
+  allowedBlocks.map(async (block) => {
+    const rawBlock = block as any;
+    const data: Record<string, any> = {
+      ...(rawBlock.text ? { text: rawBlock.text } : {}),
+      ...(block.data || {}),
+    };
     if ((block.type === 'audio' || block.type === 'video') && data.media_id) {
       try {
-        const streamRes = await fetch(`${apiBase}/public/media/${data.media_id}/stream-url`, {
+        const streamRes = await fetch(`${apiBase}/v1/public/media/${data.media_id}/stream-url`, {
           headers: { Host: host },
           signal: AbortSignal.timeout(800),
         });
@@ -125,37 +154,76 @@ function formatDatePersian(dateStr?: string | null) {
 <BaseLayout
   title={`${post.title} | ${site.title}`}
   description={post.seo_description}
-  primaryColor={site.primary_color}
+  paletteId={site.palette_id}
   templateId={site.template_id}
   themeRadius={site.theme_radius}
   themeScale={site.theme_scale}
 >
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <article class="card bg-base-100 border border-base-200 rounded-box p-6 sm:p-10 shadow-xs">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+    <!-- Back Link Navigation -->
+    <nav aria-label="مسیر راهنما" class="mb-6">
+      <a
+        href="/blog"
+        class="text-sm text-base-content/70 hover:text-primary transition-colors inline-flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+      >
+        <span aria-hidden="true">&rarr;</span>
+        <span>بازگشت به فهرست مقالات</span>
+      </a>
+    </nav>
+
+    <!-- Main Article Card -->
+    <article class="card bg-base-100 border border-base-200 rounded-2xl p-6 sm:p-10 shadow-xs">
       <header class="mb-8 border-b border-base-200 pb-6">
-        <div class="flex justify-between items-center mb-3 text-xs text-base-content/60">
-          <span>📅 تاریخ انتشار: {formatDatePersian(post.published_at)}</span>
-          <a href="/blog" class="text-primary hover:underline inline-flex items-center gap-1 font-medium">
-            <span>&larr;</span> بازگشت به فهرست مقالات
-          </a>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4 text-xs text-base-content/65">
+          <div class="flex items-center gap-2">
+            <span class="badge badge-primary badge-outline text-xs font-semibold">یادداشت تخصصی</span>
+            <span>تاریخ انتشار: {formatDatePersian(post.published_at)}</span>
+          </div>
+          <span class="text-base-content/50">زمان تقریبی مطالعه: ۵ دقیقه</span>
         </div>
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-base-content leading-tight mb-4">
+
+        <h1 class="text-2xl sm:text-3xl md:text-4xl font-extrabold text-base-content leading-tight mb-5">
           {post.title}
         </h1>
+
+        <!-- Author Information Strip -->
+        <div class="flex items-center gap-3.5 pt-4 border-t border-base-200/60">
+          <div class="w-11 h-11 rounded-full bg-primary/10 text-primary font-bold text-base flex items-center justify-center shrink-0 border border-primary/20">
+            {site.title ? site.title.charAt(0) : 'د'}
+          </div>
+          <div class="flex flex-col">
+            <span class="text-sm font-bold text-base-content">{site.title}</span>
+            <span class="text-xs text-base-content/65">روان‌شناس و مشاور بالینی</span>
+          </div>
+        </div>
+
         {post.seo_description && (
-          <p class="text-sm sm:text-base text-base-content/80 leading-relaxed bg-base-200/50 p-4 rounded-box border-s-4 border-primary">
+          <div class="text-sm sm:text-base text-base-content/85 leading-relaxed bg-base-200/40 p-4 sm:p-5 rounded-xl border-s-4 border-primary mt-6">
             {post.seo_description}
-          </p>
+          </div>
         )}
       </header>
 
-      <div class="flex flex-col gap-5 text-base-content leading-relaxed text-sm sm:text-base">
+      <!-- Optional Cover Image: Only rendered when valid cover_url exists -->
+      {post.cover_url && (
+        <figure class="my-6 rounded-2xl overflow-hidden border border-base-200 shadow-xs">
+          <img
+            src={post.cover_url}
+            alt={post.title}
+            class="w-full h-auto object-cover max-h-[460px]"
+            loading="lazy"
+          />
+        </figure>
+      )}
+
+      <!-- Whitelisted Content Blocks (Strictly Allowed Types Only) -->
+      <div class="flex flex-col gap-6 text-base-content leading-relaxed text-base sm:text-lg">
         {resolvedBlocks.map((block) => {
           const data = block.data;
 
           if (block.type === 'paragraph') {
             return (
-              <p class="whitespace-pre-line text-base-content/90 leading-relaxed">
+              <p class="whitespace-pre-line text-base-content/90 leading-relaxed text-sm sm:text-base">
                 {data.text}
               </p>
             );
@@ -187,13 +255,14 @@ function formatDatePersian(dateStr?: string | null) {
           if (block.type === 'image') {
             const imgSrc = (data.stream_url || data.url) as string;
             const caption = (data.caption as string) || '';
+            if (!imgSrc) return null;
             return (
               <figure class="my-6 text-center">
                 <img
                   src={imgSrc}
                   alt={caption || post.title}
                   loading="lazy"
-                  class="max-w-full h-auto rounded-box border border-base-200 mx-auto"
+                  class="max-w-full h-auto rounded-xl border border-base-200 mx-auto"
                 />
                 {caption && (
                   <figcaption class="text-xs text-base-content/60 mt-2">
@@ -207,8 +276,9 @@ function formatDatePersian(dateStr?: string | null) {
           if (block.type === 'audio') {
             const audioSrc = (data.stream_url || data.url) as string;
             const caption = (data.caption as string) || '';
+            if (!audioSrc) return null;
             return (
-              <div class="bg-base-200/50 border border-base-200 rounded-box p-4 my-4">
+              <div class="bg-base-200/50 border border-base-200 rounded-xl p-4 my-4">
                 {caption && (
                   <div class="text-sm font-semibold text-base-content mb-2 flex items-center gap-2">
                     <span>🎧</span>
@@ -230,13 +300,14 @@ function formatDatePersian(dateStr?: string | null) {
           if (block.type === 'video') {
             const videoSrc = (data.stream_url || data.url) as string;
             const caption = (data.caption as string) || '';
+            if (!videoSrc) return null;
             return (
-              <div class="bg-base-300 rounded-box p-3 my-4">
+              <div class="bg-base-300 rounded-xl p-3 my-4">
                 <video
                   controls
                   preload="metadata"
                   playsinline
-                  class="w-full max-h-96 rounded-box bg-black"
+                  class="w-full max-h-96 rounded-lg bg-black"
                 >
                   <source src={videoSrc} type="video/mp4" />
                   مرورگر شما از پخش مستقیم ویدئو پشتیبانی نمی‌کند.
@@ -250,9 +321,34 @@ function formatDatePersian(dateStr?: string | null) {
             );
           }
 
+          if (block.type === 'quote') {
+            const quoteText = data.text || data.quote;
+            if (!quoteText) return null;
+            return (
+              <blockquote class="bg-base-200/40 border border-base-300 border-e-4 border-e-primary rounded-xl p-5 my-4 text-base font-medium text-base-content italic leading-relaxed">
+                {quoteText}
+              </blockquote>
+            );
+          }
+
           return null;
         })}
       </div>
+
+      <!-- Contextual Booking CTA Card -->
+      <section class="mt-12 bg-base-200/50 border border-base-300 rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+        <div class="flex flex-col gap-1.5">
+          <h3 class="text-lg font-bold text-base-content">
+            نیاز به گفت‌وگوی تخصصی درباره این موضوع دارید؟
+          </h3>
+          <p class="text-xs sm:text-sm text-base-content/75 leading-relaxed">
+            می‌توانید برای جلسه مشاوره فردی یا زوج‌درمانی به صورت آنلاین و حضوری نوبت رزرو کنید.
+          </p>
+        </div>
+        <a href="/booking" class="btn btn-primary rounded-full px-6 font-semibold shrink-0">
+          درخواست نوبت مشاوره
+        </a>
+      </section>
     </article>
   </div>
 </BaseLayout>

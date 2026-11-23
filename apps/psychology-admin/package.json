@@ -7,9 +7,9 @@
     "start": "astro dev --port 3001",
     "build": "astro build",
     "preview": "astro preview",
-    "lint": "node -e \"process.exit(0)\"",
+    "lint": "node ../../scripts/lint.mjs",
     "typecheck": "astro check && tsc --noEmit",
-    "test": "node --test test/ssr-render.test.mjs test/settings.test.mjs test/admin-pages.test.mjs"
+    "test": "node --test test/ssr-render.test.mjs test/settings.test.mjs test/settings-two-clinics.test.mjs test/admin-pages.test.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^9.1.2",

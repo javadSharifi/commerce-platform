@@ -97,7 +97,8 @@ SELECT
 FROM outbox_events
 WHERE status = 'pending'
 ORDER BY created_at ASC
-LIMIT $1;`
+LIMIT $1
+FOR UPDATE SKIP LOCKED;`
 
 	rows, err := db.Query(ctx, query, limit)
 	if err != nil {

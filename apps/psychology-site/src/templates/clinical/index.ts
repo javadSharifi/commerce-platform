@@ -6,6 +6,7 @@ import HomeHero from './HomeHero.astro';
 import CourseCard from './CourseCard.astro';
 import WorkshopCard from './WorkshopCard.astro';
 import BlogCard from './BlogCard.astro';
+import Shell from './Shell.astro';
 
 const meta = TEMPLATE_CATALOG.find((t) => t.id === 'clinical')!;
 
@@ -18,6 +19,7 @@ export const clinicalTemplate: SiteTemplate = {
     CourseCard,
     WorkshopCard,
     BlogCard,
+    Shell,
   },
 };
 

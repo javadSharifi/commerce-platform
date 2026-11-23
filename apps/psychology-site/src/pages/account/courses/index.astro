@@ -5,13 +5,13 @@ import { fetchPublicSite } from '../../../lib/site.js';
 // Strict private no-store header: buyer courses dashboard
 Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
 
-const site = await fetchPublicSite(Astro.request);
+const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
 ---
 
 <BaseLayout
   title={`دوره‌های من | ${site.title}`}
   description="مشاهده و دسترسی به دوره‌های آموزشی خریداری‌شده"
-  primaryColor={site.primary_color}
+  paletteId={site.palette_id}
   templateId={site.template_id}
   themeRadius={site.theme_radius}
   themeScale={site.theme_scale}
@@ -140,7 +140,7 @@ const site = await fetchPublicSite(Astro.request);
 
   async function checkAuth() {
     try {
-      const res = await fetch('/account/auth/me');
+      const res = await fetch('/v1/account/auth/me');
       if (res.ok) {
         const buyer = await res.json();
         if (stateChecking) stateChecking.classList.add('hidden');
@@ -167,8 +167,10 @@ const site = await fetchPublicSite(Astro.request);
 
   btnLogout?.addEventListener('click', async () => {
     try {
-      await fetch('/account/auth/logout', { method: 'POST' });
-    } catch {}
+      await fetch('/v1/account/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore network errors on logout
+    }
     window.location.reload();
   });
 
@@ -181,7 +183,7 @@ const site = await fetchPublicSite(Astro.request);
     btnSendOtp.disabled = true;
     btnSendOtp.textContent = 'در حال ارسال...';
     try {
-      const res = await fetch('/account/auth/otp/send', {
+      const res = await fetch('/v1/account/auth/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
@@ -213,7 +215,7 @@ const site = await fetchPublicSite(Astro.request);
     btnVerifyOtp.disabled = true;
     btnVerifyOtp.textContent = 'در حال تأیید...';
     try {
-      const res = await fetch('/account/auth/otp/verify', {
+      const res = await fetch('/v1/account/auth/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, code }),
@@ -236,9 +238,9 @@ const site = await fetchPublicSite(Astro.request);
 
   async function loadMyCourses() {
     if (!coursesGrid) return;
-    coursesGrid.innerHTML = '';
+    coursesGrid.replaceChildren();
     try {
-      const res = await fetch('/account/courses/my');
+      const res = await fetch('/v1/account/courses');
       if (res.ok) {
         const items = await res.json();
         if (Array.isArray(items) && items.length > 0) {
@@ -246,26 +248,45 @@ const site = await fetchPublicSite(Astro.request);
           items.forEach((c) => {
             const card = document.createElement('article');
             card.className = 'card bg-base-100 border border-base-200 rounded-box p-5 shadow-xs flex flex-col justify-between';
-            card.innerHTML = `
-              <div>
-                <div class="badge badge-success badge-sm text-xs mb-3">دسترسی فعال</div>
-                <h3 class="font-bold text-base text-base-content mb-2 leading-snug">
-                  ${c.title}
-                </h3>
-                <div class="text-xs text-base-content/70 mb-4">مدرس: ${c.instructor_name || 'مرکز روان‌شناسی'}</div>
-              </div>
-              <div class="pt-4 border-t border-base-200">
-                <a href="/account/courses/${c.id}" class="btn btn-primary btn-sm w-full">
-                  ورود به کلاس و پخش آنلاین
-                </a>
-              </div>
-            `;
+
+            const topDiv = document.createElement('div');
+
+            const badge = document.createElement('div');
+            badge.className = 'badge badge-success badge-sm text-xs mb-3';
+            badge.textContent = 'دسترسی فعال';
+            topDiv.appendChild(badge);
+
+            const heading = document.createElement('h3');
+            heading.className = 'font-bold text-base text-base-content mb-2 leading-snug';
+            heading.textContent = c.title || '';
+            topDiv.appendChild(heading);
+
+            const instructor = document.createElement('div');
+            instructor.className = 'text-xs text-base-content/70 mb-4';
+            instructor.textContent = `مدرس: ${c.instructor_name || 'مرکز روان‌شناسی'}`;
+            topDiv.appendChild(instructor);
+
+            card.appendChild(topDiv);
+
+            const bottomDiv = document.createElement('div');
+            bottomDiv.className = 'pt-4 border-t border-base-200';
+
+            const link = document.createElement('a');
+            link.href = `/account/courses/${encodeURIComponent(c.id)}`;
+            link.className = 'btn btn-primary btn-sm w-full';
+            link.textContent = 'ورود به کلاس و پخش آنلاین';
+            bottomDiv.appendChild(link);
+
+            card.appendChild(bottomDiv);
+
             coursesGrid.appendChild(card);
           });
           return;
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error('Failed to load my courses:', err);
+    }
     if (coursesEmpty) coursesEmpty.classList.remove('hidden');
   }
 </script>

@@ -4,29 +4,36 @@ export const GET: APIRoute = async ({ request }) => {
   const host = request.headers.get('host') || 'localhost:3000';
   const protocol = host.includes('localhost') ? 'http' : 'https';
   const baseUrl = `${protocol}://${host}`;
-  const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+  const apiBase =
+    process.env.INTERNAL_API_URL ||
+    import.meta.env.INTERNAL_API_URL ||
+    import.meta.env.PUBLIC_API_URL ||
+    'http://localhost:8080';
 
-  let blogPosts: Array<{ slug: string; published_at?: string }> = [];
+  let courses: Array<{ slug: string; published_at?: string }> = [];
   let workshops: Array<{ id: string }> = [];
+  let blogPosts: Array<{ slug: string; published_at?: string }> = [];
 
+  // 1. Fetch published courses
   try {
-    const blogRes = await fetch(`${apiBase}/public/blog`, {
-      headers: { 'Host': host },
+    const coursesRes = await fetch(`${apiBase}/v1/public/courses`, {
+      headers: { Host: host },
       signal: AbortSignal.timeout(1200),
     });
-    if (blogRes.ok) {
-      const data = await blogRes.json();
+    if (coursesRes.ok) {
+      const data = await coursesRes.json();
       if (Array.isArray(data)) {
-        blogPosts = data;
+        courses = data;
       }
     }
   } catch {
     // API offline in dev/preview
   }
 
+  // 2. Fetch active workshops
   try {
-    const workshopRes = await fetch(`${apiBase}/public/workshops`, {
-      headers: { 'Host': host },
+    const workshopRes = await fetch(`${apiBase}/v1/public/workshops`, {
+      headers: { Host: host },
       signal: AbortSignal.timeout(1200),
     });
     if (workshopRes.ok) {
@@ -39,12 +46,20 @@ export const GET: APIRoute = async ({ request }) => {
     // API offline in dev/preview
   }
 
-  // If no blog posts returned from API, include default published posts for preview
-  if (blogPosts.length === 0) {
-    blogPosts = [
-      { slug: 'self-awareness-and-emotional-regulation', published_at: '2026-11-15T10:00:00Z' },
-      { slug: 'managing-performance-anxiety', published_at: '2026-11-18T14:30:00Z' },
-    ];
+  // 3. Fetch published blog posts
+  try {
+    const blogRes = await fetch(`${apiBase}/v1/public/blog`, {
+      headers: { Host: host },
+      signal: AbortSignal.timeout(1200),
+    });
+    if (blogRes.ok) {
+      const data = await blogRes.json();
+      if (Array.isArray(data)) {
+        blogPosts = data;
+      }
+    }
+  } catch {
+    // API offline in dev/preview
   }
 
   interface SitemapUrl {
@@ -56,14 +71,15 @@ export const GET: APIRoute = async ({ request }) => {
 
   const staticUrls: SitemapUrl[] = [
     { loc: `${baseUrl}/`, priority: '1.0', changefreq: 'daily' },
+    { loc: `${baseUrl}/courses`, priority: '0.9', changefreq: 'daily' },
     { loc: `${baseUrl}/workshops`, priority: '0.9', changefreq: 'daily' },
     { loc: `${baseUrl}/blog`, priority: '0.9', changefreq: 'daily' },
     { loc: `${baseUrl}/booking`, priority: '0.9', changefreq: 'daily' },
   ];
 
-  const blogUrls: SitemapUrl[] = blogPosts.map((post) => ({
-    loc: `${baseUrl}/blog/${encodeURIComponent(post.slug)}`,
-    lastmod: post.published_at ? new Date(post.published_at).toISOString().split('T')[0] : undefined,
+  const courseUrls: SitemapUrl[] = courses.map((course) => ({
+    loc: `${baseUrl}/courses/${encodeURIComponent(course.slug)}`,
+    lastmod: course.published_at ? new Date(course.published_at).toISOString().split('T')[0] : undefined,
     priority: '0.8',
     changefreq: 'weekly',
   }));
@@ -74,7 +90,19 @@ export const GET: APIRoute = async ({ request }) => {
     changefreq: 'weekly',
   }));
 
-  const allUrls: SitemapUrl[] = [...staticUrls, ...workshopUrls, ...blogUrls];
+  const blogUrls: SitemapUrl[] = blogPosts.map((post) => ({
+    loc: `${baseUrl}/blog/${encodeURIComponent(post.slug)}`,
+    lastmod: post.published_at ? new Date(post.published_at).toISOString().split('T')[0] : undefined,
+    priority: '0.8',
+    changefreq: 'weekly',
+  }));
+
+  const allUrls: SitemapUrl[] = [
+    ...staticUrls,
+    ...courseUrls,
+    ...workshopUrls,
+    ...blogUrls,
+  ];
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

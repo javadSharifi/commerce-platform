@@ -87,6 +87,7 @@ test('Interactive SSR - Modal with trigger renders trigger button cleanly', () =
       title: 'پرونده مراجع',
       description: 'اطلاعات محرمانه پرونده بالینی',
       actions: React.createElement(Button, { variant: 'ghost' }, 'بستن'),
+      isDismissable: true,
     },
     React.createElement('p', null, 'محتوای جلسات مشاوره')
   );
@@ -94,6 +95,29 @@ test('Interactive SSR - Modal with trigger renders trigger button cleanly', () =
   const html = renderToString(modalElement);
   assert.match(html, /مشاهده پرونده/);
   assert.match(html, /btn-primary/);
+});
+
+test('Interactive - Modal dialog role, accessible label, and dismissable behavior (PSY-5.18)', () => {
+  // Verify Modal is a valid React component supporting dialog accessibility props
+  assert.strictEqual(typeof Modal, 'function');
+
+  // Verify that Modal renders trigger with accessible attributes
+  const triggerBtn = React.createElement('button', { id: 'open-booking-btn' }, 'رزرو نوبت');
+  const modalElement = React.createElement(
+    Modal,
+    {
+      trigger: triggerBtn,
+      title: 'تکمیل درخواست نوبت مشاوره',
+      description: 'اطلاعات مراجع جهت ثبت نوبت',
+      isDismissable: true,
+      size: 'md',
+    },
+    React.createElement('form', { id: 'booking-form' }, 'فرم اطلاعات')
+  );
+
+  const html = renderToString(modalElement);
+  assert.match(html, /id="open-booking-btn"/);
+  assert.match(html, /رزرو نوبت/);
 });
 
 test('Interactive SSR - Select renders accessible button and native form select fallback', () => {

@@ -2,198 +2,361 @@
 import AdminLayout from '../layouts/AdminLayout.astro';
 import {
   TEMPLATE_CATALOG,
-  PRESET_PRIMARY_COLORS,
+  PALETTE_CATALOG,
   RADIUS_OPTIONS,
   SCALE_OPTIONS,
-  DEFAULT_PRIMARY_COLOR,
+  DEFAULT_PALETTE_ID,
   DEFAULT_RADIUS,
   DEFAULT_SCALE,
 } from '@psychology/ui';
-import type { SiteSettingsResponse } from '@psychology/api-client';
+import {
+  PsychologyApiClient,
+  type SiteSettingsResponse,
+  type SiteAppearanceResponse,
+} from '@psychology/api-client';
 
-const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
-const publicSiteBase = import.meta.env.PUBLIC_SITE_URL || 'http://localhost:3000';
+const apiBase =
+  process.env.INTERNAL_API_URL ||
+  import.meta.env.INTERNAL_API_URL ||
+  process.env.PUBLIC_API_URL ||
+  import.meta.env.PUBLIC_API_URL ||
+  'http://localhost:8080';
 const sessionToken = Astro.cookies.get('session_token')?.value;
+const activeTenant = Astro.locals.activeTenant;
+const activeTenantId = activeTenant?.id || Astro.cookies.get('tenant_id')?.value || '';
 
 const defaultSettings: SiteSettingsResponse = {
-  tenant_id: 'default',
+  tenant_id: activeTenantId || 'default',
   title: 'دکتر مریم علوی - روان‌درمانگر و مشاور خانواده',
   description: 'مرکز تخصصی روان‌درمانی فردی، اضطراب و زوج‌درمانی',
   phone: '۰۲۱-۸۸۸۸۸۸۸۸',
   address: 'تهران، خیابان ولیعصر، بالاتر از میدان ونک',
-  primary_color: DEFAULT_PRIMARY_COLOR,
+  primary_color: '#0284c7',
   template_id: 'minimal',
   template_version: '1.0.0',
+  theme_radius: DEFAULT_RADIUS,
+  theme_scale: DEFAULT_SCALE,
+  palette_id: DEFAULT_PALETTE_ID,
+};
+
+const defaultAppearance: SiteAppearanceResponse = {
+  template_id: 'minimal',
+  template_version: '1.0.0',
+  palette_id: DEFAULT_PALETTE_ID,
   theme_radius: DEFAULT_RADIUS,
   theme_scale: DEFAULT_SCALE,
 };
 
 let settings = defaultSettings;
+let appearance = defaultAppearance;
+let canManageAppearance = true;
 
 if (sessionToken) {
   try {
-    const res = await fetch(`${apiBase}/admin/site`, {
+    const client = new PsychologyApiClient({
+      baseUrl: apiBase,
       headers: {
         Cookie: `session_token=${sessionToken}`,
-        'X-Tenant-ID': Astro.cookies.get('tenant_id')?.value || '',
+        'X-Tenant-ID': activeTenantId,
         Host: Astro.request.headers.get('host') || 'localhost:3001',
+        'X-Forwarded-Host': Astro.request.headers.get('host') || 'localhost:3001',
       },
-      signal: AbortSignal.timeout(1500),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.title) {
-        settings = { ...defaultSettings, ...data };
-      }
+
+    const [siteData, appData] = await Promise.all([
+      client.getAdminSite().catch(() => null),
+      client.getAdminAppearance().catch((err: any) => {
+        if (err?.status === 403) {
+          canManageAppearance = false;
+        }
+        return null;
+      }),
+    ]);
+
+    if (siteData && siteData.title) {
+      settings = { ...defaultSettings, ...siteData };
+    }
+    if (appData && appData.template_id) {
+      appearance = { ...defaultAppearance, ...appData };
+    } else if (settings.palette_id || settings.template_id) {
+      appearance = {
+        template_id: settings.template_id || 'minimal',
+        template_version: settings.template_version || '1.0.0',
+        palette_id: settings.palette_id || DEFAULT_PALETTE_ID,
+        theme_radius: settings.theme_radius || DEFAULT_RADIUS,
+        theme_scale: settings.theme_scale || DEFAULT_SCALE,
+      };
     }
   } catch {
     // Keep fallback settings for dev/preview
   }
 }
+
+// Compute public site base URL from primary_domain if available
+const hasVerifiedDomain = Boolean(settings.primary_domain);
+let publicSiteBase = import.meta.env.PUBLIC_SITE_URL || 'http://localhost:3000';
+if (settings.primary_domain) {
+  publicSiteBase = settings.primary_domain.startsWith('http')
+    ? settings.primary_domain
+    : `https://${settings.primary_domain}`;
+}
+
+const previewParams = new URLSearchParams({
+  template: appearance.template_id,
+  palette: appearance.palette_id,
+  radius: appearance.theme_radius,
+  scale: appearance.theme_scale,
+});
+const initialPreviewUrl = `${publicSiteBase}/preview?${previewParams.toString()}`;
 ---
 
-<AdminLayout title="تنظیمات قالب و هویت بصری وب‌سایت" currentNav="settings">
-  <div class="max-w-4xl mx-auto space-y-8" data-public-base={publicSiteBase}>
+<AdminLayout title="تنظیمات قالب و هویت بصری" currentNav="settings">
+  <div class="max-w-4xl mx-auto space-y-10" data-public-base={publicSiteBase} data-has-domain={hasVerifiedDomain ? 'true' : 'false'}>
     <!-- Header title and summary -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-base-300">
       <div>
-        <h2 class="text-xl font-bold text-base-content">ظاهر و تنظیمات وب‌سایت کلینیک</h2>
+        <h2 class="text-xl font-bold text-base-content">تنظیمات و ظاهر وب‌سایت کلینیک</h2>
         <p class="text-xs text-base-content/70 mt-1">
-          انتخاب قالب، تم رنگی، گردی گوشه‌ها، مقیاس قلم و مشخصات عمومی مطب
+          مدیریت محتوای عمومی مطب و انتخاب مستقل قالب و پالت رنگی وب‌سایت
         </p>
       </div>
 
       <div class="flex items-center gap-3">
         <a
           id="preview-btn-top"
-          href={`${publicSiteBase}/preview?template=${settings.template_id}&primary=${encodeURIComponent(settings.primary_color)}&radius=${settings.theme_radius}&scale=${settings.theme_scale}`}
+          href={initialPreviewUrl}
           target="_blank"
           rel="noopener noreferrer"
-          class="btn btn-outline btn-sm gap-2"
+          class={`btn btn-outline btn-sm gap-2 ${!hasVerifiedDomain ? 'btn-disabled opacity-60 cursor-not-allowed' : ''}`}
+          title={hasVerifiedDomain ? 'پیش‌نمایش زنده در وب‌سایت' : 'برای پیش‌نمایش زنده ابتدا باید دامنهٔ عمومی مطب تأیید شود.'}
         >
           <span>👁️ پیش‌نمایش زنده در وب‌سایت</span>
         </a>
       </div>
     </div>
 
-    <!-- Feedback alerts -->
-    <div id="alert-success" class="alert alert-success hidden text-sm font-medium shadow-xs">
-      <span>✓ تنظیمات با موفقیت ذخیره و منتشر شد. تغییرات بلافاصله در وب‌سایت اعمال شدند.</span>
+    <!-- Global feedback alerts -->
+    <div id="alert-content-success" class="alert alert-success hidden text-sm font-medium shadow-xs">
+      <span>✓ مشخصات و محتوای مطب با موفقیت ذخیره شد.</span>
+    </div>
+
+    <div id="alert-appearance-success" class="alert alert-success hidden text-sm font-medium shadow-xs">
+      <span>✓ ظاهر وب‌سایت با موفقیت منتشر شد و کش عمومی بازنشانی گردید.</span>
     </div>
 
     <div id="alert-error" class="alert alert-error hidden text-sm font-medium shadow-xs">
       <span id="alert-error-msg">خطا در ذخیره تنظیمات.</span>
     </div>
 
-    <form id="settings-form" class="space-y-8">
-      <!-- 1. Template selection section -->
-      <div class="card bg-base-100 border border-base-300 shadow-xs p-6">
-        <div class="mb-4">
-          <h3 class="text-base font-bold text-base-content">۱. انتخاب قالب وب‌سایت</h3>
-          <p class="text-xs text-base-content/70 mt-0.5">
-            قالب بصری مورد نظر خود را از میان طراحی‌های تأییدشده پلتفرم انتخاب کنید.
-          </p>
-        </div>
+    {!hasVerifiedDomain && (
+      <div class="alert alert-warning text-xs font-medium shadow-xs">
+        <span>⚠️ برای این مطب دامنهٔ عمومی تأییدشده‌ای ثبت نشده است. لینک پیش‌نمایش زنده تا زمان اتصال دامنه غیرفعال است.</span>
+      </div>
+    )}
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="template-options">
-          {TEMPLATE_CATALOG.map((tpl) => {
-            const isSelected = settings.template_id === tpl.id;
-            return (
-              <label
-                class={`flex flex-col justify-between p-5 rounded-xl border-2 cursor-pointer transition-all ${
-                  isSelected
-                    ? 'border-primary bg-primary/5 shadow-xs'
-                    : 'border-base-200 hover:border-base-300 bg-base-100'
-                }`}
-              >
-                <div class="flex items-start justify-between gap-3 mb-3">
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <span class="font-bold text-base text-base-content">{tpl.labelFa}</span>
-                      <span class="badge badge-xs badge-neutral">نسخه {tpl.version}</span>
-                    </div>
-                    <p class="text-xs text-base-content/75 mt-2 leading-relaxed">
-                      {tpl.descriptionFa}
-                    </p>
-                  </div>
-                  <input
-                    type="radio"
-                    name="template_id"
-                    value={tpl.id}
-                    checked={isSelected}
-                    class="radio radio-primary radio-sm mt-1"
-                  />
-                </div>
-                <div class="pt-3 border-t border-base-200/60 flex items-center justify-between text-[11px] text-base-content/60">
-                  <span>تم اختصاصی: {tpl.daisyTheme}</span>
-                  <span class="text-primary font-medium">مشاهده جزئیات &larr;</span>
-                </div>
-              </label>
-            );
-          })}
-        </div>
+    <!-- ======================================================== -->
+    <!-- بخش اول: محتوا و مشخصات عمومی مطب                         -->
+    <!-- ======================================================== -->
+    <section class="card bg-base-100 border border-base-300 shadow-xs p-6 space-y-6">
+      <div class="border-b border-base-200 pb-4">
+        <h3 class="text-base font-bold text-base-content">۱. مشخصات و محتوای وب‌سایت مطب</h3>
+        <p class="text-xs text-base-content/70 mt-1">
+          اطلاعاتی که در هدر، فوتر و صفحهٔ اصلی وب‌سایت به مراجعین نمایش داده می‌شوند. ذخیرهٔ این بخش صرفاً محتوا را به‌روزرسانی می‌کند.
+        </p>
       </div>
 
-      <!-- 2. Brand Color & Theme Tokens -->
-      <div class="card bg-base-100 border border-base-300 shadow-xs p-6 space-y-6">
+      <form id="content-form" class="space-y-4">
         <div>
-          <h3 class="text-base font-bold text-base-content">۲. هویت بصری و تم اختصاصی</h3>
-          <p class="text-xs text-base-content/70 mt-0.5">
-            تنظیم رنگ سازمانی برند، انحنای گوشه‌ها و مقیاس اندازه عناصر و نوشته‌ها
-          </p>
+          <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
+            عنوان وب‌سایت مطب / درمانگر <span class="text-error">*</span>
+          </label>
+          <input
+            type="text"
+            id="content-title"
+            name="title"
+            value={settings.title}
+            class="input input-bordered w-full text-sm"
+            placeholder="مثال: دکتر علوی - متخصص روان‌درمانی و مشاوره"
+            required
+          />
         </div>
 
-        <!-- Color customization -->
-        <div class="space-y-3">
-          <label class="block text-sm font-semibold text-base-content">
-            رنگ اصلی برند (Primary Color)
+        <div>
+          <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
+            توضیحات کوتاه و بیوگرافی معرفی
           </label>
+          <textarea
+            id="content-description"
+            name="description"
+            rows="3"
+            class="textarea textarea-bordered w-full text-sm font-sans"
+            placeholder="معرفی تخصص‌ها، رویکرد درمانی و سوابق کلینیک..."
+          >{settings.description}</textarea>
+        </div>
 
-          <!-- Preset swatches -->
-          <div class="flex flex-wrap gap-2.5" id="preset-colors">
-            {PRESET_PRIMARY_COLORS.map((preset) => (
-              <button
-                type="button"
-                data-color={preset.value}
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-base-300 text-xs text-base-content/85 hover:border-primary transition-colors cursor-pointer bg-base-100"
-              >
-                <span
-                  class="w-4 h-4 rounded-full border border-black/10 inline-block"
-                  style={`background-color: ${preset.value};`}
-                ></span>
-                <span>{preset.labelFa}</span>
-              </button>
-            ))}
-          </div>
-
-          <!-- Custom color input -->
-          <div class="flex items-center gap-3 pt-2 max-w-xs">
-            <input
-              type="color"
-              id="color-picker"
-              value={settings.primary_color}
-              class="w-10 h-10 rounded-lg border border-base-300 cursor-pointer p-0.5 bg-base-100"
-            />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
+              تلفن تماس عمومی مطب
+            </label>
             <input
               type="text"
-              id="color-hex"
-              name="primary_color"
-              value={settings.primary_color}
-              class="input input-sm input-bordered flex-1 font-mono text-center text-sm"
-              placeholder="#0284c7"
+              id="content-phone"
+              name="phone"
+              value={settings.phone || ''}
+              class="input input-bordered w-full text-sm"
+              placeholder="۰۲۱-۸۸۸۸۸۸۸۸"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
+              نشانی مطب / کلینیک
+            </label>
+            <input
+              type="text"
+              id="content-address"
+              name="address"
+              value={settings.address || ''}
+              class="input input-bordered w-full text-sm"
+              placeholder="شهر، خیابان..."
             />
           </div>
         </div>
 
+        <div class="flex justify-end pt-3">
+          <button
+            type="submit"
+            id="save-content-btn"
+            class="btn btn-primary btn-md font-semibold"
+          >
+            ذخیره مشخصات مطب
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- بخش دوم: ظاهر، قالب و پالت رنگ وب‌سایت                    -->
+    <!-- ======================================================== -->
+    <section class="card bg-base-100 border border-base-300 shadow-xs p-6 space-y-8">
+      <div class="border-b border-base-200 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h3 class="text-base font-bold text-base-content">۲. ظاهر، قالب و پالت رنگ وب‌سایت</h3>
+          <p class="text-xs text-base-content/70 mt-1">
+            انتخاب مستقل قالب چیدمان، پالت رنگی DaisyUI، گردی گوشه‌ها و مقیاس اجزا
+          </p>
+        </div>
+        {!canManageAppearance && (
+          <span class="badge badge-warning badge-sm">دسترسی انتشار ظاهر محدود است</span>
+        )}
+      </div>
+
+      <form id="appearance-form" class="space-y-8">
+        <!-- ۲.۱ انتخاب قالب وب‌سایت -->
+        <div class="space-y-3">
+          <div>
+            <h4 class="text-sm font-bold text-base-content">انتخاب قالب وب‌سایت</h4>
+            <p class="text-xs text-base-content/70 mt-0.5">
+              قالب چیدمان و ساختار ناوبری صفحات را تعیین می‌کند.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="template-options">
+            {TEMPLATE_CATALOG.map((tpl) => {
+              const isSelected = appearance.template_id === tpl.id;
+              return (
+                <label
+                  class={`flex flex-col justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    isSelected
+                      ? 'border-primary bg-primary/5 shadow-xs'
+                      : 'border-base-200 hover:border-base-300 bg-base-100'
+                  }`}
+                >
+                  <div class="flex items-start justify-between gap-2 mb-2">
+                    <span class="font-bold text-sm text-base-content">{tpl.labelFa}</span>
+                    <input
+                      type="radio"
+                      name="template_id"
+                      value={tpl.id}
+                      checked={isSelected}
+                      class="radio radio-primary radio-sm mt-0.5"
+                    />
+                  </div>
+                  <p class="text-xs text-base-content/75 leading-relaxed mb-3">
+                    {tpl.descriptionFa}
+                  </p>
+                  <div class="pt-2 border-t border-base-200/60 flex items-center justify-between text-[11px] text-base-content/60">
+                    <span>نسخه {tpl.version}</span>
+                    <span class="badge badge-ghost badge-xs">{tpl.daisyTheme}</span>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <!-- ۲.۲ انتخاب پالت رنگ پلتفرم -->
+        <div class="space-y-3 pt-4 border-t border-base-200">
+          <div>
+            <h4 class="text-sm font-bold text-base-content">انتخاب پالت رنگی وب‌سایت</h4>
+            <p class="text-xs text-base-content/70 mt-0.5">
+              پالت‌های طراحی‌شده بر اساس روان‌شناسی رنگ‌ها؛ پس‌زمینه، متن، کارت‌ها، دکمه‌ها و فرم‌ها را رنگ‌آمیزی می‌کند.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="palette-options">
+            {PALETTE_CATALOG.map((pal) => {
+              const isSelected = appearance.palette_id === pal.id;
+              return (
+                <label
+                  class={`flex flex-col justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    isSelected
+                      ? 'border-primary bg-primary/5 shadow-xs'
+                      : 'border-base-200 hover:border-base-300 bg-base-100'
+                  }`}
+                >
+                  <div class="flex items-start justify-between gap-2 mb-2">
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="w-4 h-4 rounded-full border border-black/10 inline-block"
+                        style={`background-color: ${pal.primaryColor};`}
+                      ></span>
+                      <span class="font-bold text-sm text-base-content">{pal.labelFa}</span>
+                    </div>
+                    <input
+                      type="radio"
+                      name="palette_id"
+                      value={pal.id}
+                      checked={isSelected}
+                      class="radio radio-primary radio-sm mt-0.5"
+                    />
+                  </div>
+                  <p class="text-xs text-base-content/75 leading-relaxed mb-3">
+                    {pal.descriptionFa}
+                  </p>
+                  <div class="flex items-center gap-1.5 pt-2 border-t border-base-200/60">
+                    <span class="text-[11px] text-base-content/60 ml-2">نمونه رنگ‌ها:</span>
+                    <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorBase100};`} title="پس‌زمینه"></span>
+                    <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorPrimary};`} title="رنگ اصلی"></span>
+                    <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorSecondary};`} title="رنگ دوم"></span>
+                    <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorAccent};`} title="تاکیدی"></span>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <!-- ۲.۳ انحنا و مقیاس -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-base-200">
-          <!-- Radius options -->
           <div class="space-y-3">
-            <label class="block text-sm font-semibold text-base-content">
+            <label class="block text-xs font-semibold text-base-content">
               انحنای گوشه دکمه‌ها و کادرها (Border Radius)
             </label>
             <div class="space-y-2" id="radius-options">
               {RADIUS_OPTIONS.map((opt) => {
-                const isSelected = settings.theme_radius === opt.value;
+                const isSelected = appearance.theme_radius === opt.value;
                 return (
                   <label
                     class={`flex items-center justify-between p-3 rounded-lg border cursor-pointer text-xs transition-colors ${
@@ -219,14 +382,13 @@ if (sessionToken) {
             </div>
           </div>
 
-          <!-- Scale options -->
           <div class="space-y-3">
-            <label class="block text-sm font-semibold text-base-content">
+            <label class="block text-xs font-semibold text-base-content">
               مقیاس و اندازه متون و اجزا (UI Scale)
             </label>
             <div class="space-y-2" id="scale-options">
               {SCALE_OPTIONS.map((opt) => {
-                const isSelected = settings.theme_scale === opt.value;
+                const isSelected = appearance.theme_scale === opt.value;
                 return (
                   <label
                     class={`flex items-center justify-between p-3 rounded-lg border cursor-pointer text-xs transition-colors ${
@@ -252,255 +414,242 @@ if (sessionToken) {
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 3. General Clinic Information -->
-      <div class="card bg-base-100 border border-base-300 shadow-xs p-6 space-y-4">
-        <div>
-          <h3 class="text-base font-bold text-base-content">۳. مشخصات عمومی وب‌سایت مطب</h3>
-          <p class="text-xs text-base-content/70 mt-0.5">
-            عناوینی که در هدر، فوتر و صفحه اصلی وب‌سایت به مراجعین نمایش داده می‌شوند.
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
-            عنوان وب‌سایت مطب / درمانگر
-          </label>
-          <input
-            type="text"
-            name="title"
-            value={settings.title}
-            class="input input-bordered w-full text-sm"
-            placeholder="مثال: دکتر علوی - متخصص روان‌درمانی و مشاوره"
-            required
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
-            توضیحات کوتاه و بیوگرافی معرفی
-          </label>
-          <textarea
-            name="description"
-            rows="3"
-            class="textarea textarea-bordered w-full text-sm font-sans"
-            placeholder="معرفی تخصص‌ها، رویکرد درمانی و سوابق کلینیک..."
-          >{settings.description}</textarea>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
-              تلفن تماس عمومی مطب
-            </label>
-            <input
-              type="text"
-              name="phone"
-              value={settings.phone || ''}
-              class="input input-bordered w-full text-sm"
-              placeholder="۰۲۱-۸۸۸۸۸۸۸۸"
-            />
+        <!-- دکمه‌های پیش‌نمایش و انتشار ظاهر -->
+        <div class="pt-4 border-t border-base-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="text-xs text-base-content/70">
+            <span>انتشار ظاهر با ثبت در دیتابیس، کش صفحهٔ اصلی و مسیرهای عمومی را بازنشانی می‌کند.</span>
           </div>
 
-          <div>
-            <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
-              نشانی مطب / کلینیک
-            </label>
-            <input
-              type="text"
-              name="address"
-              value={settings.address || ''}
-              class="input input-bordered w-full text-sm"
-              placeholder="شهر، خیابان..."
-            />
+          <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+            <a
+              id="preview-btn-bottom"
+              href={initialPreviewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class={`btn btn-outline btn-md flex-1 sm:flex-initial ${!hasVerifiedDomain ? 'btn-disabled opacity-60 cursor-not-allowed' : ''}`}
+              title={hasVerifiedDomain ? 'پیش‌نمایش قبل از ذخیره' : 'برای پیش‌نمایش زنده ابتدا باید دامنهٔ عمومی مطب تأیید شود.'}
+            >
+              پیش‌نمایش قبل از ذخیره
+            </a>
+
+            <button
+              type="submit"
+              id="save-appearance-btn"
+              class="btn btn-primary btn-md flex-1 sm:flex-initial font-semibold"
+            >
+              ذخیره و انتشار تغییرات
+            </button>
           </div>
         </div>
-      </div>
-
-      <!-- 4. Save and Preview Actions -->
-      <div class="card bg-base-100 border border-base-300 shadow-xs p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div class="text-xs text-base-content/70 text-center sm:text-start">
-          <span>تغییرات با کلیک بر روی ذخیره بلافاصله در وب‌سایت منتشر و کش بازنشانی می‌شود.</span>
-        </div>
-
-        <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <a
-            id="preview-btn-bottom"
-            href={`${publicSiteBase}/preview?template=${settings.template_id}&primary=${encodeURIComponent(settings.primary_color)}&radius=${settings.theme_radius}&scale=${settings.theme_scale}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-outline btn-md flex-1 sm:flex-initial"
-          >
-            پیش‌نمایش قبل از ذخیره
-          </a>
-
-          <button
-            type="submit"
-            id="save-btn"
-            class="btn btn-primary btn-md flex-1 sm:flex-initial font-semibold"
-          >
-            ذخیره و انتشار تغییرات
-          </button>
-        </div>
-      </div>
-    </form>
+      </form>
+    </section>
   </div>
 
   <script>
-    const form = document.getElementById('settings-form') as HTMLFormElement;
-    const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
+    const contentForm = document.getElementById('content-form') as HTMLFormElement;
+    const saveContentBtn = document.getElementById('save-content-btn') as HTMLButtonElement;
+
+    const appearanceForm = document.getElementById('appearance-form') as HTMLFormElement;
+    const saveAppearanceBtn = document.getElementById('save-appearance-btn') as HTMLButtonElement;
+
     const previewBtnTop = document.getElementById('preview-btn-top') as HTMLAnchorElement;
     const previewBtnBottom = document.getElementById('preview-btn-bottom') as HTMLAnchorElement;
-    const alertSuccess = document.getElementById('alert-success') as HTMLElement;
+
+    const alertContentSuccess = document.getElementById('alert-content-success') as HTMLElement;
+    const alertAppearanceSuccess = document.getElementById('alert-appearance-success') as HTMLElement;
     const alertError = document.getElementById('alert-error') as HTMLElement;
     const alertErrorMsg = document.getElementById('alert-error-msg') as HTMLElement;
 
-    const colorPicker = document.getElementById('color-picker') as HTMLInputElement;
-    const colorHex = document.getElementById('color-hex') as HTMLInputElement;
     const container = document.querySelector('[data-public-base]') as HTMLElement;
     const publicBase = container?.dataset.publicBase || 'http://localhost:3000';
+    const hasVerifiedDomain = container?.dataset.hasDomain === 'true';
 
-    function getFormValues() {
-      const formData = new FormData(form);
+    function hideAlerts() {
+      if (alertContentSuccess) alertContentSuccess.classList.add('hidden');
+      if (alertAppearanceSuccess) alertAppearanceSuccess.classList.add('hidden');
+      if (alertError) alertError.classList.add('hidden');
+    }
+
+    function getAppearanceValues() {
+      const formData = new FormData(appearanceForm);
       const templateId = (formData.get('template_id') as string) || 'minimal';
-      const primaryColor = (formData.get('primary_color') as string) || '#0284c7';
+      const paletteId = (formData.get('palette_id') as string) || 'calm-sage';
       const themeRadius = (formData.get('theme_radius') as string) || 'md';
       const themeScale = (formData.get('theme_scale') as string) || 'md';
-      const title = (formData.get('title') as string) || '';
-      const description = (formData.get('description') as string) || '';
-      const phone = (formData.get('phone') as string) || '';
-      const address = (formData.get('address') as string) || '';
 
       return {
         template_id: templateId,
-        primary_color: primaryColor,
+        palette_id: paletteId,
         theme_radius: themeRadius,
         theme_scale: themeScale,
-        title,
-        description,
-        phone,
-        address,
       };
     }
 
     function updatePreviewLinks() {
-      const vals = getFormValues();
-      const previewUrl = `${publicBase}/preview?template=${vals.template_id}&primary=${encodeURIComponent(vals.primary_color)}&radius=${vals.theme_radius}&scale=${vals.theme_scale}`;
+      if (!hasVerifiedDomain) return;
+      const vals = getAppearanceValues();
+      const params = new URLSearchParams({
+        template: vals.template_id,
+        palette: vals.palette_id,
+        radius: vals.theme_radius,
+        scale: vals.theme_scale,
+      });
+      const previewUrl = `${publicBase}/preview?${params.toString()}`;
       if (previewBtnTop) previewBtnTop.href = previewUrl;
       if (previewBtnBottom) previewBtnBottom.href = previewUrl;
     }
 
-    // Color synchronization
-    if (colorPicker && colorHex) {
-      colorPicker.addEventListener('input', () => {
-        colorHex.value = colorPicker.value;
-        updatePreviewLinks();
-      });
+    // Appearance change listeners
+    if (appearanceForm) {
+      appearanceForm.addEventListener('change', (e) => {
+        const target = e.target as HTMLInputElement;
 
-      colorHex.addEventListener('input', () => {
-        if (/^#[0-9a-fA-F]{6}$/.test(colorHex.value)) {
-          colorPicker.value = colorHex.value;
+        if (target.name === 'template_id') {
+          document.querySelectorAll('#template-options label').forEach((lbl) => {
+            const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
+            if (radio && radio.checked) {
+              lbl.classList.add('border-primary', 'bg-primary/5', 'shadow-xs');
+              lbl.classList.remove('border-base-200');
+            } else {
+              lbl.classList.remove('border-primary', 'bg-primary/5', 'shadow-xs');
+              lbl.classList.add('border-base-200');
+            }
+          });
         }
+
+        if (target.name === 'palette_id') {
+          document.querySelectorAll('#palette-options label').forEach((lbl) => {
+            const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
+            if (radio && radio.checked) {
+              lbl.classList.add('border-primary', 'bg-primary/5', 'shadow-xs');
+              lbl.classList.remove('border-base-200');
+            } else {
+              lbl.classList.remove('border-primary', 'bg-primary/5', 'shadow-xs');
+              lbl.classList.add('border-base-200');
+            }
+          });
+        }
+
+        if (target.name === 'theme_radius') {
+          document.querySelectorAll('#radius-options label').forEach((lbl) => {
+            const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
+            if (radio && radio.checked) {
+              lbl.classList.add('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
+              lbl.classList.remove('border-base-200');
+            } else {
+              lbl.classList.remove('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
+              lbl.classList.add('border-base-200');
+            }
+          });
+        }
+
+        if (target.name === 'theme_scale') {
+          document.querySelectorAll('#scale-options label').forEach((lbl) => {
+            const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
+            if (radio && radio.checked) {
+              lbl.classList.add('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
+              lbl.classList.remove('border-base-200');
+            } else {
+              lbl.classList.remove('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
+              lbl.classList.add('border-base-200');
+            }
+          });
+        }
+
         updatePreviewLinks();
       });
     }
 
-    // Preset color buttons
-    document.querySelectorAll('#preset-colors button').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const color = (btn as HTMLElement).dataset.color;
-        if (color) {
-          colorPicker.value = color;
-          colorHex.value = color;
-          updatePreviewLinks();
+    // 1. Content Form Submission (Only sends content fields to /api/admin/site)
+    if (contentForm) {
+      contentForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        hideAlerts();
+
+        const formData = new FormData(contentForm);
+        const title = (formData.get('title') as string) || '';
+        const description = (formData.get('description') as string) || '';
+        const phone = (formData.get('phone') as string) || '';
+        const address = (formData.get('address') as string) || '';
+
+        if (!title.trim()) {
+          alertErrorMsg.textContent = 'عنوان مطب الزامی است و نمی‌تواند خالی باشد.';
+          alertError.classList.remove('hidden');
+          return;
+        }
+
+        saveContentBtn.disabled = true;
+        saveContentBtn.textContent = 'در حال ذخیره...';
+
+        try {
+          const res = await fetch('/api/admin/site', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              title,
+              description,
+              phone,
+              address,
+            }),
+          });
+
+          if (res.ok) {
+            alertContentSuccess.classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            const err = await res.json().catch(() => ({ message: 'خطای ناشناخته رخ داد' }));
+            alertErrorMsg.textContent = err.message || 'خطا در ثبت مشخصات مطب';
+            alertError.classList.remove('hidden');
+          }
+        } catch (err: any) {
+          alertErrorMsg.textContent = 'خطای ارتباط با سرور: ' + (err?.message || 'عدم دسترسی');
+          alertError.classList.remove('hidden');
+        } finally {
+          saveContentBtn.disabled = false;
+          saveContentBtn.textContent = 'ذخیره مشخصات مطب';
         }
       });
-    });
+    }
 
-    // Template, radius, scale changes
-    form.addEventListener('change', (e) => {
-      const target = e.target as HTMLInputElement;
-      if (target.name === 'template_id') {
-        document.querySelectorAll('#template-options label').forEach((lbl) => {
-          const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
-          if (radio && radio.checked) {
-            lbl.classList.add('border-primary', 'bg-primary/5', 'shadow-xs');
-            lbl.classList.remove('border-base-200');
+    // 2. Appearance Form Submission (Only sends appearance fields to /api/admin/appearance)
+    if (appearanceForm) {
+      appearanceForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        hideAlerts();
+
+        const values = getAppearanceValues();
+
+        saveAppearanceBtn.disabled = true;
+        saveAppearanceBtn.textContent = 'در حال انتشار ظاهر...';
+
+        try {
+          const res = await fetch('/api/admin/appearance', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(values),
+          });
+
+          if (res.ok) {
+            alertAppearanceSuccess.classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
           } else {
-            lbl.classList.remove('border-primary', 'bg-primary/5', 'shadow-xs');
-            lbl.classList.add('border-base-200');
+            const err = await res.json().catch(() => ({ message: 'خطای ناشناخته رخ داد' }));
+            alertErrorMsg.textContent = err.message || 'خطا در انتشار ظاهر سایت';
+            alertError.classList.remove('hidden');
           }
-        });
-      }
-      if (target.name === 'theme_radius') {
-        document.querySelectorAll('#radius-options label').forEach((lbl) => {
-          const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
-          if (radio && radio.checked) {
-            lbl.classList.add('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
-            lbl.classList.remove('border-base-200');
-          } else {
-            lbl.classList.remove('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
-            lbl.classList.add('border-base-200');
-          }
-        });
-      }
-      if (target.name === 'theme_scale') {
-        document.querySelectorAll('#scale-options label').forEach((lbl) => {
-          const radio = lbl.querySelector('input[type="radio"]') as HTMLInputElement;
-          if (radio && radio.checked) {
-            lbl.classList.add('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
-            lbl.classList.remove('border-base-200');
-          } else {
-            lbl.classList.remove('border-primary', 'bg-primary/5', 'font-semibold', 'text-primary');
-            lbl.classList.add('border-base-200');
-          }
-        });
-      }
-      updatePreviewLinks();
-    });
-
-    // Form submission
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      alertSuccess.classList.add('hidden');
-      alertError.classList.add('hidden');
-
-      const values = getFormValues();
-
-      if (!/^#[0-9a-fA-F]{6}$/.test(values.primary_color)) {
-        alertErrorMsg.textContent = 'کد رنگ واردشده نامعتبر است. فرمت صحیح: #0284c7';
-        alertError.classList.remove('hidden');
-        return;
-      }
-
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'در حال ذخیره...';
-
-      try {
-        const res = await fetch('/api/admin/site', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(values),
-        });
-
-        if (res.ok) {
-          alertSuccess.classList.remove('hidden');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          const err = await res.json().catch(() => ({ message: 'خطای ناشناخته رخ داد' }));
-          alertErrorMsg.textContent = err.message || 'خطا در ثبت تنظیمات';
+        } catch (err: any) {
+          alertErrorMsg.textContent = 'خطای ارتباط با سرور: ' + (err?.message || 'عدم دسترسی');
           alertError.classList.remove('hidden');
+        } finally {
+          saveAppearanceBtn.disabled = false;
+          saveAppearanceBtn.textContent = 'ذخیره و انتشار تغییرات';
         }
-      } catch (err: any) {
-        alertErrorMsg.textContent = 'خطای ارتباط با سرور: ' + (err?.message || 'عدم دسترسی');
-        alertError.classList.remove('hidden');
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'ذخیره و انتشار تغییرات';
-      }
-    });
+      });
+    }
   </script>
 </AdminLayout>

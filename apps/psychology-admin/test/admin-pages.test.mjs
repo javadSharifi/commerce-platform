@@ -20,6 +20,20 @@ test('PSY-5.8.4: Admin panel pages migration to shared UI and DaisyUI with no-st
       setTimeout(() => reject(new Error('timeout waiting for server to start')), 6000);
     });
 
+    // 1. Unauthenticated request without session_token redirects to /login
+    const unauthRes = await fetch(`http://127.0.0.1:${port}/`, { redirect: 'manual' });
+    assert.strictEqual(unauthRes.status, 302, 'Unauthenticated request must return 302 redirect');
+    assert.strictEqual(unauthRes.headers.get('location'), '/login', 'Must redirect to /login');
+
+    // 2. /login page renders properly with login form
+    const loginRes = await fetch(`http://127.0.0.1:${port}/login`);
+    assert.strictEqual(loginRes.status, 200, '/login must return 200');
+    const loginHtml = await loginRes.text();
+    assert.match(loginHtml, /ورود به پنل مدیریت/, 'Must have login title');
+    assert.match(loginHtml, /name="email"/, 'Must have email input');
+    assert.match(loginHtml, /name="password"/, 'Must have password input');
+    assert.match(loginHtml, /<meta name="robots" content="noindex, nofollow"/, 'Login must have robots noindex');
+
     const routes = [
       { path: '/', label: 'داشبورد و شاخص‌های کلینیک', check: /شاخص‌های کلان کلینیک/ },
       { path: '/workshops', label: 'مدیریت کارگاه‌ها', check: /فهرست کارگاه‌های آموزشی کلینیک/ },
@@ -32,7 +46,11 @@ test('PSY-5.8.4: Admin panel pages migration to shared UI and DaisyUI with no-st
     ];
 
     for (const route of routes) {
-      const res = await fetch(`http://127.0.0.1:${port}${route.path}`);
+      const res = await fetch(`http://127.0.0.1:${port}${route.path}`, {
+        headers: {
+          Cookie: 'session_token=test-valid-session',
+        },
+      });
       assert.strictEqual(res.status, 200, `Route ${route.path} must return 200`);
 
       const cacheControl = res.headers.get('cache-control') || '';
@@ -42,6 +60,8 @@ test('PSY-5.8.4: Admin panel pages migration to shared UI and DaisyUI with no-st
       const html = await res.text();
       assert.match(html, route.check, `${route.path} must match check regex`);
       assert.match(html, /<meta name="robots" content="noindex, nofollow"/, `${route.path} must have robots noindex`);
+      assert.match(html, /id="logout-btn"/, `${route.path} must contain logout button`);
+      assert.match(html, /id="user-display-name"/, `${route.path} must contain user display name`);
 
       // Verify DaisyUI tokens and clean semantic structure
       assert.match(html, /bg-base-200/, `${route.path} must use bg-base-200 layout`);

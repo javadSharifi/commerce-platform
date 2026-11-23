@@ -1,0 +1,17 @@
+---
+import type { SiteShellVM } from '../view-models.js';
+import Header from './Header.astro';
+import Footer from './Footer.astro';
+
+interface Props extends SiteShellVM {}
+
+const { headerVM, footerVM, hideHeaderFooter = false } = Astro.props;
+---
+
+<div class="template-shell editorial-shell flex flex-col min-h-screen bg-base-100 text-base-content antialiased">
+  {!hideHeaderFooter && <Header {...headerVM} />}
+  <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <slot />
+  </main>
+  {!hideHeaderFooter && <Footer {...footerVM} />}
+</div>

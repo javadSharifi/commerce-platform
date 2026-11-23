@@ -27,6 +27,30 @@ const fallbackPurchases = [
 
 let purchases = fallbackPurchases;
 
+const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const sessionToken = Astro.cookies.get('session_token')?.value;
+const host = Astro.request.headers.get('host') || 'localhost:3001';
+
+if (sessionToken) {
+  try {
+    const res = await fetch(`${apiBase}/v1/admin/payments?status=refund_required`, {
+      headers: {
+        Host: host,
+        Cookie: `session_token=${sessionToken}`,
+      },
+      signal: AbortSignal.timeout(1500),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        purchases = data;
+      }
+    }
+  } catch {
+    // Keep fallback
+  }
+}
+
 function formatDateTehran(dateStr: string) {
   try {
     return new Intl.DateTimeFormat('fa-IR', {
@@ -229,7 +253,7 @@ function formatPriceToman(priceRials: number) {
         }
 
         try {
-          const res = await fetch(`/admin/payments/${activePurchaseId}/refund`, {
+          const res = await fetch(`/v1/admin/payments/${activePurchaseId}/refund`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

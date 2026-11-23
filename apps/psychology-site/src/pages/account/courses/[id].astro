@@ -6,13 +6,13 @@ import { fetchPublicSite } from '../../../lib/site.js';
 Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
 
 const { id } = Astro.params;
-const site = await fetchPublicSite(Astro.request);
+const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
 ---
 
 <BaseLayout
   title={`پخش جلسات دوره | ${site.title}`}
   description="پخش آنلاین و اختصاصی ویدیو و صوت جلسات دوره آموزشی"
-  primaryColor={site.primary_color}
+  paletteId={site.palette_id}
   templateId={site.template_id}
   themeRadius={site.theme_radius}
   themeScale={site.theme_scale}
@@ -221,13 +221,13 @@ const site = await fetchPublicSite(Astro.request);
 
   async function initViewer() {
     try {
-      const authRes = await fetch('/account/auth/me');
+      const authRes = await fetch('/v1/account/auth/me');
       if (!authRes.ok) {
         showError('ورود به حساب کاربری الزامی است', 'جهت مشاهده جلسات دوره، ابتدا باید وارد حساب کاربری خود شوید.');
         return;
       }
 
-      const coursesRes = await fetch('/account/courses/my');
+      const coursesRes = await fetch('/v1/account/courses');
       if (!coursesRes.ok) {
         showError('عدم دسترسی به دوره', 'اطلاعات دوره‌های خریداری‌شده شما یافت نشد.');
         return;
@@ -240,7 +240,7 @@ const site = await fetchPublicSite(Astro.request);
         return;
       }
 
-      const detailRes = await fetch(`/public/courses/${entitlement.course_slug || entitlement.course_id}`);
+      const detailRes = await fetch(`/v1/public/courses/${entitlement.course_slug || entitlement.course_id}`);
       if (!detailRes.ok) {
         showError('خطا در دریافت اطلاعات دوره', 'امکان دریافت سرفصل‌ها و جلسات دوره میسر نشد.');
         return;
@@ -279,20 +279,32 @@ const site = await fetchPublicSite(Astro.request);
     if (activeCourseTitle) activeCourseTitle.textContent = `دوره: ${currentCourse.title}`;
 
     if (playlistEl) {
-      playlistEl.innerHTML = '';
+      playlistEl.replaceChildren();
       currentCourse.lessons.forEach((l) => {
         const item = document.createElement('div');
         item.className = 'flex items-center gap-3 p-3 rounded-box border border-base-200 bg-base-200/40 cursor-pointer hover:bg-base-200 transition-all text-xs';
         item.setAttribute('data-lesson-id', l.id);
-        item.innerHTML = `
-          <span class="w-6 h-6 rounded-full bg-base-300 font-bold flex items-center justify-center shrink-0">
-            ${l.display_order}
-          </span>
-          <div class="flex-1 truncate">
-            <div class="font-semibold text-base-content truncate">${l.title}</div>
-            <div class="text-[11px] text-base-content/60">${Math.round(l.duration_seconds / 60)} دقیقه</div>
-          </div>
-        `;
+
+        const orderSpan = document.createElement('span');
+        orderSpan.className = 'w-6 h-6 rounded-full bg-base-300 font-bold flex items-center justify-center shrink-0';
+        orderSpan.textContent = String(l.display_order);
+        item.appendChild(orderSpan);
+
+        const textDiv = document.createElement('div');
+        textDiv.className = 'flex-1 truncate';
+
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'font-semibold text-base-content truncate';
+        titleDiv.textContent = l.title || '';
+        textDiv.appendChild(titleDiv);
+
+        const durationDiv = document.createElement('div');
+        durationDiv.className = 'text-[11px] text-base-content/60';
+        durationDiv.textContent = `${Math.round(l.duration_seconds / 60)} دقیقه`;
+        textDiv.appendChild(durationDiv);
+
+        item.appendChild(textDiv);
+
         item.addEventListener('click', () => switchLesson(l));
         playlistEl.appendChild(item);
       });
@@ -328,7 +340,7 @@ const site = await fetchPublicSite(Astro.request);
       playerOverlay.classList.add('flex');
     }
     try {
-      const res = await fetch(`/account/lessons/${lessonId}/stream`);
+      const res = await fetch(`/v1/account/courses/${courseIdParam}/lessons/${lessonId}/stream`);
       if (res.ok) {
         const streamData = await res.json();
         const streamUrl = streamData.stream_url;
@@ -353,8 +365,8 @@ const site = await fetchPublicSite(Astro.request);
           if (mediaTypeBadge) mediaTypeBadge.textContent = 'ویدیو آموزشی';
         }
       }
-    } catch {
-      // media stream error
+    } catch (err) {
+      console.error('Media stream error:', err);
     } finally {
       if (playerOverlay) {
         playerOverlay.classList.add('hidden');

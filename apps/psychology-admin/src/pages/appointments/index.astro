@@ -57,13 +57,14 @@ let appointments = fallbackAppointments;
 const url = new URL(Astro.request.url);
 const currentFilter = url.searchParams.get('status') || 'all';
 
-const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const clientApiBase = import.meta.env.PUBLIC_API_URL || '';
 const host = Astro.request.headers.get('host') || 'localhost:3001';
 const cookie = Astro.request.headers.get('cookie') || '';
 
 try {
   const queryStr = currentFilter !== 'all' ? `?status=${encodeURIComponent(currentFilter)}` : '';
-  const res = await fetch(`${apiBase}/admin/appointments${queryStr}`, {
+  const res = await fetch(`${apiBase}/v1/admin/appointments${queryStr}`, {
     headers: {
       Host: host,
       Cookie: cookie,
@@ -387,7 +388,7 @@ function getStatusBadge(st: string) {
     </div>
   </div>
 
-  <script define:vars={{ apiBase }}>
+  <script define:vars={{ apiBase: clientApiBase }}>
     // Confirm Appointment
     document.querySelectorAll('.confirm-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -398,7 +399,7 @@ function getStatusBadge(st: string) {
         btn.textContent = 'در حال ثبت...';
 
         try {
-          const res = await fetch(`${apiBase}/admin/appointments/${apptId}/confirm`, {
+          const res = await fetch(`${apiBase}/v1/admin/appointments/${apptId}/confirm`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -452,7 +453,7 @@ function getStatusBadge(st: string) {
       cancelErrMsg.classList.add('hidden');
 
       try {
-        const res = await fetch(`${apiBase}/admin/appointments/${apptId}/cancel`, {
+        const res = await fetch(`${apiBase}/v1/admin/appointments/${apptId}/cancel`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -497,20 +498,31 @@ function getStatusBadge(st: string) {
         rescheduleThName.textContent = thName;
         rescheduleReason.value = 'هماهنگی تلفنی با مراجع';
         rescheduleErrMsg.classList.add('hidden');
-        rescheduleNewSlot.innerHTML = '<option value="">در حال دریافت سانس‌های آزاد...</option>';
+        rescheduleNewSlot.replaceChildren();
+        const loadingOpt = document.createElement('option');
+        loadingOpt.value = '';
+        loadingOpt.textContent = 'در حال دریافت سانس‌های آزاد...';
+        rescheduleNewSlot.appendChild(loadingOpt);
+
         rescheduleModal.classList.remove('hidden');
         rescheduleModal.classList.add('flex');
 
         try {
-          const res = await fetch(`${apiBase}/public/therapists/${thId}/slots`, {
+          const res = await fetch(`${apiBase}/v1/public/therapists/${thId}/slots`, {
             headers: { Host: window.location.host },
           });
           if (res.ok) {
             const slots = await res.json();
+            rescheduleNewSlot.replaceChildren();
             if (slots.length === 0) {
-              rescheduleNewSlot.innerHTML = '<option value="">سانس خالی موجود نیست</option>';
+              const emptyOpt = document.createElement('option');
+              emptyOpt.value = '';
+              emptyOpt.textContent = 'سانس خالی موجود نیست';
+              rescheduleNewSlot.appendChild(emptyOpt);
             } else {
-              rescheduleNewSlot.innerHTML = slots.map((s) => {
+              slots.forEach((s) => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
                 const dStr = new Intl.DateTimeFormat('fa-IR', {
                   timeZone: 'Asia/Tehran',
                   month: 'numeric',
@@ -518,12 +530,17 @@ function getStatusBadge(st: string) {
                   hour: '2-digit',
                   minute: '2-digit',
                 }).format(new Date(s.starts_at));
-                return `<option value="${s.id}">${dStr} (سانس آزاد)</option>`;
-              }).join('');
+                opt.textContent = `${dStr} (سانس آزاد)`;
+                rescheduleNewSlot.appendChild(opt);
+              });
             }
           }
         } catch {
-          rescheduleNewSlot.innerHTML = '<option value="">خطا در دریافت سانس‌ها</option>';
+          rescheduleNewSlot.replaceChildren();
+          const errOpt = document.createElement('option');
+          errOpt.value = '';
+          errOpt.textContent = 'خطا در دریافت سانس‌ها';
+          rescheduleNewSlot.appendChild(errOpt);
         }
       });
     });
@@ -548,7 +565,7 @@ function getStatusBadge(st: string) {
       rescheduleErrMsg.classList.add('hidden');
 
       try {
-        const res = await fetch(`${apiBase}/admin/appointments/${apptId}/reschedule`, {
+        const res = await fetch(`${apiBase}/v1/admin/appointments/${apptId}/reschedule`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -586,43 +603,80 @@ function getStatusBadge(st: string) {
     document.querySelectorAll('.history-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const apptId = btn.getAttribute('data-id') || '';
-        historyContent.innerHTML = 'در حال دریافت سوابق...';
+        historyContent.replaceChildren();
+        const loadDiv = document.createElement('div');
+        loadDiv.className = 'text-base-content/60 text-center py-4 text-xs';
+        loadDiv.textContent = 'در حال دریافت سوابق...';
+        historyContent.appendChild(loadDiv);
+
         historyModal.classList.remove('hidden');
         historyModal.classList.add('flex');
 
         try {
-          const res = await fetch(`${apiBase}/admin/appointments/${apptId}/history`, {
+          const res = await fetch(`${apiBase}/v1/admin/appointments/${apptId}/history`, {
             headers: { Host: window.location.host },
           });
           if (res.ok) {
             const list = await res.json();
+            historyContent.replaceChildren();
             if (!list || list.length === 0) {
-              historyContent.innerHTML = '<div class="text-base-content/60 text-center py-4">سابقه‌ای برای این نوبت ثبت نشده است.</div>';
+              const emptyDiv = document.createElement('div');
+              emptyDiv.className = 'text-base-content/60 text-center py-4 text-xs';
+              emptyDiv.textContent = 'سابقه‌ای برای این نوبت ثبت نشده است.';
+              historyContent.appendChild(emptyDiv);
             } else {
-              historyContent.innerHTML = list.map((h) => {
+              list.forEach((h) => {
                 const tStr = new Intl.DateTimeFormat('fa-IR', {
                   timeZone: 'Asia/Tehran',
                   dateStyle: 'medium',
                   timeStyle: 'short',
                 }).format(new Date(h.created_at));
-                return `
-                  <div class="border-e-2 border-e-primary pe-3 mb-3">
-                    <div class="font-bold text-base-content text-xs">
-                      تغییر وضعیت: <span class="text-primary">${h.from_status || 'شروع'} &larr; ${h.to_status}</span>
-                    </div>
-                    <div class="text-[11px] text-base-content/60 my-0.5">
-                      اقدام‌کننده: <strong>${h.actor_role}</strong> (${tStr})
-                    </div>
-                    ${h.note ? `<div class="text-[11px] text-base-content/80 bg-base-200/50 p-1.5 rounded-sm">علت: ${h.note}</div>` : ''}
-                  </div>
-                `;
-              }).join('');
+
+                const item = document.createElement('div');
+                item.className = 'border-e-2 border-e-primary pe-3 mb-3';
+
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'font-bold text-base-content text-xs';
+                statusDiv.textContent = 'تغییر وضعیت: ';
+                const statusSpan = document.createElement('span');
+                statusSpan.className = 'text-primary';
+                statusSpan.textContent = `${h.from_status || 'شروع'} ← ${h.to_status}`;
+                statusDiv.appendChild(statusSpan);
+                item.appendChild(statusDiv);
+
+                const actorDiv = document.createElement('div');
+                actorDiv.className = 'text-[11px] text-base-content/60 my-0.5';
+                actorDiv.textContent = 'اقدام‌کننده: ';
+                const actorStrong = document.createElement('strong');
+                actorStrong.textContent = h.actor_role || '';
+                actorDiv.appendChild(actorStrong);
+                const timeText = document.createTextNode(` (${tStr})`);
+                actorDiv.appendChild(timeText);
+                item.appendChild(actorDiv);
+
+                if (h.note) {
+                  const noteDiv = document.createElement('div');
+                  noteDiv.className = 'text-[11px] text-base-content/80 bg-base-200/50 p-1.5 rounded-sm';
+                  noteDiv.textContent = `علت: ${h.note}`;
+                  item.appendChild(noteDiv);
+                }
+
+                historyContent.appendChild(item);
+              });
             }
           } else {
-            historyContent.innerHTML = '<div class="text-error">خطا در دریافت سوابق تاریخچه.</div>';
+            historyContent.replaceChildren();
+            const errDiv = document.createElement('div');
+            errDiv.className = 'text-error text-center py-4 text-xs';
+            errDiv.textContent = 'خطا در دریافت سوابق تاریخچه.';
+            historyContent.appendChild(errDiv);
           }
         } catch {
-          historyContent.innerHTML = '<div class="text-error">خطای اتصال به سرور.</div>';
+          historyContent.replaceChildren();
+          const errDiv = document.createElement('div');
+          errDiv.className = 'text-error text-center py-4 text-xs';
+          errDiv.textContent = 'خطای اتصال به سرور.';
+          historyContent.appendChild(errDiv);
         }
       });
     });

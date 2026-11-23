@@ -1,5 +1,6 @@
 export * from './tokens.js';
 export * from './template-catalog.js';
+export * from './palette-catalog.js';
 export * from './utils/cn.js';
 
 // Primitives (SSR-compatible without client hydration)

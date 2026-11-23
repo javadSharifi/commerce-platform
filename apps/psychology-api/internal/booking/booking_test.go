@@ -1795,7 +1795,7 @@ func TestPublicAppointment_HTTPEndpoints(t *testing.T) {
 	svc := booking.NewService(q)
 
 	tenantID := uuid.New()
-	t0 := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+	t0 := time.Now().UTC()
 	slotStart := t0.Add(24 * time.Hour)
 	slotEnd := slotStart.Add(45 * time.Minute)
 
@@ -2296,7 +2296,7 @@ func TestAdminAppointment_HTTPEndpoints(t *testing.T) {
 	svc := booking.NewService(q)
 
 	tenantID := uuid.New()
-	t0 := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+	t0 := time.Now().UTC()
 	s1Start := t0.Add(24 * time.Hour)
 	s2Start := t0.Add(26 * time.Hour)
 

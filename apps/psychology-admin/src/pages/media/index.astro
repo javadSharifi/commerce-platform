@@ -2,9 +2,10 @@
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import type { MediaListResponse } from '@psychology/api-client';
 
-const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 const tenantId = Astro.cookies.get('tenant_id')?.value || '4f3b7b51-7890-4e12-b345-67890abcdef1';
 const sessionToken = Astro.cookies.get('session_token')?.value || '';
+const host = Astro.request.headers.get('host') || 'localhost:3001';
 
 // Fallback demo media data
 const fallbackMedia: MediaListResponse = {
@@ -47,8 +48,10 @@ const fallbackMedia: MediaListResponse = {
 let mediaData = fallbackMedia;
 
 try {
-  const res = await fetch(`${apiBase}/admin/media`, {
+  const res = await fetch(`${apiBase}/v1/admin/media`, {
     headers: {
+      Host: host,
+      ...(sessionToken ? { Cookie: `session_token=${sessionToken}` } : {}),
       'X-Tenant-ID': tenantId,
       'Authorization': `Bearer ${sessionToken}`,
     },
@@ -194,7 +197,7 @@ function formatDatePersian(dateStr?: string | null) {
   </div>
 
   <script>
-    const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+    const apiBase = import.meta.env.PUBLIC_API_URL || '';
     const uploadBtn = document.getElementById('btn-upload-direct');
     const fileInput = document.getElementById('media-file-input') as HTMLInputElement;
     const progressText = document.getElementById('upload-progress-text');
@@ -209,7 +212,7 @@ function formatDatePersian(dateStr?: string | null) {
 
       try {
         // 1. Request presigned upload URL
-        const reqRes = await fetch(`${apiBase}/admin/media/upload-url`, {
+        const reqRes = await fetch(`${apiBase}/v1/admin/media/upload-url`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -244,7 +247,7 @@ function formatDatePersian(dateStr?: string | null) {
 
         // 3. Finalize upload
         if (progressText) progressText.textContent = '🔄 در حال نهایی‌سازی و اعتبارسنجی سروری...';
-        const finRes = await fetch(`${apiBase}/admin/media/finalize`, {
+        const finRes = await fetch(`${apiBase}/v1/admin/media/finalize`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

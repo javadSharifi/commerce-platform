@@ -85,7 +85,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const price_rials = price_tomans * 10;
 
       try {
-        const res = await fetch('/admin/courses', {
+        const res = await fetch('/v1/admin/courses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -7,9 +7,9 @@
     "start": "astro dev --port 3000",
     "build": "astro build",
     "preview": "astro preview",
-    "lint": "node -e \"process.exit(0)\"",
+    "lint": "node ../../scripts/lint.mjs",
     "typecheck": "astro check && tsc --noEmit",
-    "test": "node --test test/ssr-render.test.mjs test/templates.test.mjs test/preview.test.mjs test/acceptance-a12.test.mjs test/content-pages.test.mjs test/interactive-pages.test.mjs"
+    "test": "node --test --test-concurrency=1 test/ssr-render.test.mjs test/templates.test.mjs test/preview.test.mjs test/editorial-template.test.mjs test/home-preview-redesign.test.mjs test/education-pages-redesign.test.mjs test/blog-pages-redesign.test.mjs test/booking-redesign.test.mjs test/acceptance-a12.test.mjs test/acceptance-a13.test.mjs test/acceptance-a14.test.mjs test/content-pages.test.mjs test/interactive-pages.test.mjs test/ssr-api-runtime.test.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^9.1.2",

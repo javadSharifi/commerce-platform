@@ -15,6 +15,7 @@ import (
 	"psychology/api/internal/domain"
 	"psychology/api/internal/domain/domaindb"
 	"psychology/api/internal/platform/db"
+	"psychology/api/internal/platform/tenantctx"
 	"psychology/api/internal/settings"
 	"psychology/api/internal/settings/settingsdb"
 
@@ -64,15 +65,34 @@ func (s *serverMockStore) GetDomainByHost(ctx context.Context, host string) (dom
 }
 
 // Settings Querier
-func (s *serverMockStore) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (settingsdb.SiteSetting, error) {
+func (s *serverMockStore) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (settingsdb.GetSiteSettingsRow, error) {
 	st, ok := s.settings[fromPgUUID(tenantID).String()]
 	if !ok {
-		return settingsdb.SiteSetting{}, pgx.ErrNoRows
+		return settingsdb.GetSiteSettingsRow{}, pgx.ErrNoRows
 	}
-	return st, nil
+	pal := st.PaletteID
+	if pal == "" {
+		pal = "calm-sage"
+	}
+	return settingsdb.GetSiteSettingsRow{
+		TenantID:        st.TenantID,
+		Title:           st.Title,
+		Description:     st.Description,
+		Phone:           st.Phone,
+		Address:         st.Address,
+		PrimaryColor:    st.PrimaryColor,
+		LogoMediaID:     st.LogoMediaID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		PaletteID:       pal,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
 }
 
-func (s *serverMockStore) UpsertSiteSettings(ctx context.Context, arg settingsdb.UpsertSiteSettingsParams) (settingsdb.SiteSetting, error) {
+func (s *serverMockStore) UpsertSiteSettings(ctx context.Context, arg settingsdb.UpsertSiteSettingsParams) (settingsdb.UpsertSiteSettingsRow, error) {
 	st := settingsdb.SiteSetting{
 		TenantID:        arg.TenantID,
 		Title:           arg.Title,
@@ -85,9 +105,112 @@ func (s *serverMockStore) UpsertSiteSettings(ctx context.Context, arg settingsdb
 		TemplateVersion: arg.TemplateVersion,
 		ThemeRadius:     arg.ThemeRadius,
 		ThemeScale:      arg.ThemeScale,
+		PaletteID:       arg.PaletteID,
 	}
 	s.settings[fromPgUUID(arg.TenantID).String()] = st
-	return st, nil
+	return settingsdb.UpsertSiteSettingsRow{
+		TenantID:        st.TenantID,
+		Title:           st.Title,
+		Description:     st.Description,
+		Phone:           st.Phone,
+		Address:         st.Address,
+		PrimaryColor:    st.PrimaryColor,
+		LogoMediaID:     st.LogoMediaID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		PaletteID:       st.PaletteID,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
+}
+
+func (s *serverMockStore) GetSiteAppearance(ctx context.Context, tenantID pgtype.UUID) (settingsdb.GetSiteAppearanceRow, error) {
+	st, ok := s.settings[fromPgUUID(tenantID).String()]
+	if !ok {
+		return settingsdb.GetSiteAppearanceRow{}, pgx.ErrNoRows
+	}
+	pal := st.PaletteID
+	if pal == "" {
+		pal = "calm-sage"
+	}
+	return settingsdb.GetSiteAppearanceRow{
+		TenantID:        st.TenantID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		PaletteID:       pal,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
+}
+
+func (s *serverMockStore) UpsertSiteAppearance(ctx context.Context, arg settingsdb.UpsertSiteAppearanceParams) (settingsdb.UpsertSiteAppearanceRow, error) {
+	key := fromPgUUID(arg.TenantID).String()
+	st := s.settings[key]
+	st.TenantID = arg.TenantID
+	st.TemplateID = arg.TemplateID
+	st.TemplateVersion = arg.TemplateVersion
+	st.PaletteID = arg.PaletteID
+	st.ThemeRadius = arg.ThemeRadius
+	st.ThemeScale = arg.ThemeScale
+	s.settings[key] = st
+	return settingsdb.UpsertSiteAppearanceRow{
+		TenantID:        st.TenantID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		PaletteID:       st.PaletteID,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
+}
+
+func (s *serverMockStore) UpsertSiteProfile(ctx context.Context, arg settingsdb.UpsertSiteProfileParams) (settingsdb.UpsertSiteProfileRow, error) {
+	key := fromPgUUID(arg.TenantID).String()
+	st := s.settings[key]
+	st.TenantID = arg.TenantID
+	st.Title = arg.Title
+	st.Description = arg.Description
+	st.Phone = arg.Phone
+	st.Address = arg.Address
+	st.PrimaryColor = arg.PrimaryColor
+	st.LogoMediaID = arg.LogoMediaID
+	if st.TemplateID == "" {
+		st.TemplateID = "minimal"
+	}
+	if st.TemplateVersion == "" {
+		st.TemplateVersion = "1.0.0"
+	}
+	if st.ThemeRadius == "" {
+		st.ThemeRadius = "md"
+	}
+	if st.ThemeScale == "" {
+		st.ThemeScale = "md"
+	}
+	if st.PaletteID == "" {
+		st.PaletteID = "calm-sage"
+	}
+	s.settings[key] = st
+	return settingsdb.UpsertSiteProfileRow{
+		TenantID:        st.TenantID,
+		Title:           st.Title,
+		Description:     st.Description,
+		Phone:           st.Phone,
+		Address:         st.Address,
+		PrimaryColor:    st.PrimaryColor,
+		LogoMediaID:     st.LogoMediaID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		PaletteID:       st.PaletteID,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
 }
 
 func (s *serverMockStore) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (settingsdb.GetPublicSiteProfileRow, error) {
@@ -105,7 +228,12 @@ func (s *serverMockStore) GetPublicSiteProfile(ctx context.Context, id pgtype.UU
 			TemplateVersion: "1.0.0",
 			ThemeRadius:     "md",
 			ThemeScale:      "md",
+			PaletteID:       "calm-sage",
 		}, nil
+	}
+	pal := st.PaletteID
+	if pal == "" {
+		pal = "calm-sage"
 	}
 	return settingsdb.GetPublicSiteProfileRow{
 		ClinicName:      name,
@@ -119,6 +247,7 @@ func (s *serverMockStore) GetPublicSiteProfile(ctx context.Context, id pgtype.UU
 		TemplateVersion: st.TemplateVersion,
 		ThemeRadius:     st.ThemeRadius,
 		ThemeScale:      st.ThemeScale,
+		PaletteID:       pal,
 	}, nil
 }
 
@@ -188,7 +317,7 @@ func (s *serverMockStore) CreateMembership(ctx context.Context, arg authdb.Creat
 }
 
 func TestHealthCheck(t *testing.T) {
-	router := setupRouter(nil, nil, nil, nil, nil)
+	router := setupRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req, err := http.NewRequest(http.MethodGet, "/healthz", nil)
 	if err != nil {
@@ -282,7 +411,7 @@ func TestServer_SettingsEndToEnd_TwoHostsAndAuth(t *testing.T) {
 	settingsService := settings.NewService(store)
 	settingsHandler := settings.NewHandler(settingsService, domainResolver, authService)
 
-	router := setupRouter(authHandler, nil, nil, nil, settingsHandler)
+	router := setupRouter(authHandler, nil, nil, nil, settingsHandler, nil, nil, nil, nil)
 
 	// 1. Host A public profile -> 200 OK
 	reqA := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
@@ -344,8 +473,7 @@ func TestServer_SettingsEndToEnd_TwoHostsAndAuth(t *testing.T) {
 
 	// 6. Cross-Tenant Mutation Attempt: Owner A tries to mutate Tenant B -> 403 FORBIDDEN
 	tamperBody, _ := json.Marshal(map[string]string{
-		"title":         "کلینیک دستکاری‌شده ماهان",
-		"primary_color": "#ff0000",
+		"title": "کلینیک دستکاری‌شده ماهان",
 	})
 	reqTamper := httptest.NewRequest(http.MethodPut, "/v1/admin/site", bytes.NewBuffer(tamperBody))
 	reqTamper.Header.Set("Authorization", "Bearer "+validTokenA)
@@ -375,11 +503,10 @@ func TestServer_SettingsEndToEnd_TwoHostsAndAuth(t *testing.T) {
 
 	// 8. Authorized Admin Update for Tenant A by Owner A -> 200 OK
 	validBody, _ := json.Marshal(map[string]string{
-		"title":         "کلینیک تخصصی دکتر علوی (به‌روزشده)",
-		"description":   "مشاوره و روان‌درمانی فردی و خانواده",
-		"phone":         "02188889999",
-		"address":       "تهران، خیابان ولیعصر",
-		"primary_color": "#0ea5e9",
+		"title":       "کلینیک تخصصی دکتر علوی (به‌روزشده)",
+		"description": "مشاوره و روان‌درمانی فردی و خانواده",
+		"phone":       "02188889999",
+		"address":     "تهران، خیابان ولیعصر",
 	})
 	reqAdminPut := httptest.NewRequest(http.MethodPut, "/v1/admin/site", bytes.NewBuffer(validBody))
 	reqAdminPut.Header.Set("Authorization", "Bearer "+validTokenA)
@@ -401,7 +528,7 @@ func TestServer_SettingsEndToEnd_TwoHostsAndAuth(t *testing.T) {
 	}
 	var resAUpdated settings.PublicSiteProfile
 	_ = json.Unmarshal(rrAUpdated.Body.Bytes(), &resAUpdated)
-	if resAUpdated.Title != "کلینیک تخصصی دکتر علوی (به‌روزشده)" || resAUpdated.PrimaryColor != "#0ea5e9" {
+	if resAUpdated.Title != "کلینیک تخصصی دکتر علوی (به‌روزشده)" || resAUpdated.PrimaryColor != "#0284c7" {
 		t.Fatalf("Host A profile was not updated: %+v", resAUpdated)
 	}
 
@@ -437,15 +564,15 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 
 	store := db.NewStore(pool)
 	domainResolver := domain.NewResolver(domaindb.New(pool))
-	authService := auth.NewService(authdb.New(pool))
+	authService := auth.NewServiceWithStore(authdb.New(pool), store)
 	authHandler := auth.NewHandler(authService)
 
 	settingsService := settings.NewServiceWithStore(store)
 	settingsHandler := settings.NewHandler(settingsService, domainResolver, authService)
 
-	router := setupRouter(authHandler, nil, nil, nil, settingsHandler)
+	router := setupRouter(authHandler, nil, nil, nil, settingsHandler, nil, nil, nil, nil)
 
-	// Verify health check works with full setup
+	// 1. Verify health check works with full setup
 	req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -453,12 +580,256 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 		t.Fatalf("expected 200 for /v1/health with live pool, got %d", rr.Code)
 	}
 
-	// Verify unknown host handling with live pool
+	// 2. Verify unknown host handling with live pool returns 404
 	reqUnknown := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
 	reqUnknown.Host = "unknown-" + uuid.NewString() + ".ir"
 	rrUnknown := httptest.NewRecorder()
 	router.ServeHTTP(rrUnknown, reqUnknown)
 	if rrUnknown.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown host with live pool, got %d", rrUnknown.Code)
+	}
+
+	// 3. Seed two distinct tenants and panel identities
+	tenantA := uuid.New()
+	tenantB := uuid.New()
+	slugA := "live-a-" + tenantA.String()[:8]
+	slugB := "live-b-" + tenantB.String()[:8]
+	hostA := slugA + ".ir"
+	hostB := slugB + ".ir"
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO tenants (id, name, slug, status)
+		VALUES ($1, $2, $3, 'active'), ($4, $5, $6, 'active')
+	`, tenantA, "کلینیک دکتر شمس", slugA, tenantB, "کلینیک دکتر فردوس", slugB)
+	if err != nil {
+		t.Fatalf("failed to insert live tenants: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM tenants WHERE id IN ($1, $2)", tenantA, tenantB)
+	}()
+
+	userA := uuid.New()
+	userB := uuid.New()
+	_, err = pool.Exec(ctx, `
+		INSERT INTO panel_identities (id, email, password_hash, full_name, status)
+		VALUES ($1, $2, 'hash', 'دکتر شمس', 'active'), ($3, $4, 'hash', 'دکتر فردوس', 'active')
+	`, userA, slugA+"@clinic.ir", userB, slugB+"@clinic.ir")
+	if err != nil {
+		t.Fatalf("failed to insert live panel identities: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM panel_identities WHERE id IN ($1, $2)", userA, userB)
+	}()
+
+	ctxA := tenantctx.With(ctx, tenantA)
+	ctxB := tenantctx.With(ctx, tenantB)
+
+	// Seed domain, membership, and initial settings for Tenant A
+	err = store.WithTenantTx(ctxA, func(tx pgx.Tx, tid uuid.UUID) error {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO domains (id, tenant_id, host, is_primary, is_verified, verified_at)
+			VALUES ($1, $2, $3, true, true, now())
+		`, uuid.New(), tid, hostA); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO memberships (id, tenant_id, user_id, role)
+			VALUES ($1, $2, $3, 'owner')
+		`, uuid.New(), tid, userA); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed to seed domain/membership for Tenant A: %v", err)
+	}
+	if _, err := settingsService.UpdateSettings(ctxA, tenantA, settings.UpdateSettingsParams{
+		Title:        "کلینیک دکتر شمس",
+		PrimaryColor: "#0ea5e9",
+		TemplateID:   "minimal",
+	}); err != nil {
+		t.Fatalf("failed to set initial settings for Tenant A: %v", err)
+	}
+
+	// Seed domain, membership, and initial settings for Tenant B
+	err = store.WithTenantTx(ctxB, func(tx pgx.Tx, tid uuid.UUID) error {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO domains (id, tenant_id, host, is_primary, is_verified, verified_at)
+			VALUES ($1, $2, $3, true, true, now())
+		`, uuid.New(), tid, hostB); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO memberships (id, tenant_id, user_id, role)
+			VALUES ($1, $2, $3, 'owner')
+		`, uuid.New(), tid, userB); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed to seed domain/membership for Tenant B: %v", err)
+	}
+	if _, err := settingsService.UpdateSettings(ctxB, tenantB, settings.UpdateSettingsParams{
+		Title:        "کلینیک دکتر فردوس",
+		PrimaryColor: "#10b981",
+		TemplateID:   "minimal",
+	}); err != nil {
+		t.Fatalf("failed to set initial settings for Tenant B: %v", err)
+	}
+
+	// Seed active session for userA
+	tokenA := "live-test-token-" + uuid.NewString()
+	tokenHashA := auth.HashToken(tokenA)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO panel_sessions (id, user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3, now() + interval '1 day')
+	`, uuid.New(), userA, tokenHashA)
+	if err != nil {
+		t.Fatalf("failed to seed panel session for user A: %v", err)
+	}
+
+	// 4. Verify Host A gets its public profile (200 OK)
+	reqA := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
+	reqA.Host = hostA
+	rrA := httptest.NewRecorder()
+	router.ServeHTTP(rrA, reqA)
+	if rrA.Code != http.StatusOK {
+		t.Fatalf("expected 200 for Host A public site, got %d: %s", rrA.Code, rrA.Body.String())
+	}
+	var resA settings.PublicSiteProfile
+	if err := json.Unmarshal(rrA.Body.Bytes(), &resA); err != nil {
+		t.Fatalf("failed to unmarshal Host A response: %v", err)
+	}
+	if resA.Title != "کلینیک دکتر شمس" || resA.PrimaryColor != "#0ea5e9" {
+		t.Fatalf("unexpected Host A profile: %+v", resA)
+	}
+
+	// 5. Verify Host B gets its public profile (200 OK)
+	reqB := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
+	reqB.Host = hostB
+	rrB := httptest.NewRecorder()
+	router.ServeHTTP(rrB, reqB)
+	if rrB.Code != http.StatusOK {
+		t.Fatalf("expected 200 for Host B public site, got %d: %s", rrB.Code, rrB.Body.String())
+	}
+	var resB settings.PublicSiteProfile
+	if err := json.Unmarshal(rrB.Body.Bytes(), &resB); err != nil {
+		t.Fatalf("failed to unmarshal Host B response: %v", err)
+	}
+	if resB.Title != "کلینیک دکتر فردوس" || resB.PrimaryColor != "#10b981" {
+		t.Fatalf("unexpected Host B profile: %+v", resB)
+	}
+
+	// 6. Authorized Admin GET for Tenant A by Owner A -> 200 OK
+	reqAdminGet := httptest.NewRequest(http.MethodGet, "/v1/admin/site", nil)
+	reqAdminGet.Header.Set("Authorization", "Bearer "+tokenA)
+	reqAdminGet.Header.Set("X-Tenant-ID", tenantA.String())
+	rrAdminGet := httptest.NewRecorder()
+	router.ServeHTTP(rrAdminGet, reqAdminGet)
+	if rrAdminGet.Code != http.StatusOK {
+		t.Fatalf("expected 200 for authorized admin get, got %d: %s", rrAdminGet.Code, rrAdminGet.Body.String())
+	}
+	var adminRes settings.SiteSettings
+	if err := json.Unmarshal(rrAdminGet.Body.Bytes(), &adminRes); err != nil {
+		t.Fatalf("failed to unmarshal admin get response: %v", err)
+	}
+	if adminRes.Title != "کلینیک دکتر شمس" {
+		t.Fatalf("unexpected admin settings title: %s", adminRes.Title)
+	}
+
+	// 7. Authorized Admin PUT for Tenant A by Owner A -> 200 OK
+	updateBody, _ := json.Marshal(map[string]string{
+		"title": "کلینیک تخصصی دکتر شمس (به‌روزشده)",
+		"phone": "02177778888",
+	})
+	reqAdminPut := httptest.NewRequest(http.MethodPut, "/v1/admin/site", bytes.NewBuffer(updateBody))
+	reqAdminPut.Header.Set("Authorization", "Bearer "+tokenA)
+	reqAdminPut.Header.Set("X-Tenant-ID", tenantA.String())
+	reqAdminPut.Header.Set("Content-Type", "application/json")
+	rrAdminPut := httptest.NewRecorder()
+	router.ServeHTTP(rrAdminPut, reqAdminPut)
+	if rrAdminPut.Code != http.StatusOK {
+		t.Fatalf("expected 200 for authorized admin put, got %d: %s", rrAdminPut.Code, rrAdminPut.Body.String())
+	}
+
+	// 8. Host A public profile now reflects the updated settings -> 200 OK
+	reqAUpdated := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
+	reqAUpdated.Host = hostA
+	rrAUpdated := httptest.NewRecorder()
+	router.ServeHTTP(rrAUpdated, reqAUpdated)
+	if rrAUpdated.Code != http.StatusOK {
+		t.Fatalf("expected 200 for Host A updated, got %d", rrAUpdated.Code)
+	}
+	var resAUpdated settings.PublicSiteProfile
+	_ = json.Unmarshal(rrAUpdated.Body.Bytes(), &resAUpdated)
+	if resAUpdated.Title != "کلینیک تخصصی دکتر شمس (به‌روزشده)" || resAUpdated.PrimaryColor != "#0ea5e9" {
+		t.Fatalf("Host A profile was not updated: %+v", resAUpdated)
+	}
+
+	// 9. Host B public profile remains completely unchanged -> 200 OK
+	reqBCheck := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
+	reqBCheck.Host = hostB
+	rrBCheck := httptest.NewRecorder()
+	router.ServeHTTP(rrBCheck, reqBCheck)
+	var resBCheck settings.PublicSiteProfile
+	_ = json.Unmarshal(rrBCheck.Body.Bytes(), &resBCheck)
+	if resBCheck.Title != "کلینیک دکتر فردوس" || resBCheck.PrimaryColor != "#10b981" {
+		t.Fatalf("Host B profile was polluted by Host A update! Got: %+v", resBCheck)
+	}
+
+	// 10. Tampering attempt: Owner A attempts to read Tenant B settings -> 403 Forbidden
+	reqTamperGet := httptest.NewRequest(http.MethodGet, "/v1/admin/site", nil)
+	reqTamperGet.Header.Set("Authorization", "Bearer "+tokenA)
+	reqTamperGet.Header.Set("X-Tenant-ID", tenantB.String())
+	rrTamperGet := httptest.NewRecorder()
+	router.ServeHTTP(rrTamperGet, reqTamperGet)
+	if rrTamperGet.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for cross-tenant read attempt, got %d: %s", rrTamperGet.Code, rrTamperGet.Body.String())
+	}
+
+	// 11. Tampering attempt: Owner A attempts to update Tenant B settings -> 403 Forbidden
+	reqTamperPut := httptest.NewRequest(http.MethodPut, "/v1/admin/site", bytes.NewBuffer(updateBody))
+	reqTamperPut.Header.Set("Authorization", "Bearer "+tokenA)
+	reqTamperPut.Header.Set("X-Tenant-ID", tenantB.String())
+	reqTamperPut.Header.Set("Content-Type", "application/json")
+	rrTamperPut := httptest.NewRecorder()
+	router.ServeHTTP(rrTamperPut, reqTamperPut)
+	if rrTamperPut.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for cross-tenant update attempt, got %d: %s", rrTamperPut.Code, rrTamperPut.Body.String())
+	}
+}
+
+func TestServer_GracefulShutdownAndTimeouts(t *testing.T) {
+	router := setupRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	srv := &http.Server{
+		Addr:              ":0",
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	if srv.ReadHeaderTimeout != 5*time.Second {
+		t.Errorf("expected ReadHeaderTimeout = 5s, got %v", srv.ReadHeaderTimeout)
+	}
+	if srv.ReadTimeout != 15*time.Second {
+		t.Errorf("expected ReadTimeout = 15s, got %v", srv.ReadTimeout)
+	}
+	if srv.WriteTimeout != 30*time.Second {
+		t.Errorf("expected WriteTimeout = 30s, got %v", srv.WriteTimeout)
+	}
+	if srv.IdleTimeout != 60*time.Second {
+		t.Errorf("expected IdleTimeout = 60s, got %v", srv.IdleTimeout)
+	}
+
+	// Verify server starts and gracefully shuts down
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		t.Fatalf("graceful shutdown failed: %v", err)
 	}
 }

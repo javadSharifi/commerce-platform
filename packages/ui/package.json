@@ -12,7 +12,7 @@
     "./styles/base.css": "./src/styles/base.css"
   },
   "scripts": {
-    "lint": "node -e \"process.exit(0)\"",
+    "lint": "node ../../scripts/lint.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "test": "node --test test/render.test.mjs test/interactive.test.mjs"

@@ -34,6 +34,7 @@ export interface PublicSiteResponse {
   template_version: string;
   theme_radius: ThemeRadius;
   theme_scale: ThemeScale;
+  palette_id: string;
 }
 
 export interface LoginRequest {
@@ -68,6 +69,7 @@ export interface AdminMeResponse {
 
 export interface SiteSettingsResponse {
   tenant_id: string;
+  primary_domain?: string;
   title: string;
   description: string;
   phone: string;
@@ -78,6 +80,22 @@ export interface SiteSettingsResponse {
   template_version: string;
   theme_radius: ThemeRadius;
   theme_scale: ThemeScale;
+  palette_id?: string;
+}
+
+export interface SiteAppearanceResponse {
+  template_id: string;
+  template_version: string;
+  palette_id: string;
+  theme_radius: ThemeRadius;
+  theme_scale: ThemeScale;
+}
+
+export interface UpdateSiteAppearanceRequest {
+  template_id: string;
+  palette_id: string;
+  theme_radius?: ThemeRadius;
+  theme_scale?: ThemeScale;
 }
 
 export interface UpdateSiteSettingsRequest {
@@ -85,11 +103,7 @@ export interface UpdateSiteSettingsRequest {
   description: string;
   phone?: string;
   address?: string;
-  primary_color: string;
   logo_media_id?: string | null;
-  template_id?: string;
-  theme_radius?: ThemeRadius;
-  theme_scale?: ThemeScale;
 }
 
 export interface BuyerProfileResponse {

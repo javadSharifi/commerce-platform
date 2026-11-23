@@ -1,0 +1,49 @@
+---
+import type { SiteHeaderVM } from '../view-models.js';
+
+interface Props extends SiteHeaderVM {}
+
+const { clinicTitle, navItems, primaryAction } = Astro.props;
+---
+
+<header class="w-full bg-base-100 border-b border-base-200 shadow-xs transition-colors sticky top-0 z-30">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-14 md:h-16">
+      <!-- Clinic Title / Brand -->
+      <a href="/" class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-primary text-primary-content flex items-center justify-center font-bold text-sm shadow-xs">
+          {clinicTitle.slice(0, 1)}
+        </div>
+        <span class="text-base sm:text-lg font-bold text-base-content hover:text-primary transition-colors line-clamp-1">
+          {clinicTitle}
+        </span>
+      </a>
+
+      <!-- Desktop Navigation Links -->
+      <nav class="hidden md:flex items-center gap-5 text-sm font-medium">
+        {navItems.map((item) => (
+          <a
+            href={item.href}
+            class={`transition-colors py-1 ${
+              item.isActive ? 'text-primary font-bold border-b-2 border-primary' : 'text-base-content/80 hover:text-primary'
+            }`}
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
+      <!-- Action CTA -->
+      {primaryAction && (
+        <div class="flex items-center gap-2">
+          <a
+            href={primaryAction.href}
+            class="btn btn-primary btn-xs sm:btn-sm md:btn-md rounded-xl font-medium shadow-xs"
+          >
+            {primaryAction.label}
+          </a>
+        </div>
+      )}
+    </div>
+  </div>
+</header>

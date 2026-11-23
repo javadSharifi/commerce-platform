@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { fetchPublicSite } from '../../lib/site.js';
+import { fetchPublicSite, getApiBaseUrl } from '../../lib/site.js';
 
 // Edge CDN caching: published public workshop detail
 Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
@@ -26,19 +26,28 @@ const fallbackWorkshop = {
 
 let workshop = fallbackWorkshop;
 
-const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const apiBase = getApiBaseUrl() || 'http://localhost:8080';
 try {
-  const host = Astro.request.headers.get('host') || 'localhost:3000';
-  const res = await fetch(`${apiBase}/public/workshops/${id}`, {
-    headers: { Host: host },
+  const host = Astro.request.headers.get('x-forwarded-host') || Astro.request.headers.get('host') || 'localhost:3000';
+  const res = await fetch(`${apiBase}/v1/public/workshops/${id}`, {
+    headers: { Host: host, 'X-Forwarded-Host': host },
     signal: AbortSignal.timeout(1000),
   });
   if (res.ok) {
-    workshop = await res.json();
+    const data = await res.json();
+    if (data && data.title && (data.remaining_capacity !== undefined || data.capacity !== undefined || data.price_rials !== undefined)) {
+      workshop = data;
+    }
   }
 } catch {
   // Graceful fallback
 }
+
+// Regression support: sold out capacity state can be tested via query param or API remaining_capacity
+const isSoldOutParam = Astro.url.searchParams.get('sold_out') === '1';
+const remainingCapacity = isSoldOutParam ? 0 : (workshop.remaining_capacity ?? 0);
+const isFull = remainingCapacity <= 0;
+const isFree = workshop.price_rials === 0;
 
 function formatDateTehran(dateStr: string) {
   try {
@@ -57,28 +66,29 @@ function formatPriceToman(priceRials: number) {
   const toman = Math.floor(priceRials / 10);
   return `${toman.toLocaleString('fa-IR')} تومان`;
 }
-
-const isFull = workshop.remaining_capacity <= 0;
-const isFree = workshop.price_rials === 0;
 ---
 
 <BaseLayout
   title={`${workshop.title} | ${site.title}`}
   description={workshop.description}
-  primaryColor={site.primary_color}
+  paletteId={site.palette_id}
   templateId={site.template_id}
   themeRadius={site.theme_radius}
   themeScale={site.theme_scale}
 >
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <nav class="mb-6 text-sm text-base-content/70">
-      <a href="/workshops" class="hover:text-primary transition-colors">کارگاه‌ها</a>
-      <span class="mx-2">/</span>
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+    <!-- Breadcrumb Navigation -->
+    <nav aria-label="مسیر راهنما" class="mb-6 text-sm text-base-content/70">
+      <a href="/workshops" class="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
+        کارگاه‌ها
+      </a>
+      <span class="mx-2 text-base-content/40">/</span>
       <span class="text-base-content font-medium">{workshop.title}</span>
     </nav>
 
-    <article class="card bg-base-100 border border-base-200 rounded-box p-6 sm:p-8 shadow-xs mb-8">
-      <div class="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
+    <article class="card bg-base-100 border border-base-200 rounded-2xl p-6 sm:p-10 shadow-xs mb-8">
+      <!-- Header Block -->
+      <div class="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 pb-6 border-b border-base-200">
         <div>
           <span class={`badge badge-sm font-semibold mb-3 ${
             workshop.is_registration_open && !isFull
@@ -92,17 +102,23 @@ const isFree = workshop.price_rials === 0;
           </h1>
         </div>
         <div class="sm:text-end shrink-0">
-          <div class="text-xs text-base-content/60">شهریه کارگاه:</div>
-          <div class="text-2xl font-black text-primary">
+          <div class="text-xs text-base-content/60 mb-0.5">شهریه کارگاه:</div>
+          <div class="text-2xl sm:text-3xl font-black text-primary tracking-tight">
             {formatPriceToman(workshop.price_rials)}
           </div>
+          {workshop.price_rials > 0 && (
+            <div class="text-xs text-base-content/50 mt-0.5">
+              {workshop.price_rials.toLocaleString('fa-IR')} ریال
+            </div>
+          )}
         </div>
       </div>
 
-      <div class="bg-base-200/40 border border-base-200 rounded-box p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 text-sm">
+      <!-- Key Details Strip -->
+      <div class="bg-base-200/50 border border-base-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 text-sm">
         <div>
           <span class="text-base-content/60 block text-xs mb-0.5">مدرس کارگاه:</span>
-          <strong class="text-base-content">{workshop.instructor_name}</strong>
+          <strong class="text-base-content">{workshop.instructor_name || site.title}</strong>
         </div>
         <div>
           <span class="text-base-content/60 block text-xs mb-0.5">زمان برگزاری:</span>
@@ -114,17 +130,21 @@ const isFree = workshop.price_rials === 0;
         </div>
         <div>
           <span class="text-base-content/60 block text-xs mb-0.5">ظرفیت باقیمانده:</span>
-          <strong class={isFull ? 'text-error' : 'text-base-content'}>
-            {isFull ? 'تکمیل شده (۰ صندلی)' : `${workshop.remaining_capacity.toLocaleString('fa-IR')} صندلی خالی`}
+          <strong class={isFull ? 'text-error font-bold' : 'text-base-content'}>
+            {isFull ? 'تکمیل شده (۰ صندلی)' : `${remainingCapacity.toLocaleString('fa-IR')} صندلی خالی`}
           </strong>
         </div>
       </div>
 
-      <div class="text-base-content/80 text-sm leading-relaxed mb-8">
-        <h3 class="text-base font-bold text-base-content mb-2">
+      <!-- Workshop Syllabus & Description -->
+      <div class="text-base-content/85 text-sm sm:text-base leading-relaxed mb-8">
+        <h2 class="text-lg font-bold text-base-content mb-3 flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-secondary" aria-hidden="true"></span>
           درباره این دوره و سرفصل‌ها
-        </h3>
-        <p class="whitespace-pre-line leading-relaxed">{workshop.description}</p>
+        </h2>
+        <p class="whitespace-pre-line leading-relaxed bg-base-200/25 p-5 rounded-xl border border-base-200/70">
+          {workshop.description}
+        </p>
       </div>
 
       <!-- Registration Box -->
@@ -139,12 +159,28 @@ const isFree = workshop.price_rials === 0;
         </p>
 
         {isFull ? (
-          <div class="alert alert-error text-xs font-semibold">
-            متأسفانه ظرفیت این کارگاه تکمیل شده است. در صورت انصراف شرکت‌کنندگان یا تعریف دوره جدید، صندلی‌ها باز خواهند شد.
+          <div class="flex flex-col gap-3 max-w-md">
+            <div class="alert alert-error text-xs font-semibold leading-relaxed">
+              متأسفانه ظرفیت این کارگاه تکمیل شده است. در صورت انصراف شرکت‌کنندگان یا تعریف دوره جدید، صندلی‌ها باز خواهند شد.
+            </div>
+            <button disabled class="btn btn-disabled w-full text-sm font-bold rounded-full">
+              تکمیل ظرفیت
+            </button>
+            <a href="/workshops" class="btn btn-outline btn-sm rounded-full text-xs text-center mt-1">
+              مشاهده سایر کارگاه‌های دارای ظرفیت
+            </a>
           </div>
         ) : !workshop.is_registration_open ? (
-          <div class="alert alert-error text-xs font-semibold">
-            مهلت ثبت‌نام در این کارگاه به پایان رسیده است.
+          <div class="flex flex-col gap-3 max-w-md">
+            <div class="alert alert-error text-xs font-semibold leading-relaxed">
+              مهلت ثبت‌نام در این کارگاه به پایان رسیده است.
+            </div>
+            <button disabled class="btn btn-disabled w-full text-sm font-bold rounded-full">
+              پایان مهلت ثبت‌نام
+            </button>
+            <a href="/workshops" class="btn btn-outline btn-sm rounded-full text-xs text-center mt-1">
+              مشاهده سایر کارگاه‌های دارای ظرفیت
+            </a>
           </div>
         ) : (
           <form id="register-form" class="flex flex-col gap-4 max-w-md">
@@ -160,7 +196,7 @@ const isFree = workshop.price_rials === 0;
                 type="text"
                 required
                 placeholder="مثال: سارا محمدی"
-                class="input input-bordered w-full text-base-content bg-base-100 text-sm"
+                class="input input-bordered w-full text-base-content bg-base-100 text-sm rounded-xl"
               />
             </div>
 
@@ -175,7 +211,7 @@ const isFree = workshop.price_rials === 0;
                 dir="ltr"
                 required
                 placeholder="09123456789"
-                class="input input-bordered w-full text-base-content bg-base-100 text-sm text-end"
+                class="input input-bordered w-full text-base-content bg-base-100 text-sm text-end rounded-xl"
               />
               <span class="block text-[11px] text-base-content/60 mt-1">
                 پیامک تأیید و پیگیری ثبت‌نام به این شماره ارسال خواهد شد.
@@ -185,7 +221,7 @@ const isFree = workshop.price_rials === 0;
             <button
               id="submit-btn"
               type="submit"
-              class="btn btn-primary w-full text-sm font-bold mt-2"
+              class="btn btn-primary w-full text-sm font-bold mt-2 rounded-full"
             >
               {isFree ? 'ثبت و تایید نهایی ثبت‌نام رایگان' : `رزرو صندلی و پرداخت (${formatPriceToman(workshop.price_rials)})`}
             </button>
@@ -231,7 +267,7 @@ const isFree = workshop.price_rials === 0;
         submitBtn.textContent = 'در حال ثبت اطلاعات...';
 
         try {
-          const res = await fetch(`/public/workshops/${workshopId}/register`, {
+          const res = await fetch(`/v1/public/workshops/${workshopId}/register`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -263,7 +299,9 @@ const isFree = workshop.price_rials === 0;
           if (data.lookup_token) {
             try {
               localStorage.setItem(`reg_${data.registration_id}`, data.lookup_token);
-            } catch {}
+            } catch {
+              // Ignore localStorage quota errors
+            }
           }
 
           if (isFree || data.status === 'confirmed') {

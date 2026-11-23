@@ -1,0 +1,87 @@
+---
+import type { SiteHeaderVM } from '../view-models.js';
+
+interface Props extends SiteHeaderVM {}
+
+const { clinicTitle, navItems, primaryAction } = Astro.props;
+---
+
+<header class="w-full bg-base-100/90 backdrop-blur-sm border-b border-base-300 transition-colors sticky top-0 z-30">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-20">
+      <!-- Clinic Title / Editorial Brand -->
+      <a
+        href="/"
+        class="text-xl sm:text-2xl font-bold tracking-tight text-base-content hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-sm"
+      >
+        {clinicTitle}
+      </a>
+
+      <!-- Desktop Editorial Navigation Links -->
+      <nav class="hidden md:flex items-center gap-7 text-sm font-medium" aria-label="ناوبری اصلی">
+        {navItems.map((item) => (
+          <a
+            href={item.href}
+            class={`transition-colors py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm ${
+              item.isActive
+                ? 'text-primary font-bold border-b-2 border-primary'
+                : 'text-base-content/75 hover:text-primary'
+            }`}
+            aria-current={item.isActive ? 'page' : undefined}
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
+      <!-- Desktop Action CTA -->
+      {primaryAction && (
+        <div class="hidden md:flex items-center gap-3">
+          <a
+            href={primaryAction.href}
+            class="btn btn-primary btn-sm sm:btn-md rounded-full px-6 shadow-none font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            {primaryAction.label}
+          </a>
+        </div>
+      )}
+
+      <!-- Mobile Navigation Menu (Zero-JS Details Dropdown, RTL) -->
+      <div class="flex items-center gap-2 md:hidden">
+        {primaryAction && (
+          <a
+            href={primaryAction.href}
+            class="btn btn-primary btn-xs sm:btn-sm rounded-full font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            {primaryAction.label}
+          </a>
+        )}
+        <details class="dropdown dropdown-end">
+          <summary
+            class="btn btn-ghost btn-sm btn-square focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label="منوی ناوبری"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </summary>
+          <ul class="dropdown-content menu p-3 shadow-lg bg-base-100 rounded-box w-56 border border-base-300 mt-2 z-50">
+            {navItems.map((item) => (
+              <li>
+                <a
+                  href={item.href}
+                  class={`py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm ${
+                    item.isActive ? 'active font-bold text-primary' : 'text-base-content/80'
+                  }`}
+                  aria-current={item.isActive ? 'page' : undefined}
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+      </div>
+    </div>
+  </div>
+</header>

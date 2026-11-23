@@ -1,0 +1,65 @@
+/* Semantic DaisyUI tokens for Platform Palettes (PSY-6.1) */
+
+[data-palette="calm-sage"] {
+  color-scheme: light;
+  --color-base-100: #f6f8f6;
+  --color-base-200: #ebf0eb;
+  --color-base-300: #dde5dd;
+  --color-base-content: #1f2937;
+  --color-primary: #3b7a57;
+  --color-primary-content: #ffffff;
+  --color-secondary: #5c8374;
+  --color-secondary-content: #ffffff;
+  --color-accent: #84a98c;
+  --color-accent-content: #ffffff;
+  --color-neutral: #2d3748;
+  --color-neutral-content: #f7fafc;
+}
+
+[data-palette="ocean-trust"] {
+  color-scheme: light;
+  --color-base-100: #f0f7fc;
+  --color-base-200: #e2eff8;
+  --color-base-300: #cde2f3;
+  --color-base-content: #0f172a;
+  --color-primary: #0369a1;
+  --color-primary-content: #ffffff;
+  --color-secondary: #38bdf8;
+  --color-secondary-content: #0f172a;
+  --color-accent: #0284c7;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1e293b;
+  --color-neutral-content: #f8fafc;
+}
+
+[data-palette="warm-sand"] {
+  color-scheme: light;
+  --color-base-100: #faf6f0;
+  --color-base-200: #f5ede2;
+  --color-base-300: #eedfcb;
+  --color-base-content: #292524;
+  --color-primary: #b45309;
+  --color-primary-content: #ffffff;
+  --color-secondary: #d97706;
+  --color-secondary-content: #ffffff;
+  --color-accent: #f59e0b;
+  --color-accent-content: #ffffff;
+  --color-neutral: #451a03;
+  --color-neutral-content: #fef3c7;
+}
+
+[data-palette="royal-plum"] {
+  color-scheme: light;
+  --color-base-100: #faf5ff;
+  --color-base-200: #f3e8ff;
+  --color-base-300: #e9d5ff;
+  --color-base-content: #1e1b4b;
+  --color-primary: #7e22ce;
+  --color-primary-content: #ffffff;
+  --color-secondary: #a855f7;
+  --color-secondary-content: #ffffff;
+  --color-accent: #c084fc;
+  --color-accent-content: #ffffff;
+  --color-neutral: #3b0764;
+  --color-neutral-content: #faf5ff;
+}

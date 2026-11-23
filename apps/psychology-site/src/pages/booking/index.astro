@@ -1,12 +1,12 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { fetchPublicSite } from '../../lib/site.js';
-import { PersianDatePicker } from '@psychology/ui';
+import BookingFlow from '../../components/BookingFlow';
 
-// Edge CDN caching: therapists directory & booking profiles
-Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=1800, stale-while-revalidate=60');
+// Edge CDN caching: therapists directory & booking profiles (fresh slots, no stale s-maxage)
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
 
-const site = await fetchPublicSite(Astro.request);
+const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
 
 // Fallback therapists for SSR/preview when backend is offline
 const fallbackTherapists = [
@@ -29,11 +29,20 @@ const fallbackTherapists = [
 ];
 
 let therapists = fallbackTherapists;
-const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const apiBase =
+  (typeof process !== 'undefined' && process.env && process.env.INTERNAL_API_URL) ||
+  import.meta.env.INTERNAL_API_URL ||
+  (typeof process !== 'undefined' && process.env && process.env.PUBLIC_API_URL) ||
+  import.meta.env.PUBLIC_API_URL ||
+  'http://localhost:8080';
+const clientApiBase =
+  (typeof process !== 'undefined' && process.env && process.env.PUBLIC_API_URL) ||
+  import.meta.env.PUBLIC_API_URL ||
+  '';
 const host = Astro.request.headers.get('host') || 'localhost:3000';
 
 try {
-  const res = await fetch(`${apiBase}/public/therapists`, {
+  const res = await fetch(`${apiBase}/v1/public/therapists`, {
     headers: { Host: host },
     signal: AbortSignal.timeout(1200),
   });
@@ -82,7 +91,7 @@ const fallbackSlots = [
 let initialSlots = fallbackSlots;
 if (therapists[0]?.id) {
   try {
-    const slotsRes = await fetch(`${apiBase}/public/therapists/${therapists[0].id}/slots`, {
+    const slotsRes = await fetch(`${apiBase}/v1/public/therapists/${therapists[0].id}/slots`, {
       headers: { Host: host },
       signal: AbortSignal.timeout(1200),
     });
@@ -97,468 +106,115 @@ if (therapists[0]?.id) {
   }
 }
 
-function formatDateTehran(dateStr: string) {
-  try {
-    return new Intl.DateTimeFormat('fa-IR', {
-      timeZone: 'Asia/Tehran',
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(new Date(dateStr));
-  } catch {
-    return dateStr;
-  }
-}
-
-function formatTimeTehran(dateStr: string) {
-  try {
-    return new Intl.DateTimeFormat('fa-IR', {
-      timeZone: 'Asia/Tehran',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(dateStr));
-  } catch {
-    return dateStr;
-  }
-}
-
 const todayIso = now.toISOString().slice(0, 10);
+const clinicPhone = site?.phone || '۰۲۱-۸۸۸۸۸۸۸۸';
+const clinicAddress = site?.address || 'تهران، خیابان شریعتی، کلینیک تخصصی روان‌شناسی و مشاوره';
 ---
 
 <BaseLayout
   title={`رزرو نوبت مشاوره حضوری | ${site.title}`}
   description="انتخاب زمان آزاد، تعیین وقت مشاوره با روان‌شناسان و پیگیری خصوصی نوبت"
-  primaryColor={site.primary_color}
+  paletteId={site.palette_id}
   templateId={site.template_id}
   themeRadius={site.theme_radius}
   themeScale={site.theme_scale}
 >
-  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="mb-8">
-      <h1 class="text-2xl sm:text-3xl font-extrabold text-base-content mb-2">
+  <div class="max-w-5xl lg:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full overflow-x-hidden">
+    <!-- Header Section (Stitch visual cues) -->
+    <header class="mb-10 max-w-3xl">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3">
+        <span class="inline-block w-2 h-2 rounded-full bg-primary" aria-hidden="true"></span>
+        <span>رزرو وقت مشاوره • محرمانه و مطمئن</span>
+      </div>
+      <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-base-content tracking-tight mb-3">
         درخواست نوبت مشاوره و روان‌درمانی
       </h1>
-      <p class="text-sm sm:text-base text-base-content/70 leading-relaxed">
-        درمانگر مورد نظر و سانس خالی مناسب خود را انتخاب نمایید. پس از ثبت نوبت، زمان برای شما به مدت ۲ ساعت رزرو موقت شده و لینک پیگیری خصوصی در اختیارتان قرار می‌گیرد.
+      <p class="text-sm sm:text-base text-base-content/70 leading-relaxed text-pretty">
+        درمانگر، روز و سانس خالی مناسب خود را انتخاب نمایید. پس از ثبت نوبت، زمان برای شما به مدت ۲ ساعت رزرو موقت شده و لینک پیگیری خصوصی در اختیارتان قرار می‌گیرد.
       </p>
-    </div>
+    </header>
 
-    <!-- 1. Therapist Selector -->
-    <div class="mb-8">
-      <label class="block font-bold text-base-content text-sm sm:text-base mb-3">
-        ۱. انتخاب درمانگر:
-      </label>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" id="therapist-list">
-        {therapists.map((th, idx) => (
-          <div
-            class={`therapist-card card bg-base-100 border-2 rounded-box p-5 cursor-pointer transition-all duration-200 shadow-xs ${
-              idx === 0 ? 'border-primary bg-primary/5 shadow-sm' : 'border-base-200 hover:border-base-300'
-            }`}
-            data-id={th.id}
-            data-name={th.name}
-            data-duration={th.session_duration_minutes}
-          >
-            <div class="font-bold text-base sm:text-lg text-base-content mb-1">
-              {th.name}
-            </div>
-            <div class="text-xs font-semibold text-primary mb-2">
-              {th.title}
-            </div>
-            <p class="text-xs text-base-content/70 mb-3 leading-relaxed">
-              {th.bio}
-            </p>
-            <div class="text-[11px] text-base-content/80 bg-base-200/60 px-2.5 py-1 rounded-box inline-block">
-              مدت هر جلسه: <strong>{th.session_duration_minutes} دقیقه</strong>
-            </div>
+    <!-- 2-Column Responsive Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <!-- Main Column: Interactive BookingFlow Island (8 cols) -->
+      <main class="lg:col-span-8 flex flex-col gap-6">
+        <BookingFlow
+          client:visible
+          therapists={therapists}
+          initialSlots={initialSlots}
+          initialTherapistId={therapists[0]?.id}
+          initialDate={todayIso}
+          apiBase={clientApiBase}
+        />
+      </main>
+
+      <!-- Sidebar Column: Trust, Confidentiality & Clinic Guidance (4 cols) -->
+      <aside class="lg:col-span-4 flex flex-col gap-6">
+        <!-- Trust & Confidentiality Card -->
+        <div class="card bg-base-100 border border-base-200 rounded-2xl p-6 shadow-xs flex flex-col gap-4">
+          <div class="flex items-center justify-between pb-3 border-b border-base-200">
+            <h2 class="font-bold text-base text-base-content flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path>
+                <path d="m9 12 2 2 4-4"></path>
+              </svg>
+              <span>اصول رازداری و هماهنگی</span>
+            </h2>
+            <span class="badge badge-primary badge-outline text-xs">اطلاعیه مراجعان</span>
           </div>
-        ))}
-      </div>
-    </div>
 
-    <!-- 2. Persian Calendar Date Filter (Astro Island via React Aria) -->
-    <div class="mb-8 card bg-base-100 border border-base-200 p-6 rounded-box shadow-xs">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <label class="block font-bold text-base-content text-sm sm:text-base mb-1">
-            ۲. فیلتر تاریخ مشاوره (تقویم هجری شمسی):
-          </label>
-          <p class="text-xs text-base-content/60">
-            برای جستجوی سانس‌های فعال، روز مورد نظر خود را در تقویم زیر تعیین نمایید:
-          </p>
+          <ul class="flex flex-col gap-3.5 text-xs sm:text-sm text-base-content/80 leading-relaxed">
+            <li class="flex items-start gap-2.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"></span>
+              <span><strong>حفظ کامل حریم خصوصی:</strong> کلیه مکالمات و سوابق پرونده شما با درمانگر طبق موازین اخلاقی و حرفه‌ای کاملاً محرمانه است.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"></span>
+              <span><strong>رزرو موقت ۲ ساعته:</strong> سانس انتخاب‌شده به مدت ۲ ساعت برای شما نگاه داشته می‌شود تا پذیرش با شما تماس بگیرد.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"></span>
+              <span><strong>لغو و جابه‌جایی:</strong> تا ۲۴ ساعت پیش از شروع جلسه، امکان هماهنگی برای تغییر زمان یا انصراف وجود دارد.</span>
+            </li>
+          </ul>
         </div>
-        <div class="w-full sm:w-72">
-          <PersianDatePicker
-            client:visible
-            defaultValue={todayIso}
-            aria-label="تاریخ مشاوره"
-            name="booking_preferred_date"
-          />
-        </div>
-      </div>
-    </div>
 
-    <!-- 3. Available Slots Section -->
-    <div class="mb-10">
-      <div class="flex justify-between items-center mb-3">
-        <label class="font-bold text-base-content text-sm sm:text-base">
-          ۳. انتخاب سانس آزاد (به وقت تهران):
-        </label>
-        <span id="loading-slots" class="hidden text-xs text-primary items-center gap-1">
-          <span class="loading loading-spinner loading-xs"></span>
-          در حال دریافت سانس‌ها...
-        </span>
-      </div>
-
-      <div id="slots-container" class="card bg-base-100 border border-base-200 rounded-box p-6 min-h-[160px]">
-        {initialSlots.length === 0 ? (
-          <div id="no-slots-msg" class="text-center text-base-content/60 py-8 text-sm">
-            در حال حاضر سانس بازی برای این درمانگر ثبت نشده است. لطفاً روزهای دیگر را بررسی فرمایید.
-          </div>
-        ) : (
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="slots-grid">
-            {initialSlots.map((s) => (
-              <button
-                type="button"
-                class="slot-btn border border-success/30 bg-success/10 hover:bg-success hover:text-success-content rounded-box p-3 text-center cursor-pointer transition-all duration-150"
-                data-slot-id={s.id}
-                data-starts={s.starts_at}
-                data-ends={s.ends_at}
-              >
-                <div class="text-xs font-semibold text-success mb-1">
-                  {formatDateTehran(s.starts_at)}
-                </div>
-                <div class="text-sm font-bold text-base-content font-mono" dir="ltr">
-                  {formatTimeTehran(s.starts_at)} - {formatTimeTehran(s.ends_at)}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-
-    <!-- 4. Booking Modal -->
-    <div id="booking-modal" class="hidden fixed inset-0 bg-black/60 z-50 items-center justify-center p-4">
-      <div class="card bg-base-100 rounded-box max-w-md w-full p-6 sm:p-8 shadow-2xl border border-base-200 relative">
-        <div class="flex justify-between items-center mb-4 border-b border-base-200 pb-3">
-          <h3 class="text-base sm:text-lg font-bold text-base-content">
-            تکمیل درخواست نوبت مشاوره
+        <!-- Clinic Contact & Hours Card -->
+        <div class="card bg-base-100 border border-base-200 rounded-2xl p-6 shadow-xs flex flex-col gap-4">
+          <h3 class="font-bold text-base text-base-content flex items-center gap-2 pb-3 border-b border-base-200">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
+              <line x1="16" x2="16" y1="2" y2="6"></line>
+              <line x1="8" x2="8" y1="2" y2="6"></line>
+              <line x1="3" x2="21" y1="10" y2="10"></line>
+            </svg>
+            <span>اطلاعات تماس و نشانی</span>
           </h3>
-          <button id="close-modal-btn" type="button" class="btn btn-ghost btn-sm btn-circle text-base-content/60">
-            ✕
-          </button>
+
+          <div class="flex flex-col gap-3 text-xs sm:text-sm text-base-content/80">
+            <div class="flex items-start gap-2.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/60 mt-1 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+              </svg>
+              <span>{clinicAddress}</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+              </svg>
+              <span>تلفن تماس: <strong class="font-mono text-base-content" dir="ltr">{clinicPhone}</strong></span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>ساعات پذیرش: شنبه تا چهارشنبه ۱۰:۰۰ الی ۱۹:۰۰</span>
+            </div>
+          </div>
         </div>
-
-        <div id="modal-alert" class="alert alert-error text-xs mb-4 hidden leading-relaxed"></div>
-
-        <div class="bg-base-200/50 border border-base-200 rounded-box p-4 mb-5 text-xs">
-          <div class="mb-1.5 flex justify-between">
-            <span class="text-base-content/60">درمانگر انتخابی:</span>
-            <strong id="modal-therapist-name" class="text-base-content">-</strong>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-base-content/60">زمان نوبت:</span>
-            <strong id="modal-slot-time" class="text-primary font-mono" dir="ltr">-</strong>
-          </div>
-        </div>
-
-        <form id="booking-form" class="flex flex-col gap-3.5">
-          <input type="hidden" id="selected-therapist-id" value={therapists[0]?.id || ''} />
-          <input type="hidden" id="selected-slot-id" value="" />
-
-          <div>
-            <label for="guest_name" class="label-text text-xs font-semibold text-base-content block mb-1">
-              نام و نام خانوادگی مراجع <span class="text-error">*</span>
-            </label>
-            <input
-              type="text"
-              id="guest_name"
-              required
-              placeholder="مثال: سارا محمدی"
-              class="input input-bordered w-full text-base-content bg-base-100 text-sm"
-            />
-          </div>
-
-          <div>
-            <label for="guest_phone" class="label-text text-xs font-semibold text-base-content block mb-1">
-              شماره تلفن همراه (جهت هماهنگی نوبت) <span class="text-error">*</span>
-            </label>
-            <input
-              type="tel"
-              id="guest_phone"
-              required
-              dir="ltr"
-              placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-              class="input input-bordered w-full text-base-content bg-base-100 text-sm text-end"
-            />
-            <small class="block text-[11px] text-base-content/60 mt-1">
-              شماره همراه فقط جهت تماس پرسنل پذیرش استفاده شده و کاملاً محرمانه می‌ماند.
-            </small>
-          </div>
-
-          <div>
-            <label for="notes" class="label-text text-xs font-semibold text-base-content block mb-1">
-              توضیحات یا علت مراجعه (اختیاری)
-            </label>
-            <textarea
-              id="notes"
-              rows="2"
-              placeholder="توضیح کوتاه درباره موضوع جلسه..."
-              class="textarea textarea-bordered w-full text-base-content bg-base-100 text-xs"
-            ></textarea>
-          </div>
-
-          <div class="flex gap-2 mt-2">
-            <button
-              type="submit"
-              id="submit-booking-btn"
-              class="btn btn-primary btn-sm flex-1 font-bold"
-            >
-              تأیید و ارسال درخواست نوبت
-            </button>
-            <button
-              type="button"
-              id="cancel-modal-btn"
-              class="btn btn-ghost btn-sm"
-            >
-              انصراف
-            </button>
-          </div>
-        </form>
-      </div>
+      </aside>
     </div>
   </div>
-
-  <script define:vars={{ apiBase }}>
-    let currentTherapistId = document.getElementById('selected-therapist-id')?.value || '';
-    let currentTherapistName = document.querySelector('.therapist-card.border-primary')?.getAttribute('data-name') || '';
-
-    const therapistCards = document.querySelectorAll('.therapist-card');
-    const slotsContainer = document.getElementById('slots-container');
-    const loadingSlots = document.getElementById('loading-slots');
-    const bookingModal = document.getElementById('booking-modal');
-    const closeModalBtn = document.getElementById('close-modal-btn');
-    const cancelModalBtn = document.getElementById('cancel-modal-btn');
-    const bookingForm = document.getElementById('booking-form');
-    const modalAlert = document.getElementById('modal-alert');
-    const submitBtn = document.getElementById('submit-booking-btn');
-
-    function formatTehranDateStr(dateStr) {
-      try {
-        return new Intl.DateTimeFormat('fa-IR', {
-          timeZone: 'Asia/Tehran',
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-        }).format(new Date(dateStr));
-      } catch {
-        return dateStr;
-      }
-    }
-
-    function formatTehranTimeStr(dateStr) {
-      try {
-        return new Intl.DateTimeFormat('fa-IR', {
-          timeZone: 'Asia/Tehran',
-          hour: '2-digit',
-          minute: '2-digit',
-        }).format(new Date(dateStr));
-      } catch {
-        return dateStr;
-      }
-    }
-
-    // Therapist Card Selection
-    therapistCards.forEach((card) => {
-      card.addEventListener('click', async () => {
-        therapistCards.forEach((c) => {
-          c.classList.remove('border-primary', 'bg-primary/5', 'shadow-sm');
-          c.classList.add('border-base-200');
-        });
-        card.classList.remove('border-base-200');
-        card.classList.add('border-primary', 'bg-primary/5', 'shadow-sm');
-
-        currentTherapistId = card.getAttribute('data-id') || '';
-        currentTherapistName = card.getAttribute('data-name') || '';
-        const idInput = document.getElementById('selected-therapist-id');
-        if (idInput) idInput.value = currentTherapistId;
-
-        await loadSlots(currentTherapistId);
-      });
-    });
-
-    async function loadSlots(thId) {
-      if (!thId) return;
-      if (loadingSlots) {
-        loadingSlots.classList.remove('hidden');
-        loadingSlots.classList.add('inline-flex');
-      }
-      try {
-        const host = window.location.host;
-        const res = await fetch(`${apiBase}/public/therapists/${thId}/slots`, {
-          headers: { Host: host },
-        });
-        if (res.ok) {
-          const slots = await res.json();
-          renderSlots(slots);
-        } else {
-          renderSlots([]);
-        }
-      } catch {
-        // network issue
-      } finally {
-        if (loadingSlots) {
-          loadingSlots.classList.add('hidden');
-          loadingSlots.classList.remove('inline-flex');
-        }
-      }
-    }
-
-    function renderSlots(slots) {
-      if (!slotsContainer) return;
-      if (!slots || slots.length === 0) {
-        slotsContainer.innerHTML = `
-          <div class="text-center text-base-content/60 py-8 text-sm">
-            در حال حاضر سانس بازی برای این درمانگر ثبت نشده است. لطفاً روزهای دیگر را بررسی فرمایید.
-          </div>
-        `;
-        return;
-      }
-
-      let html = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="slots-grid">';
-      slots.forEach((s) => {
-        const dStr = formatTehranDateStr(s.starts_at);
-        const tStart = formatTehranTimeStr(s.starts_at);
-        const tEnd = formatTehranTimeStr(s.ends_at);
-        html += `
-          <button
-            type="button"
-            class="slot-btn border border-success/30 bg-success/10 hover:bg-success hover:text-success-content rounded-box p-3 text-center cursor-pointer transition-all duration-150"
-            data-slot-id="${s.id}"
-            data-starts="${s.starts_at}"
-            data-ends="${s.ends_at}"
-          >
-            <div class="text-xs font-semibold text-success mb-1">
-              ${dStr}
-            </div>
-            <div class="text-sm font-bold text-base-content font-mono" dir="ltr">
-              ${tStart} - ${tEnd}
-            </div>
-          </button>
-        `;
-      });
-      html += '</div>';
-      slotsContainer.innerHTML = html;
-      attachSlotListeners();
-    }
-
-    function attachSlotListeners() {
-      if (!slotsContainer) return;
-      const slotBtns = slotsContainer.querySelectorAll('.slot-btn');
-      slotBtns.forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const slotId = btn.getAttribute('data-slot-id');
-          const starts = btn.getAttribute('data-starts');
-          const ends = btn.getAttribute('data-ends');
-
-          const slotInput = document.getElementById('selected-slot-id');
-          if (slotInput) slotInput.value = slotId || '';
-          const nameEl = document.getElementById('modal-therapist-name');
-          if (nameEl) nameEl.textContent = currentTherapistName;
-
-          const datePart = formatTehranDateStr(starts);
-          const timePart = `${formatTehranTimeStr(starts)} تا ${formatTehranTimeStr(ends)}`;
-          const timeEl = document.getElementById('modal-slot-time');
-          if (timeEl) timeEl.textContent = `${datePart} (${timePart})`;
-
-          if (modalAlert) modalAlert.classList.add('hidden');
-          if (bookingModal) {
-            bookingModal.classList.remove('hidden');
-            bookingModal.classList.add('flex');
-          }
-        });
-      });
-    }
-
-    attachSlotListeners();
-
-    function closeModal() {
-      if (bookingModal) {
-        bookingModal.classList.add('hidden');
-        bookingModal.classList.remove('flex');
-      }
-      if (modalAlert) modalAlert.classList.add('hidden');
-    }
-
-    closeModalBtn?.addEventListener('click', closeModal);
-    cancelModalBtn?.addEventListener('click', closeModal);
-
-    // Handle Form Submit
-    bookingForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (modalAlert) modalAlert.classList.add('hidden');
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'در حال ثبت...';
-      }
-
-      const therapistId = document.getElementById('selected-therapist-id')?.value;
-      const slotId = document.getElementById('selected-slot-id')?.value;
-      const guestName = document.getElementById('guest_name')?.value.trim();
-      const guestPhone = document.getElementById('guest_phone')?.value.trim();
-      const notes = document.getElementById('notes')?.value.trim();
-
-      try {
-        const host = window.location.host;
-        const res = await fetch(`${apiBase}/public/appointments`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Host: host,
-          },
-          body: JSON.stringify({
-            therapist_id: therapistId,
-            slot_id: slotId,
-            guest_name: guestName,
-            guest_phone: guestPhone,
-            notes: notes,
-          }),
-        });
-
-        if (res.status === 201) {
-          const data = await res.json();
-          try {
-            sessionStorage.setItem(`appt_${data.id}_hash`, data.guest_lookup_hash);
-          } catch {}
-          window.location.href = `/appointments/${data.id}?hash=${encodeURIComponent(data.guest_lookup_hash)}`;
-          return;
-        }
-
-        const errData = await res.json().catch(() => ({}));
-        if (modalAlert) {
-          modalAlert.classList.remove('hidden');
-          if (res.status === 409) {
-            modalAlert.textContent = 'متأسفانه این سانس هم‌اکنون رزرو شده یا در دست هماهنگی با متقاضی دیگری است. لطفاً سانس آزاد دیگری را انتخاب فرمایید.';
-          } else if (res.status === 429) {
-            modalAlert.textContent = 'تعداد درخواست‌های شما بیش از حد مجاز است. لطفاً چند دقیقه بعد مجدداً تلاش کنید.';
-          } else if (errData.code === 'INVALID_PHONE') {
-            modalAlert.textContent = 'شماره موبایل واردشده نامعتبر است. لطفاً شماره صحیح ۱۱ رقمی (مثلاً ۰۹۱۲۳۴۵۶۷۸۹) وارد کنید.';
-          } else {
-            modalAlert.textContent = errData.message || 'خطا در ثبت نوبت. لطفاً دوباره تلاش فرمایید.';
-          }
-        }
-      } catch {
-        if (modalAlert) {
-          modalAlert.classList.remove('hidden');
-          modalAlert.textContent = 'خطای ارتباط با سرور. لطفاً اتصال اینترنت خود را بررسی کنید.';
-        }
-      } finally {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'تأیید و ارسال درخواست نوبت';
-        }
-      }
-    });
-  </script>
 </BaseLayout>

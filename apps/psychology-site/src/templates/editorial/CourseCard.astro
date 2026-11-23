@@ -1,0 +1,46 @@
+---
+import type { CourseCardVM } from '../view-models.js';
+
+interface Props extends CourseCardVM {}
+
+const { slug, title, instructorName, priceLabel, lessonsCountLabel, coverUrl } = Astro.props;
+---
+
+<div class="card bg-base-100 border border-base-300 hover:border-primary/50 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md rounded-2xl flex flex-col h-full">
+  {coverUrl ? (
+    <figure class="aspect-video w-full bg-base-200 overflow-hidden">
+      <img src={coverUrl} alt={title} class="w-full h-full object-cover" loading="lazy" />
+    </figure>
+  ) : (
+    <div class="aspect-video w-full bg-base-200/80 flex items-center justify-center text-base-content/40 text-sm">
+      بدون تصویر
+    </div>
+  )}
+
+  <div class="card-body p-6 flex flex-col flex-1 justify-between">
+    <div>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <span class="text-xs font-medium text-base-content/65">{instructorName}</span>
+        {lessonsCountLabel && (
+          <span class="badge badge-sm badge-ghost text-xs border border-base-300">{lessonsCountLabel}</span>
+        )}
+      </div>
+
+      <h3 class="card-title text-base sm:text-lg font-bold text-base-content mb-2 line-clamp-2">
+        <a href={`/courses/${slug}`} class="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
+          {title}
+        </a>
+      </h3>
+    </div>
+
+    <div class="pt-4 border-t border-base-200 flex items-center justify-between mt-auto">
+      <span class="font-bold text-primary text-base">{priceLabel}</span>
+      <a
+        href={`/courses/${slug}`}
+        class="btn btn-sm btn-ghost hover:btn-primary rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        مشاهده دوره
+      </a>
+    </div>
+  </div>
+</div>

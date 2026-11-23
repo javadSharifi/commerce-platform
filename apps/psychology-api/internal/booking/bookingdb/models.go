@@ -284,6 +284,7 @@ type SiteSetting struct {
 	TemplateVersion string
 	ThemeRadius     string
 	ThemeScale      string
+	PaletteID       string
 }
 
 type Tenant struct {

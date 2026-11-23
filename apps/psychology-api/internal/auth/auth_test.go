@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -399,5 +400,66 @@ func TestAuthHTTPHandlers(t *testing.T) {
 	r.ServeHTTP(rrLogout, reqLogout)
 	if rrLogout.Code != http.StatusOK {
 		t.Fatalf("expected 200 for logout, got %d", rrLogout.Code)
+	}
+}
+
+func TestAuthCookie_SecureFlag(t *testing.T) {
+	q := newMockAuthQuerier()
+	pass, _ := auth.HashPassword("SecretPassword123!")
+	q.identities["doc@test.ir"] = authdb.PanelIdentity{
+		ID:           toPgUUID(uuid.New()),
+		Email:        "doc@test.ir",
+		PasswordHash: pass,
+		Status:       "active",
+	}
+
+	// 1. Non-production / dev -> Secure: false
+	hDev := auth.NewHandler(auth.NewService(q))
+	hDev.SetCookieSecure(false)
+	rDev := chi.NewRouter()
+	hDev.MountRoutes(rDev)
+
+	reqDev := httptest.NewRequest(http.MethodPost, "/admin/auth/login", strings.NewReader(`{"email":"doc@test.ir","password":"SecretPassword123!"}`))
+	reqDev.Header.Set("Content-Type", "application/json")
+	rrDev := httptest.NewRecorder()
+	rDev.ServeHTTP(rrDev, reqDev)
+
+	var devCookie *http.Cookie
+	for _, c := range rrDev.Result().Cookies() {
+		if c.Name == "session_token" {
+			devCookie = c
+			break
+		}
+	}
+	if devCookie == nil {
+		t.Fatal("expected dev cookie to be set")
+	}
+	if devCookie.Secure {
+		t.Errorf("expected dev cookie to have Secure=false, got true")
+	}
+
+	// 2. Production -> Secure: true
+	hProd := auth.NewHandler(auth.NewService(q))
+	hProd.SetCookieSecure(true)
+	rProd := chi.NewRouter()
+	hProd.MountRoutes(rProd)
+
+	reqProd := httptest.NewRequest(http.MethodPost, "/admin/auth/login", strings.NewReader(`{"email":"doc@test.ir","password":"SecretPassword123!"}`))
+	reqProd.Header.Set("Content-Type", "application/json")
+	rrProd := httptest.NewRecorder()
+	rProd.ServeHTTP(rrProd, reqProd)
+
+	var prodCookie *http.Cookie
+	for _, c := range rrProd.Result().Cookies() {
+		if c.Name == "session_token" {
+			prodCookie = c
+			break
+		}
+	}
+	if prodCookie == nil {
+		t.Fatal("expected prod cookie to be set")
+	}
+	if !prodCookie.Secure {
+		t.Errorf("expected prod cookie to have Secure=true, got false")
 	}
 }

@@ -1,5 +1,12 @@
 @import "tailwindcss";
+@source "../**/*.{ts,tsx}";
 @plugin "daisyui";
+@import "./palettes.css";
+
+/* Local and standard Persian fonts fallback */
+:root, :host {
+  --font-sans: "Vazirmatn", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
 
 /* Base custom radius tokens */
 [data-radius="sm"] {

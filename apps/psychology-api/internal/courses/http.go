@@ -84,6 +84,7 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		buyer.Post("/account/auth/logout", h.handleBuyerLogout)
 		buyer.Get("/account/auth/me", h.handleBuyerMe)
 		buyer.Get("/account/courses", h.handleListMyCourses)
+		buyer.Get("/account/courses/my", h.handleListMyCourses)
 		buyer.Get("/account/courses/{courseId}/lessons/{lessonId}/stream", h.handleGetPrivateLessonStream)
 	})
 

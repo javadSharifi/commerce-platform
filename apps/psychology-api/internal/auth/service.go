@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"psychology/api/internal/auth/authdb"
+	"psychology/api/internal/platform/tenantctx"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -58,12 +59,21 @@ type AuthQuerier interface {
 	CreateMembership(ctx context.Context, arg authdb.CreateMembershipParams) (authdb.Membership, error)
 }
 
+type TenantStore interface {
+	WithTenantTx(ctx context.Context, fn func(tx pgx.Tx, tenantID uuid.UUID) error) error
+}
+
 type Service struct {
 	queries AuthQuerier
+	store   TenantStore
 }
 
 func NewService(q AuthQuerier) *Service {
 	return &Service{queries: q}
+}
+
+func NewServiceWithStore(q AuthQuerier, store TenantStore) *Service {
+	return &Service{queries: q, store: store}
 }
 
 func HashToken(rawToken string) string {
@@ -200,6 +210,35 @@ func (s *Service) ListMemberships(ctx context.Context, userID uuid.UUID) ([]Memb
 
 // GetMembership verifies that the user is a member of the tenant and returns their role.
 func (s *Service) GetMembership(ctx context.Context, userID, tenantID uuid.UUID) (*Membership, error) {
+	if s.store != nil {
+		var mem *Membership
+		ctxTenant := tenantctx.With(ctx, tenantID)
+		err := s.store.WithTenantTx(ctxTenant, func(tx pgx.Tx, tid uuid.UUID) error {
+			q := authdb.New(tx)
+			m, err := q.GetMembershipByUserAndTenant(ctxTenant, authdb.GetMembershipByUserAndTenantParams{
+				UserID:   toPgUUID(userID),
+				TenantID: toPgUUID(tid),
+			})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return ErrNotAMember
+				}
+				return err
+			}
+			mem = &Membership{
+				ID:       fromPgUUID(m.ID),
+				TenantID: fromPgUUID(m.TenantID),
+				UserID:   fromPgUUID(m.UserID),
+				Role:     m.Role,
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return mem, nil
+	}
+
 	m, err := s.queries.GetMembershipByUserAndTenant(ctx, authdb.GetMembershipByUserAndTenantParams{
 		UserID:   toPgUUID(userID),
 		TenantID: toPgUUID(tenantID),

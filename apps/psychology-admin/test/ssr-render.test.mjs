@@ -21,7 +21,11 @@ test('psychology-admin SSR renders Button component from @psychology/ui', async 
       setTimeout(() => reject(new Error('timeout waiting for server to start')), 5000);
     });
 
-    const res = await fetch(`http://127.0.0.1:${port}/`);
+    const res = await fetch(`http://127.0.0.1:${port}/`, {
+      headers: {
+        Cookie: 'session_token=test-token',
+      },
+    });
     assert.strictEqual(res.status, 200);
     const html = await res.text();
     assert.match(html, /<button/);

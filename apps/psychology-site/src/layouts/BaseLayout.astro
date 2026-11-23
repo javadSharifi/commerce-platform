@@ -2,22 +2,23 @@
 import '@psychology/ui/styles/base.css';
 import '../templates/minimal/theme.css';
 import '../templates/clinical/theme.css';
+import '../templates/mobile-app/theme.css';
+import '../templates/editorial/theme.css';
 
 import {
-  DEFAULT_PRIMARY_COLOR,
   DEFAULT_RADIUS,
   DEFAULT_SCALE,
-  isValidHexColor,
   isValidRadius,
   isValidScale,
+  resolvePaletteMeta,
 } from '@psychology/ui';
 import { resolveTemplate } from '../templates/registry.js';
-import type { SiteHeaderVM, FooterVM } from '../templates/view-models.js';
+import type { SiteHeaderVM, FooterVM, SiteShellVM } from '../templates/view-models.js';
 
 interface Props {
   title?: string;
   description?: string;
-  primaryColor?: string;
+  paletteId?: string | null;
   templateId?: string | null;
   themeRadius?: string | null;
   themeScale?: string | null;
@@ -28,7 +29,7 @@ interface Props {
 const {
   title = 'مرکز خدمات روان‌شناختی و مشاوره',
   description = 'سامانه تخصصی مشاوره، کارگاه‌ها و آموزش روان‌شناسی',
-  primaryColor,
+  paletteId,
   templateId,
   themeRadius,
   themeScale,
@@ -37,10 +38,11 @@ const {
 } = Astro.props;
 
 const activeTemplate = resolveTemplate(templateId);
+const safePalette = resolvePaletteMeta(paletteId);
 const HeaderComponent = activeTemplate.components.Header;
 const FooterComponent = activeTemplate.components.Footer;
+const ShellComponent = activeTemplate.components.Shell;
 
-const safePrimaryColor = primaryColor && isValidHexColor(primaryColor) ? primaryColor : DEFAULT_PRIMARY_COLOR;
 const safeRadius = themeRadius && isValidRadius(themeRadius) ? themeRadius : DEFAULT_RADIUS;
 const safeScale = themeScale && isValidScale(themeScale) ? themeScale : DEFAULT_SCALE;
 
@@ -66,6 +68,14 @@ const footerVM: FooterVM = {
   copyrightYear: new Date().toLocaleDateString('fa-IR', { year: 'numeric' }),
   description,
 };
+
+const shellVM: SiteShellVM = {
+  clinicTitle: title,
+  headerVM,
+  footerVM,
+  currentPath,
+  hideHeaderFooter,
+};
 ---
 
 <!doctype html>
@@ -73,6 +83,7 @@ const footerVM: FooterVM = {
   lang="fa"
   dir="rtl"
   data-theme={activeTemplate.meta.daisyTheme}
+  data-palette={safePalette.id}
   data-radius={safeRadius}
   data-scale={safeScale}
 >
@@ -82,13 +93,20 @@ const footerVM: FooterVM = {
     <title>{title}</title>
     <meta name="description" content={description} />
     {robots && <meta name="robots" content={robots} />}
-    <style is:inline set:html={`:root { --color-primary: ${safePrimaryColor}; }`} />
   </head>
   <body class="min-h-screen flex flex-col bg-base-100 text-base-content font-sans antialiased">
-    {!hideHeaderFooter && <HeaderComponent {...headerVM} />}
-    <main class="flex-1 w-full">
-      <slot />
-    </main>
-    {!hideHeaderFooter && <FooterComponent {...footerVM} />}
+    {ShellComponent ? (
+      <ShellComponent {...shellVM}>
+        <slot />
+      </ShellComponent>
+    ) : (
+      <>
+        {!hideHeaderFooter && <HeaderComponent {...headerVM} />}
+        <main class="flex-1 w-full">
+          <slot />
+        </main>
+        {!hideHeaderFooter && <FooterComponent {...footerVM} />}
+      </>
+    )}
   </body>
 </html>

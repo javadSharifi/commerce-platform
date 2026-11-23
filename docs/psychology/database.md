@@ -95,15 +95,20 @@ CREATE POLICY tenant_isolation ON domains
 ### ۴.۳ جدول `site_settings` (تنظیمات سایت و هویت بصری)
 ```sql
 CREATE TABLE site_settings (
-    tenant_id     uuid        PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
-    title         text        NOT NULL DEFAULT '',
-    description   text        NOT NULL DEFAULT '',
-    phone         text        NOT NULL DEFAULT '',
-    address       text        NOT NULL DEFAULT '',
-    primary_color text        NOT NULL DEFAULT '#0284c7',
-    logo_media_id uuid,
-    created_at    timestamptz NOT NULL DEFAULT now(),
-    updated_at    timestamptz NOT NULL DEFAULT now()
+    tenant_id        uuid        PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+    title            text        NOT NULL DEFAULT '',
+    description      text        NOT NULL DEFAULT '',
+    phone            text        NOT NULL DEFAULT '',
+    address          text        NOT NULL DEFAULT '',
+    primary_color    text        NOT NULL DEFAULT '#0284c7',
+    logo_media_id    uuid,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    template_id      text        NOT NULL DEFAULT 'minimal',
+    template_version text        NOT NULL DEFAULT '1.0.0',
+    theme_radius     text        NOT NULL DEFAULT 'md' CHECK (theme_radius IN ('sm', 'md', 'lg')),
+    theme_scale      text        NOT NULL DEFAULT 'md' CHECK (theme_scale IN ('sm', 'md', 'lg')),
+    palette_id       text        NOT NULL DEFAULT 'calm-sage' CHECK (palette_id IN ('calm-sage', 'ocean-trust', 'warm-sand', 'royal-plum'))
 );
 
 ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;

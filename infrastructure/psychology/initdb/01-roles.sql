@@ -14,4 +14,10 @@ BEGIN
     ELSE
         ALTER ROLE lookup_user WITH PASSWORD 'secret_lookup_pass' NOSUPERUSER NOBYPASSRLS;
     END IF;
+
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'worker_user') THEN
+        CREATE ROLE worker_user WITH LOGIN PASSWORD 'secret_worker_pass' NOSUPERUSER NOBYPASSRLS;
+    ELSE
+        ALTER ROLE worker_user WITH PASSWORD 'secret_worker_pass' NOSUPERUSER NOBYPASSRLS;
+    END IF;
 END $$;

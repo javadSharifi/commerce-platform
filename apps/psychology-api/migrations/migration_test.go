@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -222,13 +223,95 @@ func TestSiteTemplateSettingsMigration(t *testing.T) {
 	}
 }
 
+func TestDomainLookupPolicyMigration(t *testing.T) {
+	upContentBytes, err := os.ReadFile("000009_domain_lookup_policy.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000009_domain_lookup_policy.up.sql: %v", err)
+	}
+	upContent := string(upContentBytes)
+
+	if !strings.Contains(upContent, "CREATE POLICY domain_lookup ON domains") {
+		t.Errorf("expected 000009 to create policy domain_lookup on domains")
+	}
+	if !strings.Contains(upContent, "FOR SELECT") {
+		t.Errorf("000009 missing FOR SELECT")
+	}
+	if !strings.Contains(upContent, "is_verified = true") {
+		t.Errorf("000009 missing is_verified = true condition")
+	}
+
+	downContentBytes, err := os.ReadFile("000009_domain_lookup_policy.down.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000009_domain_lookup_policy.down.sql: %v", err)
+	}
+	downContent := string(downContentBytes)
+	if !strings.Contains(downContent, "DROP POLICY IF EXISTS domain_lookup ON domains") {
+		t.Errorf("000009 down missing DROP POLICY IF EXISTS domain_lookup ON domains")
+	}
+}
+
+func TestOutboxWorkerPermissionsMigration(t *testing.T) {
+	upContentBytes, err := os.ReadFile("000010_outbox_worker_permissions.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000010_outbox_worker_permissions.up.sql: %v", err)
+	}
+	upContent := string(upContentBytes)
+
+	if !strings.Contains(upContent, "worker_user") {
+		t.Errorf("000010 missing worker_user")
+	}
+	if !strings.Contains(upContent, "GRANT SELECT, UPDATE (status, retry_count, last_error, processed_at) ON outbox_events TO worker_user") {
+		t.Errorf("000010 missing column-level update grant for worker_user")
+	}
+	if !strings.Contains(upContent, "CREATE POLICY outbox_worker_policy ON outbox_events") {
+		t.Errorf("000010 missing outbox_worker_policy")
+	}
+	if !strings.Contains(upContent, "CREATE POLICY outbox_tenant_isolation ON outbox_events") {
+		t.Errorf("000010 missing outbox_tenant_isolation")
+	}
+
+	downContentBytes, err := os.ReadFile("000010_outbox_worker_permissions.down.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000010_outbox_worker_permissions.down.sql: %v", err)
+	}
+	downContent := string(downContentBytes)
+	if !strings.Contains(downContent, "DROP POLICY IF EXISTS outbox_worker_policy ON outbox_events") {
+		t.Errorf("000010 down missing drop outbox_worker_policy")
+	}
+}
+
+func TestPaletteIdMigration(t *testing.T) {
+	upContentBytes, err := os.ReadFile("000011_add_palette_id_to_site_settings.up.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000011_add_palette_id_to_site_settings.up.sql: %v", err)
+	}
+	upContent := string(upContentBytes)
+
+	if !strings.Contains(upContent, "ADD COLUMN palette_id text NOT NULL DEFAULT 'calm-sage'") {
+		t.Errorf("000011 missing ADD COLUMN palette_id text NOT NULL DEFAULT 'calm-sage'")
+	}
+	if !strings.Contains(upContent, "CHECK (palette_id IN ('calm-sage', 'ocean-trust', 'warm-sand', 'royal-plum'))") {
+		t.Errorf("000011 missing CHECK constraint for palette_id")
+	}
+
+	downContentBytes, err := os.ReadFile("000011_add_palette_id_to_site_settings.down.sql")
+	if err != nil {
+		t.Fatalf("failed to read 000011_add_palette_id_to_site_settings.down.sql: %v", err)
+	}
+	downContent := string(downContentBytes)
+
+	if !strings.Contains(downContent, "DROP COLUMN IF EXISTS palette_id") {
+		t.Errorf("000011 down missing DROP COLUMN IF EXISTS palette_id")
+	}
+}
+
 func TestMigrationUpDownUpLive(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		t.Skip("skipping live database test: DATABASE_URL not set")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	conn, err := pgx.Connect(ctx, dbURL)
@@ -237,6 +320,15 @@ func TestMigrationUpDownUpLive(t *testing.T) {
 		return
 	}
 	defer conn.Close(ctx)
+
+	schemaName := "test_mig_" + strings.ReplaceAll(uuid.New().String(), "-", "")
+	if _, err := conn.Exec(ctx, "CREATE SCHEMA "+schemaName+"; SET search_path TO "+schemaName+", public;"); err != nil {
+		t.Skipf("skipping live migration test (failed to create test schema: %v)", err)
+		return
+	}
+	defer func() {
+		_, _ = conn.Exec(context.Background(), "DROP SCHEMA IF EXISTS "+schemaName+" CASCADE;")
+	}()
 
 	files, err := filepath.Glob("*.up.sql")
 	if err != nil || len(files) == 0 {

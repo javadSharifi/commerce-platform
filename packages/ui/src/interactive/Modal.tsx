@@ -81,14 +81,27 @@ export const Modal: React.FC<ModalProps> = ({
         >
           {({ close }) => (
             <>
-              {title && (
-                <RACHeading
-                  slot="title"
-                  className="text-lg font-bold text-base-content mb-2"
-                >
-                  {title}
-                </RACHeading>
-              )}
+              <div className="flex items-center justify-between mb-2">
+                {title && (
+                  <RACHeading
+                    slot="title"
+                    className="text-lg font-bold text-base-content"
+                  >
+                    {title}
+                  </RACHeading>
+                )}
+                {isDismissable && (
+                  <button
+                    type="button"
+                    onClick={close}
+                    id="close-modal-btn"
+                    aria-label="بستن دیالوگ"
+                    className="btn btn-ghost btn-xs btn-circle text-base-content/60 hover:text-base-content"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
               {description && (
                 <p className="text-sm text-base-content/70 mb-4">{description}</p>
               )}

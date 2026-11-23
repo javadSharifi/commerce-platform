@@ -4,9 +4,22 @@ import '@psychology/ui/styles/base.css';
 interface Props {
   title?: string;
   currentNav?: string;
+  userName?: string;
+  userRole?: string;
 }
 
 const { title = 'پنل مدیریت کلینیک', currentNav = 'dashboard' } = Astro.props;
+
+// Read user info from locals (populated by middleware) or props
+const localUser = Astro.locals.user;
+const userName = Astro.props.userName || localUser?.full_name || 'مدیر مطب';
+const rawRole = Astro.props.userRole || localUser?.role || 'owner';
+const roleMap: Record<string, string> = {
+  owner: 'مدیر مطب',
+  receptionist: 'مسئول پذیرش',
+  content_manager: 'مدیر محتوا',
+};
+const userRoleLabel = roleMap[rawRole] || rawRole;
 
 // Ensure private admin layout responses are strictly not cached
 Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -142,8 +155,8 @@ Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate
       <header class="bg-base-100 border-b border-base-300 px-6 py-4 flex justify-between items-center">
         <h1 class="text-lg font-bold text-base-content">{title}</h1>
         <div class="flex items-center gap-4">
-          <span class="text-sm text-base-content/70">دکتر علوی (مدیر مطب)</span>
-          <button class="btn btn-xs btn-outline btn-error">خروج</button>
+          <span class="text-sm text-base-content/70" id="user-display-name">{userName} ({userRoleLabel})</span>
+          <button id="logout-btn" class="btn btn-xs btn-outline btn-error">خروج</button>
         </div>
       </header>
 
@@ -151,5 +164,25 @@ Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate
         <slot />
       </main>
     </div>
+
+    <script>
+      const logoutBtn = document.getElementById('logout-btn');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+          logoutBtn.setAttribute('disabled', 'true');
+          logoutBtn.textContent = 'در حال خروج...';
+          try {
+            await fetch('/v1/admin/auth/logout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+          } catch {
+            // Ignore network errors
+          }
+          document.cookie = 'session_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT;';
+          window.location.href = '/login';
+        });
+      }
+    </script>
   </body>
 </html>

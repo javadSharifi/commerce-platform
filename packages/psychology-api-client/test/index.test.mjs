@@ -17,7 +17,7 @@ describe('PsychologyApiClient - Blog & Media Endpoints', () => {
     const client = new PsychologyApiClient({
       baseUrl: 'http://localhost:8080',
       fetch: async (url, init) => {
-        assert.strictEqual(url.toString(), 'http://localhost:8080/public/blog');
+        assert.strictEqual(url.toString(), 'http://localhost:8080/v1/public/blog');
         return new Response(JSON.stringify(mockPosts), { status: 200 });
       },
     });
@@ -1001,8 +1001,47 @@ describe('PsychologyApiClient - Courses & Buyer Endpoints (Phase 3 - PSY-3.1)', 
               template_version: storedSettings.template_version,
               theme_radius: storedSettings.theme_radius,
               theme_scale: storedSettings.theme_scale,
+              palette_id: storedSettings.palette_id || 'calm-sage',
             }),
             { status: 200 }
+          );
+        }
+        if (u.includes('/v1/admin/site/appearance')) {
+          if (init?.method === 'PUT') {
+            const body = JSON.parse(init.body);
+            storedSettings = {
+              ...storedSettings,
+              template_id: body.template_id,
+              palette_id: body.palette_id,
+              theme_radius: body.theme_radius || storedSettings.theme_radius || 'md',
+              theme_scale: body.theme_scale || storedSettings.theme_scale || 'md',
+            };
+            return new Response(
+              JSON.stringify({
+                template_id: storedSettings.template_id,
+                template_version: '1.0.0',
+                palette_id: storedSettings.palette_id,
+                theme_radius: storedSettings.theme_radius,
+                theme_scale: storedSettings.theme_scale,
+              }),
+              {
+                status: 200,
+                headers: { 'Cache-Control': 'private, no-store' },
+              }
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              template_id: storedSettings.template_id,
+              template_version: '1.0.0',
+              palette_id: storedSettings.palette_id || 'calm-sage',
+              theme_radius: storedSettings.theme_radius,
+              theme_scale: storedSettings.theme_scale,
+            }),
+            {
+              status: 200,
+              headers: { 'Cache-Control': 'private, no-store' },
+            }
           );
         }
         if (u.includes('/v1/admin/site')) {
@@ -1031,13 +1070,35 @@ describe('PsychologyApiClient - Courses & Buyer Endpoints (Phase 3 - PSY-3.1)', 
     assert.strictEqual(pub.template_version, '1.0.0');
     assert.strictEqual(pub.theme_radius, 'md');
     assert.strictEqual(pub.theme_scale, 'md');
+    assert.strictEqual(pub.palette_id, 'calm-sage');
 
     // 2. Get Admin Site
     const adm = await client.getAdminSite();
     assert.strictEqual(adm.tenant_id, 't-test-1');
     assert.strictEqual(adm.template_id, 'minimal');
 
-    // 3. Update Admin Site with template and theme
+    // 3. Get Admin Appearance
+    const app = await client.getAdminAppearance();
+    assert.strictEqual(app.template_id, 'minimal');
+    assert.strictEqual(app.template_version, '1.0.0');
+    assert.strictEqual(app.palette_id, 'calm-sage');
+    assert.strictEqual(app.theme_radius, 'md');
+    assert.strictEqual(app.theme_scale, 'md');
+
+    // 4. Update Admin Appearance
+    const updatedApp = await client.updateAdminAppearance({
+      template_id: 'mobile-app',
+      palette_id: 'ocean-trust',
+      theme_radius: 'lg',
+      theme_scale: 'sm',
+    });
+    assert.strictEqual(updatedApp.template_id, 'mobile-app');
+    assert.strictEqual(updatedApp.template_version, '1.0.0');
+    assert.strictEqual(updatedApp.palette_id, 'ocean-trust');
+    assert.strictEqual(updatedApp.theme_radius, 'lg');
+    assert.strictEqual(updatedApp.theme_scale, 'sm');
+
+    // 5. Update Admin Site with template and theme
     const updated = await client.updateAdminSite({
       title: 'کلینیک مدرن سپهر',
       description: 'روان‌درمانی تحلیلی',
@@ -1052,7 +1113,7 @@ describe('PsychologyApiClient - Courses & Buyer Endpoints (Phase 3 - PSY-3.1)', 
     assert.strictEqual(updated.theme_radius, 'lg');
     assert.strictEqual(updated.theme_scale, 'sm');
 
-    // 4. Public Site reflects update
+    // 6. Public Site reflects update
     const pubAfter = await client.getPublicSite();
     assert.strictEqual(pubAfter.title, 'کلینیک مدرن سپهر');
     assert.strictEqual(pubAfter.template_id, 'clinical');

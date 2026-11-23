@@ -14,7 +14,7 @@ const { clinicTitle, navItems, primaryAction } = Astro.props;
         {clinicTitle}
       </a>
 
-      <!-- Navigation Links -->
+      <!-- Desktop Navigation Links -->
       <nav class="hidden md:flex items-center gap-6 text-sm font-medium">
         {navItems.map((item) => (
           <a
@@ -26,14 +26,42 @@ const { clinicTitle, navItems, primaryAction } = Astro.props;
         ))}
       </nav>
 
-      <!-- Primary Action CTA -->
+      <!-- Desktop Action CTA -->
       {primaryAction && (
-        <div class="flex items-center gap-3">
+        <div class="hidden md:flex items-center gap-3">
           <a href={primaryAction.href} class="btn btn-primary btn-sm sm:btn-md rounded-full shadow-none font-medium">
             {primaryAction.label}
           </a>
         </div>
       )}
+
+      <!-- Mobile Navigation Menu (Zero-JS Details Dropdown, RTL) -->
+      <div class="flex items-center gap-2 md:hidden">
+        {primaryAction && (
+          <a href={primaryAction.href} class="btn btn-primary btn-xs sm:btn-sm rounded-full font-medium">
+            {primaryAction.label}
+          </a>
+        )}
+        <details class="dropdown dropdown-end">
+          <summary class="btn btn-ghost btn-sm btn-square" aria-label="منوی ناوبری">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </summary>
+          <ul class="dropdown-content menu p-2 shadow-lg bg-base-100 border border-base-200 rounded-box w-52 mt-2 z-50 text-right">
+            {navItems.map((item) => (
+              <li>
+                <a
+                  href={item.href}
+                  class={`py-2 text-sm ${item.isActive ? 'active font-bold text-primary' : 'text-base-content/80'}`}
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+      </div>
     </div>
   </div>
 </header>

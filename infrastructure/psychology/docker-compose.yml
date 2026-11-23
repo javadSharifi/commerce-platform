@@ -39,6 +39,8 @@ services:
       PARSPACK_SECRET_KEY: ${PARSPACK_SECRET_KEY}
       ZARINPAL_MERCHANT_ID: ${ZARINPAL_MERCHANT_ID}
       SESSION_SECRET: ${SESSION_SECRET:-pilot_random_session_secret_key_123456}
+      ENV: ${ENV:-production}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,7 +57,8 @@ services:
       NODE_ENV: production
       HOST: "0.0.0.0"
       PORT: "4321"
-      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://api:8080}
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:8080}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-}
     depends_on:
       - api
     networks:
@@ -71,7 +74,8 @@ services:
       NODE_ENV: production
       HOST: "0.0.0.0"
       PORT: "4322"
-      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://api:8080}
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:8080}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-}
     depends_on:
       - api
     networks:

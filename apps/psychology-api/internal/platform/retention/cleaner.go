@@ -147,3 +147,29 @@ WHERE id IN (
 
 	return tag.RowsAffected(), nil
 }
+
+// RunPeriodic starts a background loop that cleans expired data and purges expired buyer sessions/OTPs periodically.
+func (c *Cleaner) RunPeriodic(ctx context.Context, interval time.Duration, retentionDays int) {
+	if interval <= 0 {
+		interval = 1 * time.Hour
+	}
+	if retentionDays <= 0 {
+		retentionDays = DefaultRetentionDays
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
+			_, _ = c.AnonymizeExpiredGuestData(ctx, cutoff, 500)
+			_, _ = c.AnonymizeExpiredAppointmentData(ctx, cutoff, 500)
+			_, _ = c.PurgeExpiredOTPs(ctx, time.Now().UTC(), 1000)
+			_, _ = c.PurgeExpiredBuyerSessions(ctx, time.Now().UTC(), 1000)
+		}
+	}
+}

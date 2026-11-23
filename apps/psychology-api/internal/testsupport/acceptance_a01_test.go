@@ -62,15 +62,34 @@ func (s *fullMockStore) GetDomainByHost(ctx context.Context, host string) (domai
 }
 
 // Settings Querier
-func (s *fullMockStore) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (settingsdb.SiteSetting, error) {
+func (s *fullMockStore) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (settingsdb.GetSiteSettingsRow, error) {
 	st, ok := s.settings[fromPgUUID(tenantID).String()]
 	if !ok {
-		return settingsdb.SiteSetting{}, pgx.ErrNoRows
+		return settingsdb.GetSiteSettingsRow{}, pgx.ErrNoRows
 	}
-	return st, nil
+	pal := st.PaletteID
+	if pal == "" {
+		pal = "calm-sage"
+	}
+	return settingsdb.GetSiteSettingsRow{
+		TenantID:        st.TenantID,
+		Title:           st.Title,
+		Description:     st.Description,
+		Phone:           st.Phone,
+		Address:         st.Address,
+		PrimaryColor:    st.PrimaryColor,
+		LogoMediaID:     st.LogoMediaID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		PaletteID:       pal,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
 }
 
-func (s *fullMockStore) UpsertSiteSettings(ctx context.Context, arg settingsdb.UpsertSiteSettingsParams) (settingsdb.SiteSetting, error) {
+func (s *fullMockStore) UpsertSiteSettings(ctx context.Context, arg settingsdb.UpsertSiteSettingsParams) (settingsdb.UpsertSiteSettingsRow, error) {
 	st := settingsdb.SiteSetting{
 		TenantID:        arg.TenantID,
 		Title:           arg.Title,
@@ -83,9 +102,112 @@ func (s *fullMockStore) UpsertSiteSettings(ctx context.Context, arg settingsdb.U
 		TemplateVersion: arg.TemplateVersion,
 		ThemeRadius:     arg.ThemeRadius,
 		ThemeScale:      arg.ThemeScale,
+		PaletteID:       arg.PaletteID,
 	}
 	s.settings[fromPgUUID(arg.TenantID).String()] = st
-	return st, nil
+	return settingsdb.UpsertSiteSettingsRow{
+		TenantID:        st.TenantID,
+		Title:           st.Title,
+		Description:     st.Description,
+		Phone:           st.Phone,
+		Address:         st.Address,
+		PrimaryColor:    st.PrimaryColor,
+		LogoMediaID:     st.LogoMediaID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		PaletteID:       st.PaletteID,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
+}
+
+func (s *fullMockStore) GetSiteAppearance(ctx context.Context, tenantID pgtype.UUID) (settingsdb.GetSiteAppearanceRow, error) {
+	st, ok := s.settings[fromPgUUID(tenantID).String()]
+	if !ok {
+		return settingsdb.GetSiteAppearanceRow{}, pgx.ErrNoRows
+	}
+	pal := st.PaletteID
+	if pal == "" {
+		pal = "calm-sage"
+	}
+	return settingsdb.GetSiteAppearanceRow{
+		TenantID:        st.TenantID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		PaletteID:       pal,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
+}
+
+func (s *fullMockStore) UpsertSiteAppearance(ctx context.Context, arg settingsdb.UpsertSiteAppearanceParams) (settingsdb.UpsertSiteAppearanceRow, error) {
+	key := fromPgUUID(arg.TenantID).String()
+	st := s.settings[key]
+	st.TenantID = arg.TenantID
+	st.TemplateID = arg.TemplateID
+	st.TemplateVersion = arg.TemplateVersion
+	st.PaletteID = arg.PaletteID
+	st.ThemeRadius = arg.ThemeRadius
+	st.ThemeScale = arg.ThemeScale
+	s.settings[key] = st
+	return settingsdb.UpsertSiteAppearanceRow{
+		TenantID:        st.TenantID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		PaletteID:       st.PaletteID,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
+}
+
+func (s *fullMockStore) UpsertSiteProfile(ctx context.Context, arg settingsdb.UpsertSiteProfileParams) (settingsdb.UpsertSiteProfileRow, error) {
+	key := fromPgUUID(arg.TenantID).String()
+	st := s.settings[key]
+	st.TenantID = arg.TenantID
+	st.Title = arg.Title
+	st.Description = arg.Description
+	st.Phone = arg.Phone
+	st.Address = arg.Address
+	st.PrimaryColor = arg.PrimaryColor
+	st.LogoMediaID = arg.LogoMediaID
+	if st.TemplateID == "" {
+		st.TemplateID = "minimal"
+	}
+	if st.TemplateVersion == "" {
+		st.TemplateVersion = "1.0.0"
+	}
+	if st.ThemeRadius == "" {
+		st.ThemeRadius = "md"
+	}
+	if st.ThemeScale == "" {
+		st.ThemeScale = "md"
+	}
+	if st.PaletteID == "" {
+		st.PaletteID = "calm-sage"
+	}
+	s.settings[key] = st
+	return settingsdb.UpsertSiteProfileRow{
+		TenantID:        st.TenantID,
+		Title:           st.Title,
+		Description:     st.Description,
+		Phone:           st.Phone,
+		Address:         st.Address,
+		PrimaryColor:    st.PrimaryColor,
+		LogoMediaID:     st.LogoMediaID,
+		TemplateID:      st.TemplateID,
+		TemplateVersion: st.TemplateVersion,
+		ThemeRadius:     st.ThemeRadius,
+		ThemeScale:      st.ThemeScale,
+		PaletteID:       st.PaletteID,
+		CreatedAt:       st.CreatedAt,
+		UpdatedAt:       st.UpdatedAt,
+	}, nil
 }
 
 func (s *fullMockStore) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (settingsdb.GetPublicSiteProfileRow, error) {
@@ -103,7 +225,12 @@ func (s *fullMockStore) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID
 			TemplateVersion: "1.0.0",
 			ThemeRadius:     "md",
 			ThemeScale:      "md",
+			PaletteID:       "calm-sage",
 		}, nil
+	}
+	pal := st.PaletteID
+	if pal == "" {
+		pal = "calm-sage"
 	}
 	return settingsdb.GetPublicSiteProfileRow{
 		ClinicName:      name,
@@ -112,10 +239,12 @@ func (s *fullMockStore) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID
 		Phone:           pgtype.Text{String: st.Phone, Valid: true},
 		Address:         pgtype.Text{String: st.Address, Valid: true},
 		PrimaryColor:    pgtype.Text{String: st.PrimaryColor, Valid: true},
+		LogoMediaID:     st.LogoMediaID,
 		TemplateID:      st.TemplateID,
 		TemplateVersion: st.TemplateVersion,
 		ThemeRadius:     st.ThemeRadius,
 		ThemeScale:      st.ThemeScale,
+		PaletteID:       pal,
 	}, nil
 }
 
@@ -349,8 +478,7 @@ func TestScenario_PSY_A01(t *testing.T) {
 
 	// 6. Cross-Tenant Attempt: Owner A tries to mutate Tenant B settings -> Blocked with 403 Forbidden
 	tamperBody, _ := json.Marshal(map[string]string{
-		"title":         "کلینیک دستکاری‌شده",
-		"primary_color": "#ff0000",
+		"title": "کلینیک دستکاری‌شده",
 	})
 	reqTamper := httptest.NewRequest(http.MethodPut, "/v1/admin/site", bytes.NewBuffer(tamperBody))
 	reqTamper.Header.Set("Authorization", "Bearer "+sessA.Token)
@@ -371,8 +499,7 @@ func TestScenario_PSY_A01(t *testing.T) {
 
 	// 7. Legitimate update on Tenant A by Owner A -> 200 OK
 	legitBody, _ := json.Marshal(map[string]string{
-		"title":         "مطب تخصصی دکتر علی رضایی (به‌روزرسانی)",
-		"primary_color": "#0369a1",
+		"title": "مطب تخصصی دکتر علی رضایی (به‌روزرسانی)",
 	})
 	reqLegit := httptest.NewRequest(http.MethodPut, "/v1/admin/site", bytes.NewBuffer(legitBody))
 	reqLegit.Header.Set("Authorization", "Bearer "+sessA.Token)

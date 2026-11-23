@@ -32,7 +32,8 @@ SELECT t.name as clinic_name,
        COALESCE(s.template_id, 'minimal')::text as template_id,
        COALESCE(s.template_version, '1.0.0')::text as template_version,
        COALESCE(s.theme_radius, 'md')::text as theme_radius,
-       COALESCE(s.theme_scale, 'md')::text as theme_scale
+       COALESCE(s.theme_scale, 'md')::text as theme_scale,
+       COALESCE(s.palette_id, 'calm-sage')::text as palette_id
 FROM tenants t
 LEFT JOIN site_settings s ON s.tenant_id = t.id
 WHERE t.id = $1 AND t.status = 'active'
@@ -50,6 +51,7 @@ type GetPublicSiteProfileRow struct {
 	TemplateVersion string
 	ThemeRadius     string
 	ThemeScale      string
+	PaletteID       string
 }
 
 func (q *Queries) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (GetPublicSiteProfileRow, error) {
@@ -67,13 +69,47 @@ func (q *Queries) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (Get
 		&i.TemplateVersion,
 		&i.ThemeRadius,
 		&i.ThemeScale,
+		&i.PaletteID,
+	)
+	return i, err
+}
+
+const getSiteAppearance = `-- name: GetSiteAppearance :one
+SELECT tenant_id, template_id, template_version, palette_id, theme_radius, theme_scale, created_at, updated_at
+FROM site_settings
+WHERE tenant_id = $1
+`
+
+type GetSiteAppearanceRow struct {
+	TenantID        pgtype.UUID
+	TemplateID      string
+	TemplateVersion string
+	PaletteID       string
+	ThemeRadius     string
+	ThemeScale      string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) GetSiteAppearance(ctx context.Context, tenantID pgtype.UUID) (GetSiteAppearanceRow, error) {
+	row := q.db.QueryRow(ctx, getSiteAppearance, tenantID)
+	var i GetSiteAppearanceRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.TemplateID,
+		&i.TemplateVersion,
+		&i.PaletteID,
+		&i.ThemeRadius,
+		&i.ThemeScale,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getSiteSettings = `-- name: GetSiteSettings :one
 SELECT tenant_id, title, description, phone, address, primary_color, logo_media_id,
-       template_id, template_version, theme_radius, theme_scale, created_at, updated_at
+       template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at
 FROM site_settings
 WHERE tenant_id = $1
 `
@@ -90,6 +126,7 @@ type GetSiteSettingsRow struct {
 	TemplateVersion string
 	ThemeRadius     string
 	ThemeScale      string
+	PaletteID       string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 }
@@ -109,6 +146,139 @@ func (q *Queries) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (Ge
 		&i.TemplateVersion,
 		&i.ThemeRadius,
 		&i.ThemeScale,
+		&i.PaletteID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSiteAppearance = `-- name: UpsertSiteAppearance :one
+INSERT INTO site_settings (
+    tenant_id, template_id, template_version, palette_id, theme_radius, theme_scale, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, now())
+ON CONFLICT (tenant_id) DO UPDATE
+SET template_id = EXCLUDED.template_id,
+    template_version = EXCLUDED.template_version,
+    palette_id = EXCLUDED.palette_id,
+    theme_radius = EXCLUDED.theme_radius,
+    theme_scale = EXCLUDED.theme_scale,
+    updated_at = now()
+RETURNING tenant_id, template_id, template_version, palette_id, theme_radius, theme_scale, created_at, updated_at
+`
+
+type UpsertSiteAppearanceParams struct {
+	TenantID        pgtype.UUID
+	TemplateID      string
+	TemplateVersion string
+	PaletteID       string
+	ThemeRadius     string
+	ThemeScale      string
+}
+
+type UpsertSiteAppearanceRow struct {
+	TenantID        pgtype.UUID
+	TemplateID      string
+	TemplateVersion string
+	PaletteID       string
+	ThemeRadius     string
+	ThemeScale      string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertSiteAppearance(ctx context.Context, arg UpsertSiteAppearanceParams) (UpsertSiteAppearanceRow, error) {
+	row := q.db.QueryRow(ctx, upsertSiteAppearance,
+		arg.TenantID,
+		arg.TemplateID,
+		arg.TemplateVersion,
+		arg.PaletteID,
+		arg.ThemeRadius,
+		arg.ThemeScale,
+	)
+	var i UpsertSiteAppearanceRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.TemplateID,
+		&i.TemplateVersion,
+		&i.PaletteID,
+		&i.ThemeRadius,
+		&i.ThemeScale,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSiteProfile = `-- name: UpsertSiteProfile :one
+INSERT INTO site_settings (
+    tenant_id, title, description, phone, address, primary_color, logo_media_id, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+ON CONFLICT (tenant_id) DO UPDATE
+SET title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    phone = EXCLUDED.phone,
+    address = EXCLUDED.address,
+    primary_color = EXCLUDED.primary_color,
+    logo_media_id = EXCLUDED.logo_media_id,
+    updated_at = now()
+RETURNING tenant_id, title, description, phone, address, primary_color, logo_media_id,
+          template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at
+`
+
+type UpsertSiteProfileParams struct {
+	TenantID     pgtype.UUID
+	Title        string
+	Description  string
+	Phone        string
+	Address      string
+	PrimaryColor string
+	LogoMediaID  pgtype.UUID
+}
+
+type UpsertSiteProfileRow struct {
+	TenantID        pgtype.UUID
+	Title           string
+	Description     string
+	Phone           string
+	Address         string
+	PrimaryColor    string
+	LogoMediaID     pgtype.UUID
+	TemplateID      string
+	TemplateVersion string
+	ThemeRadius     string
+	ThemeScale      string
+	PaletteID       string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertSiteProfile(ctx context.Context, arg UpsertSiteProfileParams) (UpsertSiteProfileRow, error) {
+	row := q.db.QueryRow(ctx, upsertSiteProfile,
+		arg.TenantID,
+		arg.Title,
+		arg.Description,
+		arg.Phone,
+		arg.Address,
+		arg.PrimaryColor,
+		arg.LogoMediaID,
+	)
+	var i UpsertSiteProfileRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.Title,
+		&i.Description,
+		&i.Phone,
+		&i.Address,
+		&i.PrimaryColor,
+		&i.LogoMediaID,
+		&i.TemplateID,
+		&i.TemplateVersion,
+		&i.ThemeRadius,
+		&i.ThemeScale,
+		&i.PaletteID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -118,9 +288,9 @@ func (q *Queries) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (Ge
 const upsertSiteSettings = `-- name: UpsertSiteSettings :one
 INSERT INTO site_settings (
     tenant_id, title, description, phone, address, primary_color, logo_media_id,
-    template_id, template_version, theme_radius, theme_scale, updated_at
+    template_id, template_version, theme_radius, theme_scale, palette_id, updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET title = EXCLUDED.title,
     description = EXCLUDED.description,
@@ -132,9 +302,10 @@ SET title = EXCLUDED.title,
     template_version = EXCLUDED.template_version,
     theme_radius = EXCLUDED.theme_radius,
     theme_scale = EXCLUDED.theme_scale,
+    palette_id = EXCLUDED.palette_id,
     updated_at = now()
 RETURNING tenant_id, title, description, phone, address, primary_color, logo_media_id,
-          template_id, template_version, theme_radius, theme_scale, created_at, updated_at
+          template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at
 `
 
 type UpsertSiteSettingsParams struct {
@@ -149,6 +320,7 @@ type UpsertSiteSettingsParams struct {
 	TemplateVersion string
 	ThemeRadius     string
 	ThemeScale      string
+	PaletteID       string
 }
 
 type UpsertSiteSettingsRow struct {
@@ -163,6 +335,7 @@ type UpsertSiteSettingsRow struct {
 	TemplateVersion string
 	ThemeRadius     string
 	ThemeScale      string
+	PaletteID       string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 }
@@ -180,6 +353,7 @@ func (q *Queries) UpsertSiteSettings(ctx context.Context, arg UpsertSiteSettings
 		arg.TemplateVersion,
 		arg.ThemeRadius,
 		arg.ThemeScale,
+		arg.PaletteID,
 	)
 	var i UpsertSiteSettingsRow
 	err := row.Scan(
@@ -194,6 +368,7 @@ func (q *Queries) UpsertSiteSettings(ctx context.Context, arg UpsertSiteSettings
 		&i.TemplateVersion,
 		&i.ThemeRadius,
 		&i.ThemeScale,
+		&i.PaletteID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

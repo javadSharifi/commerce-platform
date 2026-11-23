@@ -261,7 +261,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         submitBtn.textContent = 'در حال ذخیره‌سازی...';
 
         try {
-          const res = await fetch('/admin/workshops', {
+          const res = await fetch('/v1/admin/workshops', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

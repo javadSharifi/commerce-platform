@@ -1,0 +1,26 @@
+import { TEMPLATE_CATALOG } from '@psychology/ui';
+import type { SiteTemplate } from '../contract.js';
+import Header from './Header.astro';
+import Footer from './Footer.astro';
+import HomeHero from './HomeHero.astro';
+import CourseCard from './CourseCard.astro';
+import WorkshopCard from './WorkshopCard.astro';
+import BlogCard from './BlogCard.astro';
+import Shell from './Shell.astro';
+
+const meta = TEMPLATE_CATALOG.find((t) => t.id === 'mobile-app')!;
+
+export const mobileAppTemplate: SiteTemplate = {
+  meta,
+  components: {
+    Header,
+    Footer,
+    HomeHero,
+    CourseCard,
+    WorkshopCard,
+    BlogCard,
+    Shell,
+  },
+};
+
+export default mobileAppTemplate;

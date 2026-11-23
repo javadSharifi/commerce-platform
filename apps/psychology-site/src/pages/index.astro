@@ -1,77 +1,22 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { resolveTemplate } from '../templates/registry.js';
-import type { HomeHeroVM } from '../templates/view-models.js';
+import HomePageContent from '../components/HomePageContent.astro';
 import { fetchPublicSite } from '../lib/site.js';
-import { Button } from '@psychology/ui';
 
 // Edge CDN and reverse proxy caching: public canonical homepage
 Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
 
 // Fetch published tenant settings for the current Host
-const site = await fetchPublicSite(Astro.request);
-
-// Resolve published template (with safe fallback to minimal)
-const activeTemplate = resolveTemplate(site.template_id);
-const HomeHeroComponent = activeTemplate.components.HomeHero;
-
-const heroVM: HomeHeroVM = {
-  badgeText: site.name,
-  title: site.title,
-  description: site.description,
-  primaryCta: {
-    label: 'رزرو نوبت مشاوره',
-    href: '/booking',
-  },
-  secondaryCta: {
-    label: 'مشاهده کارگاه‌ها',
-    href: '/workshops',
-  },
-};
+const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
 ---
 
 <BaseLayout
   title={site.title}
   description={site.description}
-  primaryColor={site.primary_color}
+  paletteId={site.palette_id}
   templateId={site.template_id}
   themeRadius={site.theme_radius}
   themeScale={site.theme_scale}
 >
-  <HomeHeroComponent {...heroVM} />
-
-  <section class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="bg-base-100 rounded-2xl p-6 border border-base-200 shadow-xs">
-        <h3 class="text-base font-bold text-base-content mb-3">اطلاعات تماس و دسترسی</h3>
-        {site.phone && (
-          <p class="text-sm text-base-content/80 mb-2">
-            تلفن تماس: <span class="font-medium text-base-content">{site.phone}</span>
-          </p>
-        )}
-        {site.address && (
-          <p class="text-sm text-base-content/80">
-            نشانی مطب: <span class="font-medium text-base-content">{site.address}</span>
-          </p>
-        )}
-      </div>
-      <div class="bg-base-100 rounded-2xl p-6 border border-base-200 shadow-xs">
-        <h3 class="text-base font-bold text-base-content mb-3">ساعات کاری و پذیرش</h3>
-        <p class="text-sm text-base-content/80 mb-2">شنبه تا چهارشنبه: ۱۴:۰۰ الی ۲۰:۰۰</p>
-        <p class="text-xs text-base-content/60">پاسخگویی تلفنی و هماهنگی نوبت‌ها با تعیین وقت قبلی</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-    <div class="bg-base-200 rounded-3xl p-8 border border-base-300 flex flex-col sm:flex-row items-center justify-between gap-6">
-      <div class="text-start">
-        <h4 class="text-lg font-bold text-base-content mb-1">نیاز به مشاوره فردی یا خانوادگی دارید؟</h4>
-        <p class="text-sm text-base-content/70">درمانگران متخصص ما آماده ارائه خدمات حضوری و آنلاین هستند.</p>
-      </div>
-      <a href="/booking">
-        <Button variant="primary">رزرو نوبت مشاوره</Button>
-      </a>
-    </div>
-  </section>
+  <HomePageContent site={site} templateId={site.template_id} />
 </BaseLayout>

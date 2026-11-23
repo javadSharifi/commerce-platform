@@ -1,15 +1,15 @@
 -- name: GetSiteSettings :one
 SELECT tenant_id, title, description, phone, address, primary_color, logo_media_id,
-       template_id, template_version, theme_radius, theme_scale, created_at, updated_at
+       template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at
 FROM site_settings
 WHERE tenant_id = $1;
 
 -- name: UpsertSiteSettings :one
 INSERT INTO site_settings (
     tenant_id, title, description, phone, address, primary_color, logo_media_id,
-    template_id, template_version, theme_radius, theme_scale, updated_at
+    template_id, template_version, theme_radius, theme_scale, palette_id, updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET title = EXCLUDED.title,
     description = EXCLUDED.description,
@@ -21,9 +21,45 @@ SET title = EXCLUDED.title,
     template_version = EXCLUDED.template_version,
     theme_radius = EXCLUDED.theme_radius,
     theme_scale = EXCLUDED.theme_scale,
+    palette_id = EXCLUDED.palette_id,
     updated_at = now()
 RETURNING tenant_id, title, description, phone, address, primary_color, logo_media_id,
-          template_id, template_version, theme_radius, theme_scale, created_at, updated_at;
+          template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at;
+
+-- name: UpsertSiteProfile :one
+INSERT INTO site_settings (
+    tenant_id, title, description, phone, address, primary_color, logo_media_id, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+ON CONFLICT (tenant_id) DO UPDATE
+SET title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    phone = EXCLUDED.phone,
+    address = EXCLUDED.address,
+    primary_color = EXCLUDED.primary_color,
+    logo_media_id = EXCLUDED.logo_media_id,
+    updated_at = now()
+RETURNING tenant_id, title, description, phone, address, primary_color, logo_media_id,
+          template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at;
+
+-- name: GetSiteAppearance :one
+SELECT tenant_id, template_id, template_version, palette_id, theme_radius, theme_scale, created_at, updated_at
+FROM site_settings
+WHERE tenant_id = $1;
+
+-- name: UpsertSiteAppearance :one
+INSERT INTO site_settings (
+    tenant_id, template_id, template_version, palette_id, theme_radius, theme_scale, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, now())
+ON CONFLICT (tenant_id) DO UPDATE
+SET template_id = EXCLUDED.template_id,
+    template_version = EXCLUDED.template_version,
+    palette_id = EXCLUDED.palette_id,
+    theme_radius = EXCLUDED.theme_radius,
+    theme_scale = EXCLUDED.theme_scale,
+    updated_at = now()
+RETURNING tenant_id, template_id, template_version, palette_id, theme_radius, theme_scale, created_at, updated_at;
 
 -- name: GetPublicSiteProfile :one
 SELECT t.name as clinic_name,
@@ -31,7 +67,8 @@ SELECT t.name as clinic_name,
        COALESCE(s.template_id, 'minimal')::text as template_id,
        COALESCE(s.template_version, '1.0.0')::text as template_version,
        COALESCE(s.theme_radius, 'md')::text as theme_radius,
-       COALESCE(s.theme_scale, 'md')::text as theme_scale
+       COALESCE(s.theme_scale, 'md')::text as theme_scale,
+       COALESCE(s.palette_id, 'calm-sage')::text as palette_id
 FROM tenants t
 LEFT JOIN site_settings s ON s.tenant_id = t.id
 WHERE t.id = $1 AND t.status = 'active';

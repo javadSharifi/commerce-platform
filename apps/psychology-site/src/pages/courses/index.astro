@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { fetchPublicSite } from '../../lib/site.js';
+import { fetchPublicSite, getApiBaseUrl } from '../../lib/site.js';
 import { resolveTemplate } from '../../templates/registry.js';
 import type { CourseCardVM } from '../../templates/view-models.js';
 import { EmptyState } from '@psychology/ui';
@@ -40,21 +40,28 @@ const fallbackCourses = [
 
 let courses = fallbackCourses;
 
-const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
-try {
-  const host = Astro.request.headers.get('host') || 'localhost:3000';
-  const res = await fetch(`${apiBase}/public/courses`, {
-    headers: { Host: host },
-    signal: AbortSignal.timeout(1000),
-  });
-  if (res.ok) {
-    const data = await res.json();
-    if (Array.isArray(data) && data.length > 0) {
-      courses = data;
+// Allow explicit empty state query parameter for testing and zero-state verification
+const forceEmpty = Astro.url.searchParams.get('empty') === '1';
+
+if (forceEmpty) {
+  courses = [];
+} else {
+  const apiBase = getApiBaseUrl() || 'http://localhost:8080';
+  try {
+    const host = Astro.request.headers.get('x-forwarded-host') || Astro.request.headers.get('host') || 'localhost:3000';
+    const res = await fetch(`${apiBase}/v1/public/courses`, {
+      headers: { Host: host, 'X-Forwarded-Host': host },
+      signal: AbortSignal.timeout(1000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        courses = data;
+      }
     }
+  } catch {
+    // Graceful fallback to demo data
   }
-} catch {
-  // Graceful fallback to demo data
 }
 
 function formatPriceTomans(rials: number): string {
@@ -77,36 +84,83 @@ const courseVMs: CourseCardVM[] = courses.map((c) => ({
 <BaseLayout
   title={`دوره‌های آموزشی تخصصی | ${site.title}`}
   description="دوره‌های تخصصی ضبط‌شده روان‌شناسی با تدریس اساتید و روان‌درمانگران مجرب"
-  primaryColor={site.primary_color}
+  paletteId={site.palette_id}
   templateId={site.template_id}
   themeRadius={site.theme_radius}
   themeScale={site.theme_scale}
 >
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-    <div class="text-start sm:text-center mb-8">
-      <h1 class="text-2xl sm:text-3xl font-extrabold text-base-content mb-3">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+    <!-- Header with Editorial Badge and Typography -->
+    <header class="flex flex-col items-start gap-4 max-w-3xl mb-8">
+      <span class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+        <span class="w-2 h-2 rounded-full bg-primary" aria-hidden="true"></span>
+        آموزش‌های تخصصی روانشناسی
+      </span>
+
+      <h1 class="text-3xl sm:text-4xl font-extrabold text-base-content tracking-tight leading-tight">
         دوره‌های آموزشی تخصصی
       </h1>
-      <p class="text-base-content/70 text-base max-w-2xl mx-auto">
-        ویدئوها و جلسات آموزشی ضبط‌شده با دسترسی دائمی، سرفصل‌های علمی و گارانتی بازگشت وجه.
-      </p>
-    </div>
 
-    {courseVMs.length === 0 ? (
-      <EmptyState
-        title="در حال حاضر دوره‌ای منتشر نشده است"
-        description="به زودی دوره‌های آموزشی جدید در این بخش قرار خواهند گرفت."
-      >
-        <a href="/workshops" class="btn btn-primary">
-          مشاهده کارگاه‌های حضوری و آنلاین
+      <p class="text-base-content/75 text-base sm:text-lg leading-relaxed">
+        مسیرهای یادگیری ساختارمند و دوره‌های ویدیویی جامع با تدریس اساتید و روان‌درمانگران مجرب همراه با گارانتی بازگشت وجه.
+      </p>
+
+      <!-- Category Filter Pills -->
+      <div class="flex flex-wrap items-center gap-2 pt-2" role="tablist" aria-label="فیلتر دسته‌بندی دوره‌ها">
+        <span class="btn btn-sm btn-primary rounded-full px-4 text-xs font-medium cursor-default">
+          همه دوره‌ها
+        </span>
+        <a href="#anxiety" class="btn btn-sm btn-ghost border border-base-300 rounded-full px-4 text-xs font-normal hover:border-primary">
+          اضطراب و استرس
         </a>
-      </EmptyState>
-    ) : (
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {courseVMs.map((vm) => (
-          <CourseCard {...vm} />
-        ))}
+        <a href="#relationships" class="btn btn-sm btn-ghost border border-base-300 rounded-full px-4 text-xs font-normal hover:border-primary">
+          روابط و خودشناسی
+        </a>
+        <a href="/workshops" class="btn btn-sm btn-outline border-base-300 rounded-full px-4 text-xs font-normal hover:btn-primary">
+          کارگاه‌های زنده حضوری و آنلاین
+        </a>
       </div>
+    </header>
+
+    <!-- Courses Grid or Empty State -->
+    {courseVMs.length === 0 ? (
+      <div class="py-8">
+        <EmptyState
+          title="در حال حاضر دوره‌ای منتشر نشده است"
+          description="به زودی دوره‌های آموزشی جدید در این بخش قرار خواهند گرفت."
+        >
+          <a href="/workshops" class="btn btn-primary rounded-full">
+            مشاهده کارگاه‌های حضوری و آنلاین
+          </a>
+        </EmptyState>
+      </div>
+    ) : (
+      <section aria-label="لیست دوره‌های آموزشی">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+          {courseVMs.map((vm) => (
+            <CourseCard {...vm} />
+          ))}
+        </div>
+      </section>
     )}
+
+    <!-- Live Workshops Banner Cross-Link -->
+    <section class="mt-16 bg-base-200/60 border border-base-300 rounded-2xl p-6 sm:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div class="flex flex-col gap-2 max-w-xl">
+        <div class="flex items-center gap-2">
+          <span class="badge badge-secondary badge-sm text-xs font-semibold">تعاملی و با ظرفیت محدود</span>
+          <span class="text-xs text-base-content/65">پرسش و پاسخ مستقیم</span>
+        </div>
+        <h2 class="text-xl sm:text-2xl font-bold text-base-content">
+          علاقه‌مند به شرکت در کارگاه‌های زنده هستید؟
+        </h2>
+        <p class="text-sm text-base-content/75 leading-relaxed">
+          کارگاه‌های آنلاین و حضوری با محوریت تمرین‌های بالینی، تنظیم هیجان و مهارت‌های ارتباطی در حال ثبت‌نام هستند.
+        </p>
+      </div>
+      <a href="/workshops" class="btn btn-primary rounded-full px-6 font-semibold shrink-0">
+        مشاهده تقویم کارگاه‌ها
+      </a>
+    </section>
   </div>
 </BaseLayout>

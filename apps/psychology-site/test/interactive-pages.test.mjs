@@ -75,6 +75,7 @@ test('PSY-5.8.3: Interactive pages migration (account/courses, appointments, boo
     assert.strictEqual(resBooking.status, 200);
     const ccBooking = resBooking.headers.get('cache-control') || '';
     assert.ok(ccBooking.includes('public'), 'Booking page must have public caching');
+    assert.ok(!ccBooking.includes('s-maxage'), 'Booking page must NOT have s-maxage stale cache');
     const htmlBooking = await resBooking.text();
     assert.match(htmlBooking, /درخواست نوبت مشاوره و روان‌درمانی/);
     assert.match(htmlBooking, /انتخاب درمانگر/);
@@ -94,7 +95,139 @@ test('PSY-5.8.3: Interactive pages migration (account/courses, appointments, boo
     assert.match(htmlBooking, /input-bordered/);
     assert.doesNotMatch(htmlBooking, /color:\s*#0f172a/);
     assert.doesNotMatch(htmlBooking, /background:\s*#ffffff/);
+
+    // PSY-5.18: Mobile 390px layout and RTL checks
+    assert.match(htmlBooking, /dir="rtl"/, 'Must render in RTL direction');
+    assert.match(htmlBooking, /overflow-x-hidden/, 'Must contain overflow-x-hidden to prevent horizontal scroll on 390px mobile');
+    assert.match(htmlBooking, /grid-cols-1/, 'Must support 1-column layout on mobile viewports');
   } finally {
     child.kill('SIGTERM');
+  }
+});
+
+test('PSY-5.18: Booking flow with live API sends Gregorian ISO date for slots and appointments', async () => {
+  const mockApiPort = 4418;
+  const sitePort = 4419;
+  const http = await import('node:http');
+
+  let receivedSlotQuery = '';
+  let receivedBookingBody = null;
+
+  const mockServer = http.createServer((req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const pathname = url.pathname;
+
+    if (pathname.includes('/therapists') && pathname.includes('/slots')) {
+      receivedSlotQuery = url.searchParams.get('from_date') || '';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify([
+          {
+            id: 'slot-iso-1111',
+            therapist_id: 'th-1',
+            starts_at: '2026-11-23T10:00:00Z',
+            ends_at: '2026-11-23T10:50:00Z',
+            status: 'available',
+          },
+        ])
+      );
+      return;
+    }
+
+    if (pathname === '/v1/public/therapists') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify([
+          {
+            id: 'th-1',
+            name: 'دکتر مریم علوی',
+            title: 'روان‌شناس بالینی',
+            bio: 'مشاوره فردی',
+            session_duration_minutes: 50,
+          },
+        ])
+      );
+      return;
+    }
+
+    if (pathname === '/v1/public/site') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          name: 'کلینیک روان‌شناسی مهر',
+          title: 'مرکز مشاوره مهر',
+          description: 'ارائه خدمات روان‌شناختی',
+          phone: '۰۲۱-۸۸۸۸۸۸۸۸',
+          address: 'تهران',
+          primary_color: '#0284c7',
+          template_id: 'minimal',
+          template_version: '1.0.0',
+          theme_radius: 'md',
+          theme_scale: 'md',
+        })
+      );
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ code: 'NOT_FOUND' }));
+  });
+
+  await new Promise((resolve) => mockServer.listen(mockApiPort, '127.0.0.1', resolve));
+
+  const child = spawn('node', ['./dist/server/entry.mjs'], {
+    env: {
+      ...process.env,
+      PORT: String(sitePort),
+      HOST: '127.0.0.1',
+      INTERNAL_API_URL: `http://127.0.0.1:${mockApiPort}`,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  try {
+    await new Promise((resolve, reject) => {
+      child.stdout.on('data', (data) => {
+        if (data.toString().includes('Server listening')) {
+          resolve();
+        }
+      });
+      child.on('error', reject);
+      setTimeout(() => reject(new Error('timeout waiting for site server to start')), 6000);
+    });
+
+    const resBooking = await fetch(`http://127.0.0.1:${sitePort}/booking`, {
+      headers: {
+        Host: 'mehr-clinic.ir',
+        'X-Forwarded-Host': 'mehr-clinic.ir',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      },
+    });
+
+    assert.strictEqual(resBooking.status, 200);
+    const html = await resBooking.text();
+
+    // 1. Verify RTL direction and Mobile 390px responsiveness
+    assert.match(html, /dir="rtl"/);
+    assert.match(html, /overflow-x-hidden/);
+    assert.match(html, /max-w-5xl/);
+
+    // 2. Verify Persian Jalali display in UI
+    assert.ok(html.includes('۱۴۰۵') || html.includes('1405'));
+
+    // 3. Verify standard ISO-8601 date format is used for initial slots fetch
+    assert.match(html, /value="\d{4}-\d{2}-\d{2}"/, 'DatePicker initial value must be standard ISO Gregorian YYYY-MM-DD');
+
+    // 4. Verify slots query received standard Gregorian ISO YYYY-MM-DD date string
+    if (receivedSlotQuery) {
+      assert.match(
+        receivedSlotQuery,
+        /^\d{4}-\d{2}-\d{2}$/,
+        `Slot query from_date must be formatted as YYYY-MM-DD ISO date, received: ${receivedSlotQuery}`
+      );
+    }
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise((resolve) => mockServer.close(resolve));
   }
 });

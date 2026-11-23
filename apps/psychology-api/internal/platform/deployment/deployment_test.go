@@ -88,6 +88,9 @@ func TestCaddyfile_CachingAndSecurityHeaders(t *testing.T) {
 	if !strings.Contains(content, "/account*") || !strings.Contains(content, "/appointments*") {
 		t.Errorf("Caddyfile @private block missing account or appointments paths")
 	}
+	if !strings.Contains(content, "/preview*") {
+		t.Errorf("Caddyfile @private block missing /preview* path")
+	}
 
 	// 3. Security headers
 	requiredHeaders := []string{
@@ -104,6 +107,41 @@ func TestCaddyfile_CachingAndSecurityHeaders(t *testing.T) {
 	// 4. Host preservation for multi-tenancy
 	if !strings.Contains(content, "header_up Host {host}") {
 		t.Errorf("Caddyfile missing Host header preservation")
+	}
+
+	// 5. API routes coverage
+	apiRoutes := []string{
+		"/v1/*",
+		"/callbacks/*",
+		"/public/courses*",
+		"/public/therapists*",
+		"/public/appointments*",
+		"/admin/courses*",
+		"/admin/appointments*",
+	}
+	for _, route := range apiRoutes {
+		if !strings.Contains(content, route) {
+			t.Errorf("Caddyfile @api block missing route: %s", route)
+		}
+	}
+
+	// 5b. Account frontend pages must route to Astro site, NOT Go API
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "path /v1/*") && strings.Contains(line, "/account/*") {
+			t.Errorf("Caddyfile @api block should not include /account/* (must route to Astro)")
+		}
+	}
+
+	// 6. Admin panel host routing without manual path restriction and with valid Caddy syntax
+	if !strings.Contains(content, "host panel.* admin.*") {
+		t.Errorf("Caddyfile missing Host matcher for admin panel")
+	}
+	if strings.Contains(content, "header Host panel.* admin.*") {
+		t.Errorf("Caddyfile contains invalid Caddy header Host matcher syntax")
+	}
+	if strings.Contains(content, "path /admin /admin/* /blog*") {
+		t.Errorf("Caddyfile @admin should not restrict panel paths manually")
 	}
 }
 

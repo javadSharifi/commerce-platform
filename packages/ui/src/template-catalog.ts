@@ -15,6 +15,14 @@ export interface TemplateMeta {
 
 export const DEFAULT_TEMPLATE_ID = 'minimal';
 
+export const EDITORIAL_TEMPLATE_META: TemplateMeta = {
+  id: 'editorial',
+  version: '1.0.0',
+  labelFa: 'ادیتوریال',
+  descriptionFa: 'طراحی آرامش‌بخش، گرم و مبتنی بر روانشناسی با چیدمان ژورنالی و فونت خوانا',
+  daisyTheme: 'editorial',
+};
+
 export const TEMPLATE_CATALOG: readonly TemplateMeta[] = [
   {
     id: 'minimal',
@@ -30,16 +38,27 @@ export const TEMPLATE_CATALOG: readonly TemplateMeta[] = [
     descriptionFa: 'طراحی ساختاریافته، معتبر و مدرن با تمرکز بر خدمات کلینیک و درمانگران متعدد',
     daisyTheme: 'clinical',
   },
+  {
+    id: 'mobile-app',
+    version: '1.0.0',
+    labelFa: 'اپلیکیشن موبایل',
+    descriptionFa: 'چیدمان بهینه و ناوبری اپ‌گونه با نوار دسترسی پایین صفحه مناسب تعامل لمسی موبایل',
+    daisyTheme: 'mobile-app',
+  },
+  EDITORIAL_TEMPLATE_META,
 ] as const;
 
 export const VALID_TEMPLATE_IDS = TEMPLATE_CATALOG.map((t) => t.id) as readonly string[];
-export type SupportedTemplateId = 'minimal' | 'clinical';
+export type SupportedTemplateId = 'minimal' | 'clinical' | 'mobile-app' | 'editorial';
 
 export function isValidTemplateId(id: string): id is SupportedTemplateId {
   return VALID_TEMPLATE_IDS.includes(id);
 }
 
 export function getTemplateMeta(id: string): TemplateMeta | undefined {
+  if (id === EDITORIAL_TEMPLATE_META.id) {
+    return EDITORIAL_TEMPLATE_META;
+  }
   return TEMPLATE_CATALOG.find((t) => t.id === id);
 }
 

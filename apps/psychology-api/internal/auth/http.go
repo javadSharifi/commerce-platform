@@ -3,16 +3,45 @@ package auth
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
-	service *Service
+	service      *Service
+	cookieSecure bool
+}
+
+func isEnvCookieSecure() bool {
+	if v := os.Getenv("COOKIE_SECURE"); v != "" {
+		return v == "true" || v == "1"
+	}
+	env := strings.ToLower(os.Getenv("ENV"))
+	if env == "production" || env == "prod" {
+		return true
+	}
+	appEnv := strings.ToLower(os.Getenv("APP_ENV"))
+	if appEnv == "production" || appEnv == "prod" {
+		return true
+	}
+	nodeEnv := strings.ToLower(os.Getenv("NODE_ENV"))
+	if nodeEnv == "production" || nodeEnv == "prod" {
+		return true
+	}
+	return false
 }
 
 func NewHandler(s *Service) *Handler {
-	return &Handler{service: s}
+	return &Handler{
+		service:      s,
+		cookieSecure: isEnvCookieSecure(),
+	}
+}
+
+func (h *Handler) SetCookieSecure(secure bool) {
+	h.cookieSecure = secure
 }
 
 type loginRequest struct {
@@ -74,7 +103,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  sess.ExpiresAt,
 		HttpOnly: true,
-		Secure:   false, // Can be toggled true in production with HTTPS
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -102,6 +131,7 @@ func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 

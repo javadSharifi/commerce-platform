@@ -402,6 +402,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /admin/site/appearance:
+    get:
+      tags:
+        - Admin Site
+      summary: Get clinic appearance settings
+      description: Returns template and color palette settings for the authenticated tenant. Guarded by session, membership, and appearance owner user ID.
+      operationId: getAdminAppearance
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: Clinic appearance settings
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: "private, no-store"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteAppearanceResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Not tenant member or not appearance owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+        - Admin Site
+      summary: Update clinic appearance settings
+      description: Updates template, palette, and theme options. Guarded by CSRF, session, membership, and appearance owner user ID.
+      operationId: updateAdminAppearance
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteAppearanceRequest'
+      responses:
+        '200':
+          description: Updated appearance settings
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: "private, no-store"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteAppearanceResponse'
+        '400':
+          description: Validation error or unknown fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - CSRF or not appearance owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   # ----------------------------------------------------
   # ADMIN WORKSHOPS
   # ----------------------------------------------------
@@ -2389,6 +2467,7 @@ components:
         - template_version
         - theme_radius
         - theme_scale
+        - palette_id
       properties:
         name:
           type: string
@@ -2426,6 +2505,9 @@ components:
           type: string
           enum: [sm, md, lg]
           example: "md"
+        palette_id:
+          type: string
+          example: "calm-sage"
 
     # ---------------- Admin Auth ----------------
     LoginRequest:
@@ -2521,6 +2603,8 @@ components:
         tenant_id:
           type: string
           format: uuid
+        primary_domain:
+          type: string
         title:
           type: string
         description:
@@ -2549,13 +2633,14 @@ components:
           type: string
           enum: [sm, md, lg]
           example: "md"
+        palette_id:
+          type: string
+          example: "calm-sage"
 
     UpdateSiteSettingsRequest:
       type: object
       required:
         - title
-        - description
-        - primary_color
       properties:
         title:
           type: string
@@ -2566,17 +2651,51 @@ components:
           type: string
         address:
           type: string
-        primary_color:
-          type: string
-          pattern: '^#[0-9a-fA-F]{6}$'
         logo_media_id:
           type: string
           format: uuid
           nullable: true
+
+    SiteAppearanceResponse:
+      type: object
+      required:
+        - template_id
+        - template_version
+        - palette_id
+        - theme_radius
+        - theme_scale
+      properties:
+        template_id:
+          type: string
+          example: "mobile-app"
+        template_version:
+          type: string
+          example: "1.0.0"
+        palette_id:
+          type: string
+          example: "ocean-trust"
+        theme_radius:
+          type: string
+          enum: [sm, md, lg]
+          example: "md"
+        theme_scale:
+          type: string
+          enum: [sm, md, lg]
+          example: "md"
+
+    UpdateSiteAppearanceRequest:
+      type: object
+      required:
+        - template_id
+        - palette_id
+      properties:
         template_id:
           type: string
           pattern: '^[a-z0-9-]{2,40}$'
-          example: "minimal"
+          example: "mobile-app"
+        palette_id:
+          type: string
+          example: "ocean-trust"
         theme_radius:
           type: string
           enum: [sm, md, lg]

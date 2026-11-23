@@ -2,15 +2,19 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestEdgeCache_HIT_and_MISS(t *testing.T) {
@@ -397,5 +401,356 @@ func TestOutboxWorker_RetryAndFailure(t *testing.T) {
 	}
 	if e.LastError == nil || *e.LastError == "" {
 		t.Errorf("expected last_error to be recorded")
+	}
+}
+
+func TestOutboxWorker_RunLoop(t *testing.T) {
+	db := NewMockOutboxDB()
+	purger := &mockCDNPurger{}
+	worker := NewOutboxWorker(db, purger)
+
+	tenantID := uuid.New()
+	eventID := uuid.New()
+
+	db.AddEvent(OutboxEvent{
+		ID:        eventID,
+		TenantID:  tenantID,
+		EventType: "article.published",
+		Payload: OutboxPayload{
+			Host:  "clinic.ir",
+			Paths: []string{"/blog"},
+		},
+		Status:    "pending",
+		CreatedAt: time.Now(),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		worker.Run(ctx, 10*time.Millisecond)
+		close(done)
+	}()
+
+	// Wait for event to be processed by ticker
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("worker Run did not exit after context cancellation")
+	}
+
+	e, ok := db.GetEvent(eventID)
+	if !ok || e.Status != "completed" {
+		t.Errorf("expected event status completed by Run loop, got %v", e.Status)
+	}
+}
+
+type querySpyDB struct {
+	OutboxDBTX
+	lastSQL string
+}
+
+func (s *querySpyDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	s.lastSQL = sql
+	return s.OutboxDBTX.Query(ctx, sql, args...)
+}
+
+func TestFetchPendingEvents_UsesForUpdateSkipLocked(t *testing.T) {
+	mockDB := NewMockOutboxDB()
+	spy := &querySpyDB{OutboxDBTX: mockDB}
+
+	_, err := FetchPendingEvents(context.Background(), spy, 10)
+	if err != nil {
+		t.Fatalf("unexpected error fetching events: %v", err)
+	}
+
+	if !strings.Contains(spy.lastSQL, "FOR UPDATE SKIP LOCKED") {
+		t.Fatalf("expected SQL query to contain 'FOR UPDATE SKIP LOCKED', got:\n%s", spy.lastSQL)
+	}
+}
+
+type roundTripperFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+// TestAcceptance_PSY_6_8_RealCDNAdapterAndOutboxPurge verifies acceptance requirement PSY-6.8:
+// 1. Tests real CDN adapter (ArvanCloudPurger) with individual URL purge payload and authorization.
+// 2. Warms up Home (/) and a detail page (/courses/anxiety-management) for both Host A and Host B.
+// 3. Simulates OutboxWorker processing after appearance update on Host A.
+// 4. Verifies Host A (Home & detail) are purged (MISS -> HIT with new appearance).
+// 5. Verifies Host B (Home & detail) remain strictly HIT (zero cross-tenant invalidation leakage).
+// 6. Verifies consecutive /preview requests strictly BYPASS the shared cache with private, no-store.
+func TestAcceptance_PSY_6_8_RealCDNAdapterAndOutboxPurge(t *testing.T) {
+	// -------------------------------------------------------------------------
+	// 1. Unit Test ArvanCloudPurger (Real CDN Adapter)
+	// -------------------------------------------------------------------------
+	// 1.a Empty API key returns nil (dev/test fallback mode)
+	devPurger := NewArvanCloudPurger("", nil)
+	if err := devPurger.Purge(context.Background(), "omid-psych.ir", []string{"/", "/courses"}); err != nil {
+		t.Fatalf("expected nil error on empty API key, got: %v", err)
+	}
+
+	// 1.b Live CDN purge request verification with mock transport
+	var capturedReq *http.Request
+	var capturedBody map[string]any
+
+	mockClient := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			capturedReq = req
+			_ = json.NewDecoder(req.Body).Decode(&capturedBody)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"message":"purge submitted"}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	arvanPurger := NewArvanCloudPurger("Apikey secret-arvan-key", mockClient)
+	err := arvanPurger.Purge(context.Background(), "omid-psych.ir", []string{"/", "/courses/anxiety-management"})
+	if err != nil {
+		t.Fatalf("unexpected error from arvanPurger: %v", err)
+	}
+
+	expectedEndpoint := "https://napi.arvancloud.ir/cdn/4.0/domains/omid-psych.ir/caching/purge"
+	if capturedReq.URL.String() != expectedEndpoint {
+		t.Fatalf("expected endpoint %s, got: %s", expectedEndpoint, capturedReq.URL.String())
+	}
+	if capturedReq.Header.Get("Authorization") != "Apikey secret-arvan-key" {
+		t.Fatalf("expected Authorization header with Apikey, got: %s", capturedReq.Header.Get("Authorization"))
+	}
+	if capturedReq.Header.Get("Content-Type") != "application/json" {
+		t.Fatalf("expected Content-Type application/json, got: %s", capturedReq.Header.Get("Content-Type"))
+	}
+	if capturedBody["purge"] != "individual" {
+		t.Fatalf("expected purge mode 'individual', got: %v", capturedBody["purge"])
+	}
+	rawUrls, ok := capturedBody["urls"].([]any)
+	if !ok || len(rawUrls) != 2 {
+		t.Fatalf("expected 2 URLs in purge payload, got: %v", capturedBody["urls"])
+	}
+	if rawUrls[0] != "https://omid-psych.ir/" || rawUrls[1] != "https://omid-psych.ir/courses/anxiety-management" {
+		t.Fatalf("unexpected purge URLs: %v", rawUrls)
+	}
+
+	// 1.c Error handling from CDN API
+	errorClient := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Body:       io.NopCloser(strings.NewReader(`{"message":"cdn gateway error"}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+	failingPurger := NewArvanCloudPurger("Apikey secret-arvan-key", errorClient)
+	if err := failingPurger.Purge(context.Background(), "omid-psych.ir", []string{"/"}); err == nil {
+		t.Fatalf("expected error when CDN returns 502, got nil")
+	}
+
+	// -------------------------------------------------------------------------
+	// 2. End-to-End Cache Warmup, Outbox Processing & Invalidation Isolation
+	// -------------------------------------------------------------------------
+	hostA := "omid-psych.ir"
+	hostB := "mahan-clinic.ir"
+
+	callCounts := make(map[string]int)
+	var mu sync.Mutex
+
+	// Appearance state for Host A and Host B
+	appearanceA := "minimal-calm-sage"
+	appearanceB := "minimal-warm-sand"
+
+	upstreamHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		reqKey := r.Host + r.URL.Path
+		callCounts[reqKey]++
+		count := callCounts[reqKey]
+		currentAppearance := appearanceA
+		if r.Host == hostB {
+			currentAppearance = appearanceB
+		}
+		mu.Unlock()
+
+		// Preview requests must be private, no-store
+		if strings.HasPrefix(r.URL.Path, "/preview") {
+			w.Header().Set("Cache-Control", "private, no-store")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprintf(w, "<html><body>پیش‌نمایش: %s - قالب: %s</body></html>", r.Host, r.URL.Query().Get("template"))
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=0, s-maxage=3600")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintf(w, "<html><body data-appearance=\"%s\">کلینیک: %s - مسیر: %s (فراخوانی: %d)</body></html>",
+			currentAppearance, r.Host, r.URL.Path, count)
+	})
+
+	proxy := NewEdgeCacheProxy(1 * time.Hour)
+	handler := proxy.Middleware(upstreamHandler)
+
+	outboxDB := NewMockOutboxDB()
+	proxyPurger := NewProxyPurger(proxy)
+	worker := NewOutboxWorker(outboxDB, proxyPurger)
+
+	// Step 2.a: Warm up Home (/) and Detail Page (/courses/anxiety-management) for Host A
+	reqAHome := httptest.NewRequest(http.MethodGet, "https://"+hostA+"/", nil)
+	reqACourse := httptest.NewRequest(http.MethodGet, "https://"+hostA+"/courses/anxiety-management", nil)
+
+	// First requests: MISS
+	recAHome1 := httptest.NewRecorder()
+	handler.ServeHTTP(recAHome1, reqAHome)
+	if recAHome1.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("expected Host A Home first request to be MISS, got: %s", recAHome1.Header().Get("X-Cache"))
+	}
+
+	recACourse1 := httptest.NewRecorder()
+	handler.ServeHTTP(recACourse1, reqACourse)
+	if recACourse1.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("expected Host A Course first request to be MISS, got: %s", recACourse1.Header().Get("X-Cache"))
+	}
+
+	// Second requests: HIT
+	recAHome2 := httptest.NewRecorder()
+	handler.ServeHTTP(recAHome2, reqAHome)
+	if recAHome2.Header().Get("X-Cache") != "HIT" {
+		t.Fatalf("expected Host A Home second request to be HIT, got: %s", recAHome2.Header().Get("X-Cache"))
+	}
+
+	recACourse2 := httptest.NewRecorder()
+	handler.ServeHTTP(recACourse2, reqACourse)
+	if recACourse2.Header().Get("X-Cache") != "HIT" {
+		t.Fatalf("expected Host A Course second request to be HIT, got: %s", recACourse2.Header().Get("X-Cache"))
+	}
+
+	// Step 2.b: Warm up Home (/) and Detail Page (/courses/anxiety-management) for Host B
+	reqBHome := httptest.NewRequest(http.MethodGet, "https://"+hostB+"/", nil)
+	reqBCourse := httptest.NewRequest(http.MethodGet, "https://"+hostB+"/courses/anxiety-management", nil)
+
+	// First requests: MISS
+	recBHome1 := httptest.NewRecorder()
+	handler.ServeHTTP(recBHome1, reqBHome)
+	if recBHome1.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("expected Host B Home first request to be MISS, got: %s", recBHome1.Header().Get("X-Cache"))
+	}
+
+	recBCourse1 := httptest.NewRecorder()
+	handler.ServeHTTP(recBCourse1, reqBCourse)
+	if recBCourse1.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("expected Host B Course first request to be MISS, got: %s", recBCourse1.Header().Get("X-Cache"))
+	}
+
+	// Second requests: HIT
+	recBHome2 := httptest.NewRecorder()
+	handler.ServeHTTP(recBHome2, reqBHome)
+	if recBHome2.Header().Get("X-Cache") != "HIT" {
+		t.Fatalf("expected Host B Home second request to be HIT, got: %s", recBHome2.Header().Get("X-Cache"))
+	}
+
+	recBCourse2 := httptest.NewRecorder()
+	handler.ServeHTTP(recBCourse2, reqBCourse)
+	if recBCourse2.Header().Get("X-Cache") != "HIT" {
+		t.Fatalf("expected Host B Course second request to be HIT, got: %s", recBCourse2.Header().Get("X-Cache"))
+	}
+
+	// -------------------------------------------------------------------------
+	// 3. Consecutive /preview requests must strictly BYPASS cache
+	// -------------------------------------------------------------------------
+	previewReq1 := httptest.NewRequest(http.MethodGet, "https://"+hostA+"/preview?template=clinical&palette=ocean-trust", nil)
+	previewRec1 := httptest.NewRecorder()
+	handler.ServeHTTP(previewRec1, previewReq1)
+	if previewRec1.Header().Get("X-Cache") != "BYPASS" {
+		t.Fatalf("expected preview request 1 to BYPASS, got: %s", previewRec1.Header().Get("X-Cache"))
+	}
+	if previewRec1.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("expected preview to have private, no-store, got: %s", previewRec1.Header().Get("Cache-Control"))
+	}
+
+	previewReq2 := httptest.NewRequest(http.MethodGet, "https://"+hostA+"/preview?template=clinical&palette=ocean-trust", nil)
+	previewRec2 := httptest.NewRecorder()
+	handler.ServeHTTP(previewRec2, previewReq2)
+	if previewRec2.Header().Get("X-Cache") != "BYPASS" {
+		t.Fatalf("expected preview request 2 to BYPASS, got: %s", previewRec2.Header().Get("X-Cache"))
+	}
+
+	// -------------------------------------------------------------------------
+	// 4. Host A Appearance Published -> Outbox Event Enqueued & Processed
+	// -------------------------------------------------------------------------
+	mu.Lock()
+	appearanceA = "mobile-app-royal-plum" // Appearance changed on Host A
+	mu.Unlock()
+
+	outboxEventID := uuid.New()
+	outboxDB.AddEvent(OutboxEvent{
+		ID:        outboxEventID,
+		TenantID:  uuid.New(),
+		EventType: "site.appearance.updated",
+		Payload: OutboxPayload{
+			Host:  hostA,
+			Paths: []string{"/", "/courses/anxiety-management"},
+		},
+		Status:    "pending",
+		CreatedAt: time.Now(),
+	})
+
+	// Run worker batch
+	processed, err := worker.ProcessBatch(context.Background(), 10)
+	if err != nil || processed != 1 {
+		t.Fatalf("expected worker to process 1 event, processed=%d, err=%v", processed, err)
+	}
+
+	// -------------------------------------------------------------------------
+	// 5. Verification: Host A is Purged (MISS -> HIT), Host B Remains HIT
+	// -------------------------------------------------------------------------
+	// 5.a Host A Home is MISS after outbox purge, rendering new appearance
+	recAHomeAfterPurge1 := httptest.NewRecorder()
+	handler.ServeHTTP(recAHomeAfterPurge1, reqAHome)
+	if recAHomeAfterPurge1.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("expected Host A Home after purge to be MISS, got: %s", recAHomeAfterPurge1.Header().Get("X-Cache"))
+	}
+	if !strings.Contains(recAHomeAfterPurge1.Body.String(), "data-appearance=\"mobile-app-royal-plum\"") {
+		t.Fatalf("expected Host A Home to render new appearance after purge, got: %s", recAHomeAfterPurge1.Body.String())
+	}
+
+	// Second request to Host A Home is re-cached as HIT
+	recAHomeAfterPurge2 := httptest.NewRecorder()
+	handler.ServeHTTP(recAHomeAfterPurge2, reqAHome)
+	if recAHomeAfterPurge2.Header().Get("X-Cache") != "HIT" {
+		t.Fatalf("expected Host A Home to be HIT after re-caching, got: %s", recAHomeAfterPurge2.Header().Get("X-Cache"))
+	}
+
+	// 5.b Host A Course detail is MISS after outbox purge, rendering new appearance
+	recACourseAfterPurge1 := httptest.NewRecorder()
+	handler.ServeHTTP(recACourseAfterPurge1, reqACourse)
+	if recACourseAfterPurge1.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("expected Host A Course after purge to be MISS, got: %s", recACourseAfterPurge1.Header().Get("X-Cache"))
+	}
+	if !strings.Contains(recACourseAfterPurge1.Body.String(), "data-appearance=\"mobile-app-royal-plum\"") {
+		t.Fatalf("expected Host A Course to render new appearance after purge, got: %s", recACourseAfterPurge1.Body.String())
+	}
+
+	// 5.c Host B MUST REMAIN STRICTLY HIT on both Home and Detail (Zero Tenant Invalidation Leakage)
+	recBHomeAfterPurge := httptest.NewRecorder()
+	handler.ServeHTTP(recBHomeAfterPurge, reqBHome)
+	if recBHomeAfterPurge.Header().Get("X-Cache") != "HIT" {
+		t.Fatalf("CRITICAL ISOLATION BUG: Host B Home was invalidated by Host A event! Expected HIT, got: %s", recBHomeAfterPurge.Header().Get("X-Cache"))
+	}
+	if !strings.Contains(recBHomeAfterPurge.Body.String(), "data-appearance=\"minimal-warm-sand\"") {
+		t.Fatalf("Host B Home appearance changed unexpectedly: %s", recBHomeAfterPurge.Body.String())
+	}
+
+	recBCourseAfterPurge := httptest.NewRecorder()
+	handler.ServeHTTP(recBCourseAfterPurge, reqBCourse)
+	if recBCourseAfterPurge.Header().Get("X-Cache") != "HIT" {
+		t.Fatalf("CRITICAL ISOLATION BUG: Host B Course was invalidated by Host A event! Expected HIT, got: %s", recBCourseAfterPurge.Header().Get("X-Cache"))
+	}
+	if !strings.Contains(recBCourseAfterPurge.Body.String(), "data-appearance=\"minimal-warm-sand\"") {
+		t.Fatalf("Host B Course appearance changed unexpectedly: %s", recBCourseAfterPurge.Body.String())
 	}
 }

@@ -3,9 +3,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 import type { AdminBlogPostItem, BlogPostStatus } from '@psychology/api-client';
 
 const statusFilter = Astro.url.searchParams.get('status') as BlogPostStatus | null;
-const apiBase = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const apiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 const tenantId = Astro.cookies.get('tenant_id')?.value || '4f3b7b51-7890-4e12-b345-67890abcdef1';
 const sessionToken = Astro.cookies.get('session_token')?.value || '';
+const host = Astro.request.headers.get('host') || 'localhost:3001';
 
 // Fallback demo posts for dev/preview
 const fallbackPosts: AdminBlogPostItem[] = [
@@ -38,8 +39,10 @@ const fallbackPosts: AdminBlogPostItem[] = [
 let posts = fallbackPosts;
 
 try {
-  const res = await fetch(`${apiBase}/admin/blog`, {
+  const res = await fetch(`${apiBase}/v1/admin/blog`, {
     headers: {
+      Host: host,
+      ...(sessionToken ? { Cookie: `session_token=${sessionToken}` } : {}),
       'X-Tenant-ID': tenantId,
       'Authorization': `Bearer ${sessionToken}`,
     },
@@ -209,7 +212,7 @@ function getStatusBadge(status: BlogPostStatus) {
       btn.addEventListener('click', async (e) => {
         const id = (e.currentTarget as HTMLElement).dataset.id;
         try {
-          const res = await fetch(`/admin/blog/${id}/publish`, {
+          const res = await fetch(`/v1/admin/blog/${id}/publish`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
           });
@@ -230,7 +233,7 @@ function getStatusBadge(status: BlogPostStatus) {
       btn.addEventListener('click', async (e) => {
         const id = (e.currentTarget as HTMLElement).dataset.id;
         try {
-          const res = await fetch(`/admin/blog/${id}/unpublish`, {
+          const res = await fetch(`/v1/admin/blog/${id}/unpublish`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
           });
@@ -255,7 +258,7 @@ function getStatusBadge(status: BlogPostStatus) {
         if (!confirm(`آیا از حذف مقاله "${title}" اطمینان دارید؟`)) return;
 
         try {
-          const res = await fetch(`/admin/blog/${id}`, {
+          const res = await fetch(`/v1/admin/blog/${id}`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
           });
