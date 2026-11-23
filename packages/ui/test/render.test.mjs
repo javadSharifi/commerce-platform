@@ -91,11 +91,10 @@ test('Template Catalog - Metadata & Safe Fallback', () => {
   assert.strictEqual(resolveTemplateMeta(undefined).id, 'minimal');
 });
 
-test('PSY-6.1: Palette Catalog - Four Palettes, Semantic DaisyUI Tokens & Prototype-Safe Fallback', () => {
+test('Palette catalog exposes the registered palettes and rejects unknown IDs', () => {
   assert.strictEqual(DEFAULT_PALETTE_ID, 'calm-sage');
-  assert.strictEqual(PALETTE_CATALOG.length, 4);
 
-  const expectedIds = ['calm-sage', 'ocean-trust', 'warm-sand', 'royal-plum'];
+  const expectedIds = ['calm-sage', 'ocean-trust', 'warm-sand', 'royal-plum', 'stitch-editorial'];
   assert.deepStrictEqual(
     PALETTE_CATALOG.map((p) => p.id),
     expectedIds
@@ -127,6 +126,12 @@ test('PSY-6.1: Palette Catalog - Four Palettes, Semantic DaisyUI Tokens & Protot
   for (const id of expectedIds) {
     assert.strictEqual(isValidPaletteId(id), true);
   }
+  const stitch = resolvePaletteMeta('stitch-editorial');
+  assert.equal(stitch.primaryColor, '#2d4f43');
+  assert.equal(stitch.tokens.colorBase100, '#faf9f6');
+  assert.equal(stitch.tokens.colorBase200, '#f3efe9');
+  assert.equal(stitch.tokens.colorSurfaceCard, '#ffffff');
+  assert.equal(stitch.tokens.colorAccent, '#c9825b');
   assert.strictEqual(isValidPaletteId('invalid_palette'), false);
   assert.strictEqual(isValidPaletteId(''), false);
   assert.strictEqual(isValidPaletteId(null), false);

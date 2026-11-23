@@ -1,3 +1,5 @@
+import { bookingFixture } from './booking-fixture.mjs';
+import { fetchOnHost } from './http-host.mjs';
 import test from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
@@ -42,7 +44,10 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
       id: 'c-1',
       title: 'دوره جامع مدیریت استرس و اضطراب',
       slug: 'anxiety-management',
-      price: 15000000,
+      price_rials: 15000000,
+      description: 'توضیحات دورهٔ مطب امید',
+      instructor_name: 'مدرس دوره',
+      lessons: [],
       status: 'published',
       published_at: new Date().toISOString(),
     },
@@ -75,6 +80,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     const pathname = url.pathname;
 
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (bookingFixture(req, res, cleanHost !== hostA)) return;
 
     if (pathname === '/v1/public/site') {
       if (cleanHost === hostA) {
@@ -95,6 +101,12 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     if (pathname === '/v1/public/courses') {
       res.writeHead(200);
       res.end(JSON.stringify(courses));
+      return;
+    }
+
+    if (pathname === '/v1/public/courses/anxiety-management' && cleanHost === hostA) {
+      res.writeHead(200);
+      res.end(JSON.stringify(courses[0]));
       return;
     }
 
@@ -155,7 +167,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     // Step 1: Initial Published Appearance and Strict Tenant Isolation
     // =========================================================================
     // Host A Home (/)
-    const resHomeA = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resHomeA = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resHomeA.status, 200);
@@ -168,7 +180,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.ok(!htmlHomeA.includes(siteB.title), 'Host A must NOT leak Host B title');
 
     // Host B Home (/)
-    const resHomeB = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resHomeB = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: { Host: hostB, 'X-Forwarded-Host': hostB },
     });
     assert.strictEqual(resHomeB.status, 200);
@@ -182,7 +194,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     // Step 2: Preview in Form: Fixed Template / Two Palettes, Fixed Palette / Two Templates
     // =========================================================================
     // 2.a Fixed template (clinical) with 2 palettes: calm-sage vs ocean-trust
-    const resPrevPal1 = await fetch(
+    const resPrevPal1 = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=clinical&palette=calm-sage&radius=lg&scale=sm`,
       { headers: { Host: hostA, 'X-Forwarded-Host': hostA } }
     );
@@ -195,7 +207,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.match(htmlPrevPal1, /data-scale="sm"/);
     assert.match(htmlPrevPal1, /<meta name="robots" content="noindex, nofollow"/);
 
-    const resPrevPal2 = await fetch(
+    const resPrevPal2 = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=clinical&palette=ocean-trust&radius=lg&scale=sm`,
       { headers: { Host: hostA, 'X-Forwarded-Host': hostA } }
     );
@@ -206,7 +218,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.match(htmlPrevPal2, /data-palette="ocean-trust"/);
 
     // 2.b Fixed palette (ocean-trust) with 2 templates: minimal vs mobile-app
-    const resPrevTpl1 = await fetch(
+    const resPrevTpl1 = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=minimal&palette=ocean-trust&radius=md&scale=md`,
       { headers: { Host: hostA, 'X-Forwarded-Host': hostA } }
     );
@@ -215,7 +227,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.match(htmlPrevTpl1, /data-theme="minimal"/);
     assert.match(htmlPrevTpl1, /data-palette="ocean-trust"/);
 
-    const resPrevTpl2 = await fetch(
+    const resPrevTpl2 = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=mobile-app&palette=ocean-trust&radius=md&scale=md`,
       { headers: { Host: hostA, 'X-Forwarded-Host': hostA } }
     );
@@ -226,7 +238,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.match(htmlPrevTpl2, /mobile-bottom-nav/);
 
     // 2.c Sitemap verification: /preview must NOT be present in /sitemap.xml
-    const resSitemap = await fetch(`http://127.0.0.1:${sitePort}/sitemap.xml`, {
+    const resSitemap = await fetchOnHost(`http://127.0.0.1:${sitePort}/sitemap.xml`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resSitemap.status, 200);
@@ -235,7 +247,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.ok(sitemapXml.includes('/courses'), 'sitemap.xml must include /courses');
 
     // 2.d Verify Home page ignores preview parameters before publishing
-    const resHomeWithQuery = await fetch(
+    const resHomeWithQuery = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/?template=clinical&palette=ocean-trust&radius=lg&scale=sm`,
       { headers: { Host: hostA, 'X-Forwarded-Host': hostA } }
     );
@@ -258,7 +270,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     };
 
     // 3.a Host A Home reflects newly published mobile-app and royal-plum
-    const resPublishedHomeA = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resPublishedHomeA = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resPublishedHomeA.status, 200);
@@ -269,7 +281,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.match(htmlPublishedHomeA, /data-scale="lg"/);
 
     // 3.b Host A Detail Page (/courses/anxiety-management) reflects published appearance
-    const resPublishedCourseA = await fetch(`http://127.0.0.1:${sitePort}/courses/anxiety-management`, {
+    const resPublishedCourseA = await fetchOnHost(`http://127.0.0.1:${sitePort}/courses/anxiety-management`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resPublishedCourseA.status, 200);
@@ -278,7 +290,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.match(htmlPublishedCourseA, /data-palette="royal-plum"/);
 
     // 3.c Host A Booking Page (/booking) reflects published appearance
-    const resPublishedBookingA = await fetch(`http://127.0.0.1:${sitePort}/booking`, {
+    const resPublishedBookingA = await fetchOnHost(`http://127.0.0.1:${sitePort}/booking`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resPublishedBookingA.status, 200);
@@ -287,7 +299,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     assert.match(htmlPublishedBookingA, /data-palette="royal-plum"/);
 
     // 3.d Host B remains completely unchanged (strict multi-tenant isolation)
-    const resHostBPostPublish = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resHostBPostPublish = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: { Host: hostB, 'X-Forwarded-Host': hostB },
     });
     assert.strictEqual(resHostBPostPublish.status, 200);
@@ -300,14 +312,14 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     // =========================================================================
     // Step 4: Fallback & Security for Unknown Identifiers
     // =========================================================================
-    const resFallbackTpl = await fetch(`http://127.0.0.1:${sitePort}/preview?template=unregistered_template_xyz`, {
+    const resFallbackTpl = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?template=unregistered_template_xyz`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resFallbackTpl.status, 200);
     const htmlFallbackTpl = await resFallbackTpl.text();
     assert.match(htmlFallbackTpl, /data-theme="minimal"/);
 
-    const resFallbackPal = await fetch(`http://127.0.0.1:${sitePort}/preview?palette=unregistered_palette_xyz`, {
+    const resFallbackPal = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?palette=unregistered_palette_xyz`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resFallbackPal.status, 200);
@@ -371,7 +383,7 @@ test('PSY-A13 Acceptance Test: Multi-Tenant Appearance Selection, Preview, Publi
     ];
 
     for (const priv of privatePages) {
-      const res = await fetch(`http://127.0.0.1:${sitePort}${priv.path}`, {
+      const res = await fetchOnHost(`http://127.0.0.1:${sitePort}${priv.path}`, {
         headers: { Host: hostA, 'X-Forwarded-Host': hostA },
       });
       assert.strictEqual(res.status, 200, `Private page ${priv.path} should return 200`);

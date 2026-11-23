@@ -10,7 +10,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "verify:psychology": "pnpm typecheck && pnpm test && pnpm build"
+    "verify:psychology": "pnpm build && pnpm typecheck && pnpm test"
   },
   "packageManager": "pnpm@10.12.1"
 }

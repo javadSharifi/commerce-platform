@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { readBlogIndex } from '../lib/blog.js';
 
 export const GET: APIRoute = async ({ request }) => {
   const host = request.headers.get('host') || 'localhost:3000';
@@ -12,7 +13,7 @@ export const GET: APIRoute = async ({ request }) => {
 
   let courses: Array<{ slug: string; published_at?: string }> = [];
   let workshops: Array<{ id: string }> = [];
-  let blogPosts: Array<{ slug: string; published_at?: string }> = [];
+  const blogIndex = readBlogIndex(request);
 
   // 1. Fetch published courses
   try {
@@ -46,21 +47,7 @@ export const GET: APIRoute = async ({ request }) => {
     // API offline in dev/preview
   }
 
-  // 3. Fetch published blog posts
-  try {
-    const blogRes = await fetch(`${apiBase}/v1/public/blog`, {
-      headers: { Host: host },
-      signal: AbortSignal.timeout(1200),
-    });
-    if (blogRes.ok) {
-      const data = await blogRes.json();
-      if (Array.isArray(data)) {
-        blogPosts = data;
-      }
-    }
-  } catch {
-    // API offline in dev/preview
-  }
+  const { posts: blogPosts, unavailable: blogUnavailable } = await blogIndex;
 
   interface SitemapUrl {
     loc: string;
@@ -121,7 +108,7 @@ ${allUrls
     status: 200,
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': blogUnavailable ? 'private, no-store' : 'public, max-age=3600',
     },
   });
 };

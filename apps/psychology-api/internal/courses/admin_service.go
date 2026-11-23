@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
 	"psychology/api/internal/courses/coursesdb"
+	"psychology/api/internal/education"
+	"psychology/api/internal/media"
+	"psychology/api/internal/platform/db"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -39,6 +43,7 @@ type MediaAssetValidator interface {
 }
 
 type AdminCourseItem struct {
+	Topic          string     `json:"topic,omitempty"`
 	ID             uuid.UUID  `json:"id"`
 	TenantID       uuid.UUID  `json:"tenant_id"`
 	Title          string     `json:"title"`
@@ -83,6 +88,7 @@ type AdminCourseEntitlementItem struct {
 }
 
 type CreateCourseInput struct {
+	Topic          string     `json:"topic,omitempty"`
 	Title          string     `json:"title"`
 	Slug           string     `json:"slug"`
 	Description    string     `json:"description"`
@@ -92,11 +98,12 @@ type CreateCourseInput struct {
 }
 
 type UpdateCourseInput struct {
+	Topic          *string    `json:"topic,omitempty"`
 	Title          string     `json:"title"`
 	Slug           string     `json:"slug"`
-	Description    string     `json:"description"`
-	InstructorName string     `json:"instructor_name"`
-	PriceRials     int64      `json:"price_rials"`
+	Description    *string    `json:"description"`
+	InstructorName *string    `json:"instructor_name"`
+	PriceRials     *int64     `json:"price_rials"`
 	CoverMediaID   *uuid.UUID `json:"cover_media_id,omitempty"`
 }
 
@@ -110,6 +117,7 @@ type CreateLessonInput struct {
 }
 
 type PublicCourseItem struct {
+	Topic          string     `json:"topic,omitempty"`
 	ID             uuid.UUID  `json:"id"`
 	Title          string     `json:"title"`
 	Slug           string     `json:"slug"`
@@ -132,6 +140,7 @@ type PublicLessonItem struct {
 }
 
 type PublicCourseDetail struct {
+	Topic          string             `json:"topic,omitempty"`
 	ID             uuid.UUID          `json:"id"`
 	Title          string             `json:"title"`
 	Slug           string             `json:"slug"`
@@ -154,6 +163,7 @@ type UpdateLessonInput struct {
 }
 
 type AdminCourseService struct {
+	catalogStore   *db.Store
 	queries        Querier
 	mediaValidator MediaAssetValidator
 	nowFunc        func() time.Time
@@ -172,7 +182,14 @@ func (s *AdminCourseService) SetNowFunc(f func() time.Time) {
 }
 
 func (s *AdminCourseService) ListCourses(ctx context.Context, tenantID uuid.UUID, statusFilter string) ([]AdminCourseItem, error) {
-	coursesList, err := s.queries.ListAdminCourses(ctx, toPgUUID(tenantID))
+	return db.ReadTenant(ctx, s.catalogStore, tenantID, s.queries,
+		func(tx pgx.Tx) Querier { return coursesdb.New(tx) },
+		func(q Querier) ([]AdminCourseItem, error) { return s.listCourses(ctx, q, tenantID, statusFilter) },
+	)
+}
+
+func (s *AdminCourseService) listCourses(ctx context.Context, q Querier, tenantID uuid.UUID, statusFilter string) ([]AdminCourseItem, error) {
+	coursesList, err := q.ListAdminCourses(ctx, toPgUUID(tenantID))
 	if err != nil {
 		return nil, fmt.Errorf("list admin courses: %w", err)
 	}
@@ -186,6 +203,7 @@ func (s *AdminCourseService) ListCourses(ctx context.Context, tenantID uuid.UUID
 			ID:             fromPgUUID(c.ID),
 			TenantID:       fromPgUUID(c.TenantID),
 			Title:          c.Title,
+			Topic:          c.Topic,
 			Slug:           c.Slug,
 			Description:    c.Description,
 			InstructorName: c.InstructorName,
@@ -203,7 +221,7 @@ func (s *AdminCourseService) ListCourses(ctx context.Context, tenantID uuid.UUID
 		}
 
 		// Count lessons
-		lessons, err := s.queries.ListCourseLessons(ctx, coursesdb.ListCourseLessonsParams{
+		lessons, err := q.ListCourseLessons(ctx, coursesdb.ListCourseLessonsParams{
 			TenantID: c.TenantID,
 			CourseID: c.ID,
 		})
@@ -217,7 +235,14 @@ func (s *AdminCourseService) ListCourses(ctx context.Context, tenantID uuid.UUID
 }
 
 func (s *AdminCourseService) GetCourse(ctx context.Context, tenantID, courseID uuid.UUID) (*AdminCourseItem, error) {
-	c, err := s.queries.GetCourseByID(ctx, coursesdb.GetCourseByIDParams{
+	return db.ReadTenant(ctx, s.catalogStore, tenantID, s.queries,
+		func(tx pgx.Tx) Querier { return coursesdb.New(tx) },
+		func(q Querier) (*AdminCourseItem, error) { return s.getCourse(ctx, q, tenantID, courseID) },
+	)
+}
+
+func (s *AdminCourseService) getCourse(ctx context.Context, q Querier, tenantID, courseID uuid.UUID) (*AdminCourseItem, error) {
+	c, err := q.GetCourseByID(ctx, coursesdb.GetCourseByIDParams{
 		TenantID: toPgUUID(tenantID),
 		ID:       toPgUUID(courseID),
 	})
@@ -232,6 +257,7 @@ func (s *AdminCourseService) GetCourse(ctx context.Context, tenantID, courseID u
 		ID:             fromPgUUID(c.ID),
 		TenantID:       fromPgUUID(c.TenantID),
 		Title:          c.Title,
+		Topic:          c.Topic,
 		Slug:           c.Slug,
 		Description:    c.Description,
 		InstructorName: c.InstructorName,
@@ -248,7 +274,7 @@ func (s *AdminCourseService) GetCourse(ctx context.Context, tenantID, courseID u
 		item.PublishedAt = &c.PublishedAt.Time
 	}
 
-	lessons, err := s.queries.ListCourseLessons(ctx, coursesdb.ListCourseLessonsParams{
+	lessons, err := q.ListCourseLessons(ctx, coursesdb.ListCourseLessonsParams{
 		TenantID: c.TenantID,
 		CourseID: c.ID,
 	})
@@ -260,6 +286,20 @@ func (s *AdminCourseService) GetCourse(ctx context.Context, tenantID, courseID u
 }
 
 func (s *AdminCourseService) CreateCourse(ctx context.Context, tenantID uuid.UUID, in CreateCourseInput) (*AdminCourseItem, error) {
+	if s.catalogStore == nil {
+		return s.createCourse(ctx, s.queries, tenantID, in)
+	}
+	return education.WriteCatalog(ctx, s.catalogStore, tenantID, func(tx pgx.Tx) (*AdminCourseItem, error) {
+		return s.createCourse(ctx, coursesdb.New(tx), tenantID, in)
+	})
+}
+
+func (s *AdminCourseService) createCourse(ctx context.Context, q Querier, tenantID uuid.UUID, in CreateCourseInput) (*AdminCourseItem, error) {
+	topic, err := education.NormalizeTopic(in.Topic)
+	if err != nil {
+		return nil, err
+	}
+
 	if in.PriceRials < 0 {
 		return nil, ErrInvalidCoursePrice
 	}
@@ -277,8 +317,9 @@ func (s *AdminCourseService) CreateCourse(ctx context.Context, tenantID uuid.UUI
 		coverID = toPgUUID(*in.CoverMediaID)
 	}
 
-	c, err := s.queries.CreateCourse(ctx, coursesdb.CreateCourseParams{
+	c, err := q.CreateCourse(ctx, coursesdb.CreateCourseParams{
 		TenantID:       toPgUUID(tenantID),
+		Topic:          topic,
 		Title:          title,
 		Slug:           slug,
 		Description:    in.Description,
@@ -296,6 +337,7 @@ func (s *AdminCourseService) CreateCourse(ctx context.Context, tenantID uuid.UUI
 		ID:             fromPgUUID(c.ID),
 		TenantID:       fromPgUUID(c.TenantID),
 		Title:          c.Title,
+		Topic:          c.Topic,
 		Slug:           c.Slug,
 		Description:    c.Description,
 		InstructorName: c.InstructorName,
@@ -312,11 +354,29 @@ func (s *AdminCourseService) CreateCourse(ctx context.Context, tenantID uuid.UUI
 }
 
 func (s *AdminCourseService) UpdateCourse(ctx context.Context, tenantID, courseID uuid.UUID, in UpdateCourseInput) (*AdminCourseItem, error) {
-	if in.PriceRials < 0 {
+	if s.catalogStore == nil {
+		return s.updateCourse(ctx, s.queries, nil, tenantID, courseID, in)
+	}
+	return education.WriteCatalog(ctx, s.catalogStore, tenantID, func(tx pgx.Tx) (*AdminCourseItem, error) {
+		return s.updateCourse(ctx, coursesdb.New(tx), tx, tenantID, courseID, in)
+	})
+}
+
+func (s *AdminCourseService) updateCourse(ctx context.Context, q Querier, tx pgx.Tx, tenantID, courseID uuid.UUID, in UpdateCourseInput) (*AdminCourseItem, error) {
+	var topic pgtype.Text
+	if in.Topic != nil {
+		value, err := education.NormalizeTopic(*in.Topic)
+		if err != nil {
+			return nil, err
+		}
+		topic = pgtype.Text{String: value, Valid: true}
+	}
+
+	if in.PriceRials != nil && *in.PriceRials < 0 {
 		return nil, ErrInvalidCoursePrice
 	}
 
-	existing, err := s.queries.GetCourseByID(ctx, coursesdb.GetCourseByIDParams{
+	existing, err := q.GetCourseByIDForUpdate(ctx, coursesdb.GetCourseByIDForUpdateParams{
 		TenantID: toPgUUID(tenantID),
 		ID:       toPgUUID(courseID),
 	})
@@ -336,30 +396,50 @@ func (s *AdminCourseService) UpdateCourse(ctx context.Context, tenantID, courseI
 		slug = existing.Slug
 	}
 
-	var coverID pgtype.UUID
+	description := existing.Description
+	if in.Description != nil {
+		description = *in.Description
+	}
+	instructor := existing.InstructorName
+	if in.InstructorName != nil {
+		instructor = *in.InstructorName
+	}
+	price := existing.PriceRials
+	if in.PriceRials != nil {
+		price = *in.PriceRials
+	}
+	coverID := existing.CoverMediaID
 	if in.CoverMediaID != nil {
 		coverID = toPgUUID(*in.CoverMediaID)
-	} else {
-		coverID = existing.CoverMediaID
 	}
 
-	c, err := s.queries.UpdateCourse(ctx, coursesdb.UpdateCourseParams{
+	c, err := q.UpdateCourse(ctx, coursesdb.UpdateCourseParams{
 		TenantID:       toPgUUID(tenantID),
 		ID:             toPgUUID(courseID),
 		Title:          title,
 		Slug:           slug,
-		Description:    in.Description,
-		InstructorName: in.InstructorName,
-		PriceRials:     in.PriceRials,
+		Description:    description,
+		InstructorName: instructor,
+		PriceRials:     price,
 		CoverMediaID:   coverID,
 		Status:         existing.Status,
 		PublishedAt:    existing.PublishedAt,
+		Topic:          topic,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update course: %w", err)
 	}
 
-	return s.GetCourse(ctx, tenantID, fromPgUUID(c.ID))
+	if tx != nil && c.Status == "published" {
+		paths := []string{"/", "/courses", "/courses/" + url.PathEscape(c.Slug)}
+		if existing.Slug != c.Slug {
+			paths = append(paths, "/courses/"+url.PathEscape(existing.Slug))
+		}
+		if err := education.InvalidateCatalog(ctx, tx, tenantID, paths...); err != nil {
+			return nil, err
+		}
+	}
+	return s.getCourse(ctx, q, tenantID, courseID)
 }
 
 func (s *AdminCourseService) DeleteCourse(ctx context.Context, tenantID, courseID uuid.UUID) error {
@@ -663,109 +743,155 @@ func (s *AdminCourseService) ListEntitlements(ctx context.Context, tenantID, cou
 	return result, nil
 }
 
+func (s *AdminCourseService) WithCatalogStore(store *db.Store) *AdminCourseService {
+	s.catalogStore = store
+	return s
+}
+
+type publicCatalog struct {
+	Querier
+	tx pgx.Tx
+}
+
+func bindPublicCatalog(tx pgx.Tx) publicCatalog {
+	return publicCatalog{Querier: coursesdb.New(tx), tx: tx}
+}
+
+func (q publicCatalog) cover(ctx context.Context, tenantID uuid.UUID, id pgtype.UUID) (*uuid.UUID, error) {
+	if !id.Valid {
+		return nil, nil
+	}
+	coverID := fromPgUUID(id)
+	if q.tx == nil {
+		return &coverID, nil
+	}
+	err := media.ValidatePublicImage(ctx, q.tx, tenantID, coverID)
+	switch {
+	case err == nil:
+		return &coverID, nil
+	case errors.Is(err, media.ErrMediaNotFound), errors.Is(err, media.ErrMediaNotPublic),
+		errors.Is(err, media.ErrMediaNotVerified), errors.Is(err, media.ErrInvalidMimeType),
+		errors.Is(err, media.ErrFileSizeExceeded):
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("validate public course cover: %w", err)
+	}
+}
+
 func (s *AdminCourseService) ListPublishedCourses(ctx context.Context, tenantID uuid.UUID) ([]PublicCourseItem, error) {
-	if tenantID == uuid.Nil {
-		return nil, errors.New("courses: tenant_id cannot be nil")
-	}
-	courses, err := s.queries.ListPublishedCourses(ctx, toPgUUID(tenantID))
-	if err != nil {
-		return nil, err
-	}
-	res := make([]PublicCourseItem, 0, len(courses))
-	for _, c := range courses {
-		var coverID *uuid.UUID
-		if c.CoverMediaID.Valid {
-			u := fromPgUUID(c.CoverMediaID)
-			coverID = &u
-		}
-		var pubAt *time.Time
-		if c.PublishedAt.Valid {
-			t := c.PublishedAt.Time
-			pubAt = &t
-		}
-		lessons, _ := s.queries.ListCourseLessons(ctx, coursesdb.ListCourseLessonsParams{
-			TenantID: toPgUUID(tenantID),
-			CourseID: c.ID,
-		})
-		res = append(res, PublicCourseItem{
-			ID:             fromPgUUID(c.ID),
-			Title:          c.Title,
-			Slug:           c.Slug,
-			Description:    c.Description,
-			InstructorName: c.InstructorName,
-			PriceRials:     c.PriceRials,
-			CoverMediaID:   coverID,
-			Status:         c.Status,
-			PublishedAt:    pubAt,
-			LessonsCount:   len(lessons),
-		})
-	}
-	return res, nil
+	return db.ReadTenant(ctx, s.catalogStore, tenantID, publicCatalog{Querier: s.queries}, bindPublicCatalog,
+		func(q publicCatalog) ([]PublicCourseItem, error) {
+			if tenantID == uuid.Nil {
+				return nil, errors.New("courses: tenant_id cannot be nil")
+			}
+			courses, err := q.ListPublishedCourses(ctx, toPgUUID(tenantID))
+			if err != nil {
+				return nil, err
+			}
+			res := make([]PublicCourseItem, 0, len(courses))
+			for _, c := range courses {
+				coverID, err := q.cover(ctx, tenantID, c.CoverMediaID)
+				if err != nil {
+					return nil, err
+				}
+				var pubAt *time.Time
+				if c.PublishedAt.Valid {
+					t := c.PublishedAt.Time
+					pubAt = &t
+				}
+				lessons, err := q.ListCourseLessons(ctx, coursesdb.ListCourseLessonsParams{
+					TenantID: toPgUUID(tenantID),
+					CourseID: c.ID,
+				})
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, PublicCourseItem{
+					ID:             fromPgUUID(c.ID),
+					Title:          c.Title,
+					Topic:          c.Topic,
+					Slug:           c.Slug,
+					Description:    c.Description,
+					InstructorName: c.InstructorName,
+					PriceRials:     c.PriceRials,
+					CoverMediaID:   coverID,
+					Status:         c.Status,
+					PublishedAt:    pubAt,
+					LessonsCount:   len(lessons),
+				})
+			}
+			return res, nil
+		},
+	)
 }
 
 func (s *AdminCourseService) GetPublicCourseBySlug(ctx context.Context, tenantID uuid.UUID, slug string) (*PublicCourseDetail, error) {
-	if tenantID == uuid.Nil {
-		return nil, errors.New("courses: tenant_id cannot be nil")
-	}
-	trimmed := strings.TrimSpace(slug)
-	if trimmed == "" {
-		return nil, ErrCourseNotFound
-	}
-	course, err := s.queries.GetCourseBySlug(ctx, coursesdb.GetCourseBySlugParams{
-		TenantID: toPgUUID(tenantID),
-		Slug:     trimmed,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrCourseNotFound
-		}
-		return nil, err
-	}
-	if course.Status != "published" {
-		return nil, ErrCourseNotFound
-	}
+	return db.ReadTenant(ctx, s.catalogStore, tenantID, publicCatalog{Querier: s.queries}, bindPublicCatalog,
+		func(q publicCatalog) (*PublicCourseDetail, error) {
+			if tenantID == uuid.Nil {
+				return nil, errors.New("courses: tenant_id cannot be nil")
+			}
+			trimmed := strings.TrimSpace(slug)
+			if trimmed == "" {
+				return nil, ErrCourseNotFound
+			}
+			course, err := q.GetCourseBySlug(ctx, coursesdb.GetCourseBySlugParams{
+				TenantID: toPgUUID(tenantID),
+				Slug:     trimmed,
+			})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil, ErrCourseNotFound
+				}
+				return nil, err
+			}
+			if course.Status != "published" {
+				return nil, ErrCourseNotFound
+			}
 
-	lessons, err := s.queries.ListCourseLessons(ctx, coursesdb.ListCourseLessonsParams{
-		TenantID: toPgUUID(tenantID),
-		CourseID: course.ID,
-	})
-	if err != nil {
-		return nil, err
-	}
+			lessons, err := q.ListCourseLessons(ctx, coursesdb.ListCourseLessonsParams{
+				TenantID: toPgUUID(tenantID),
+				CourseID: course.ID,
+			})
+			if err != nil {
+				return nil, err
+			}
 
-	publicLessons := make([]PublicLessonItem, 0, len(lessons))
-	for _, l := range lessons {
-		publicLessons = append(publicLessons, PublicLessonItem{
-			ID:              fromPgUUID(l.ID),
-			Title:           l.Title,
-			Description:     l.Description,
-			DisplayOrder:    l.DisplayOrder,
-			DurationSeconds: l.DurationSeconds,
-			IsFreePreview:   l.IsFreePreview,
-		})
-	}
+			publicLessons := make([]PublicLessonItem, 0, len(lessons))
+			for _, l := range lessons {
+				publicLessons = append(publicLessons, PublicLessonItem{
+					ID:              fromPgUUID(l.ID),
+					Title:           l.Title,
+					Description:     l.Description,
+					DisplayOrder:    l.DisplayOrder,
+					DurationSeconds: l.DurationSeconds,
+					IsFreePreview:   l.IsFreePreview,
+				})
+			}
 
-	var coverID *uuid.UUID
-	if course.CoverMediaID.Valid {
-		u := fromPgUUID(course.CoverMediaID)
-		coverID = &u
-	}
-	var pubAt *time.Time
-	if course.PublishedAt.Valid {
-		t := course.PublishedAt.Time
-		pubAt = &t
-	}
+			coverID, err := q.cover(ctx, tenantID, course.CoverMediaID)
+			if err != nil {
+				return nil, err
+			}
+			var pubAt *time.Time
+			if course.PublishedAt.Valid {
+				t := course.PublishedAt.Time
+				pubAt = &t
+			}
 
-	return &PublicCourseDetail{
-		ID:             fromPgUUID(course.ID),
-		Title:          course.Title,
-		Slug:           course.Slug,
-		Description:    course.Description,
-		InstructorName: course.InstructorName,
-		PriceRials:     course.PriceRials,
-		CoverMediaID:   coverID,
-		Status:         course.Status,
-		PublishedAt:    pubAt,
-		Lessons:        publicLessons,
-	}, nil
+			return &PublicCourseDetail{
+				ID:             fromPgUUID(course.ID),
+				Title:          course.Title,
+				Topic:          course.Topic,
+				Slug:           course.Slug,
+				Description:    course.Description,
+				InstructorName: course.InstructorName,
+				PriceRials:     course.PriceRials,
+				CoverMediaID:   coverID,
+				Status:         course.Status,
+				PublishedAt:    pubAt,
+				Lessons:        publicLessons,
+			}, nil
+		},
+	)
 }

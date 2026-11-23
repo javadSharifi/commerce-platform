@@ -1,11 +1,23 @@
+import { blogFixture } from './blog-fixture.mjs';
+import http from 'node:http';
+import { fetchOnHost } from './http-host.mjs';
+import { educationFixture } from './education-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 
 test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and 0 KB client JS', async () => {
   const port = 4392;
+  const api = http.createServer((req, res) => {
+    const data = req.url === '/v1/public/site'
+      ? { name: 'کلینیک آزمایشی', title: 'کلینیک آزمایشی', template_id: 'minimal', palette_id: 'calm-sage' }
+      : educationFixture(req.url) ?? blogFixture(req.url);
+    res.writeHead(data === undefined ? 404 : 200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data ?? {}));
+  });
+  await new Promise(resolve => api.listen(0, '127.0.0.1', resolve));
   const child = spawn('node', ['./dist/server/entry.mjs'], {
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
+    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', INTERNAL_API_URL: 'http://127.0.0.1:' + api.address().port },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -23,13 +35,13 @@ test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and
     const host = 'rezaei-clinic.ir';
 
     // 1. Courses Listing (/courses)
-    const resCourses = await fetch(`http://127.0.0.1:${port}/courses`, {
+    const resCourses = await fetchOnHost(`http://127.0.0.1:${port}/courses`, {
       headers: { Host: host },
     });
     assert.strictEqual(resCourses.status, 200);
     assert.ok(resCourses.headers.get('cache-control')?.includes('public'));
     const htmlCourses = await resCourses.text();
-    assert.match(htmlCourses, /دوره‌های آموزشی تخصصی/);
+    assert.match(htmlCourses, /دوره‌ها و کارگاه‌های آموزشی/);
     assert.match(htmlCourses, /دوره جامع مدیریت استرس و اضطراب فراگیر/);
     assert.match(htmlCourses, /card bg-base-100/);
     assert.match(htmlCourses, /text-primary/);
@@ -39,7 +51,7 @@ test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and
     assert.doesNotMatch(htmlCourses, /background:\s*#ffffff/);
 
     // 2. Course Detail (/courses/anxiety-management)
-    const resCourseDetail = await fetch(`http://127.0.0.1:${port}/courses/anxiety-management`, {
+    const resCourseDetail = await fetchOnHost(`http://127.0.0.1:${port}/courses/anxiety-management`, {
       headers: { Host: host },
     });
     assert.strictEqual(resCourseDetail.status, 200);
@@ -56,7 +68,7 @@ test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and
     assert.doesNotMatch(htmlCourseDetail, /background:\s*#ffffff/);
 
     // 3. Workshops Listing (/workshops)
-    const resWorkshops = await fetch(`http://127.0.0.1:${port}/workshops`, {
+    const resWorkshops = await fetchOnHost(`http://127.0.0.1:${port}/workshops`, {
       headers: { Host: host },
     });
     assert.strictEqual(resWorkshops.status, 200);
@@ -71,7 +83,7 @@ test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and
     assert.doesNotMatch(htmlWorkshops, /background:\s*#ffffff/);
 
     // 4. Workshop Detail (/workshops/f47ac10b-58cc-4372-a567-0e02b2c3d479)
-    const resWorkshopDetail = await fetch(
+    const resWorkshopDetail = await fetchOnHost(
       `http://127.0.0.1:${port}/workshops/f47ac10b-58cc-4372-a567-0e02b2c3d479`,
       { headers: { Host: host } }
     );
@@ -87,7 +99,7 @@ test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and
     assert.doesNotMatch(htmlWorkshopDetail, /color:\s*#0f172a/);
 
     // 5. Workshop Registration Status (/workshops/registrations/reg-test-123)
-    const resRegistration = await fetch(
+    const resRegistration = await fetchOnHost(
       `http://127.0.0.1:${port}/workshops/registrations/reg-test-123`,
       { headers: { Host: host } }
     );
@@ -101,7 +113,7 @@ test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and
     assert.doesNotMatch(htmlRegistration, /color:\s*#0f172a/);
 
     // 6. Blog Listing (/blog)
-    const resBlog = await fetch(`http://127.0.0.1:${port}/blog`, {
+    const resBlog = await fetchOnHost(`http://127.0.0.1:${port}/blog`, {
       headers: { Host: host },
     });
     assert.strictEqual(resBlog.status, 200);
@@ -115,12 +127,12 @@ test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and
     assert.doesNotMatch(htmlBlog, /background:\s*#ffffff/);
 
     // 7. Blog Detail (/blog/self-awareness-and-emotional-regulation)
-    const resBlogDetail = await fetch(
+    const resBlogDetail = await fetchOnHost(
       `http://127.0.0.1:${port}/blog/self-awareness-and-emotional-regulation`,
       { headers: { Host: host } }
     );
     assert.strictEqual(resBlogDetail.status, 200);
-    assert.ok(resBlogDetail.headers.get('cache-control')?.includes('public'));
+    assert.ok(resBlogDetail.headers.get('cache-control')?.includes('no-store'));
     const htmlBlogDetail = await resBlogDetail.text();
     assert.match(htmlBlogDetail, /نقش خودآگاهی و تنظیم هیجان در روابط بین‌فردی/);
     assert.match(htmlBlogDetail, /مقدمه‌ای بر هوش هیجانی و ارتباط سالم/);
@@ -134,5 +146,7 @@ test('PSY-5.8.2: Content pages migration (courses, workshops, blog) with SSR and
     assert.strictEqual(htmlBlogDetail.includes('<script type="module"'), false);
   } finally {
     child.kill('SIGTERM');
+    api.closeAllConnections();
+    await new Promise(resolve => api.close(resolve));
   }
 });

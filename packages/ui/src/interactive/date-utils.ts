@@ -66,6 +66,7 @@ export function formatPersianDate(
 
     const formatter = new DateFormatter('fa-IR-u-ca-persian', {
       dateStyle: options.style || 'long',
+      timeZone: typeof input === 'string' || !(input instanceof Date) ? 'UTC' : undefined,
     });
     return formatter.format(dateObj);
   } catch {

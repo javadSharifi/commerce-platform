@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,26 +20,29 @@ import (
 	"psychology/api/internal/platform/tenantctx"
 	"psychology/api/internal/settings"
 	"psychology/api/internal/settings/settingsdb"
+	"psychology/api/internal/testsupport/dbfixture"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // TestAcceptance_PSY_A12_InitialPath_TwoHosts verifies acceptance scenario PSY-A12:
 // 1. Two separate verified hosts: Tenant A (rezaei-clinic.ir) and Tenant B (niloofar-psych.ir).
 // 2. Both clinics have published settings and their public content is cached with Edge Cache HIT.
 // 3. Owner A compares minimal and clinical on /preview:
-//    - Preview requests have Cache-Control: private, no-store.
-//    - Sequential preview requests strictly BYPASS the shared cache and never pollute shared cache entries.
-//    - Previewing does not mutate published database settings or trigger cache invalidation.
+//   - Preview requests have Cache-Control: private, no-store.
+//   - Sequential preview requests strictly BYPASS the shared cache and never pollute shared cache entries.
+//   - Previewing does not mutate published database settings or trigger cache invalidation.
+//
 // 4. Owner A saves new visual settings via PUT /v1/admin/site (template: clinical, primary_color: #0f766e, radius: lg, scale: sm):
-//    - Response returns Cache-Control: private, no-store.
-//    - An Outbox event is recorded in the transaction for host A.
+//   - Response returns Cache-Control: private, no-store.
+//   - An Outbox event is recorded in the transaction for host A.
+//
 // 5. Outbox worker processes the invalidation event:
-//    - Host A cache entries are purged (next request is MISS, rendering the updated clinical template).
-//    - Host B cache entries remain completely intact (strict cache isolation, repeat request is HIT).
+//   - Host A cache entries are purged (next request is MISS, rendering the updated clinical template).
+//   - Host B cache entries remain completely intact (strict cache isolation, repeat request is HIT).
+//
 // 6. Cross-Tenant authorization guard: Owner A cannot mutate Tenant B's settings (rejected with 403 Forbidden).
 func TestAcceptance_PSY_A12_InitialPath_TwoHosts(t *testing.T) {
 	hostA := "rezaei-clinic.ir"
@@ -398,36 +399,9 @@ func TestAcceptance_PSY_A12_InitialPath_TwoHosts(t *testing.T) {
 // - Host A renders fresh clinical appearance without FOUC (MISS -> HIT)
 // - Host B remains cached as HIT with previous minimal appearance (zero tenant invalidation leakage)
 func TestAcceptance_PSY_A12_LivePostgreSQL_TwoHosts(t *testing.T) {
-	dbURL := os.Getenv("TEST_APP_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		t.Skip("skipping live database acceptance test: TEST_APP_DATABASE_URL or DATABASE_URL not set")
-		return
-	}
-
 	ctx := context.Background()
-	appPool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		t.Skipf("skipping live database acceptance test (failed to connect as app_user: %v)", err)
-		return
-	}
-	defer appPool.Close()
-
-	workerURL := os.Getenv("TEST_WORKER_DATABASE_URL")
-	if workerURL == "" {
-		workerURL = strings.Replace(dbURL, "app_user:secret_app_pass", "worker_user:secret_worker_pass", 1)
-		if workerURL == dbURL {
-			workerURL = "postgres://worker_user:secret_worker_pass@127.0.0.1:5432/psychology_prod?sslmode=disable"
-		}
-	}
-	workerPool, err := pgxpool.New(ctx, workerURL)
-	if err != nil {
-		t.Skipf("skipping live database acceptance test (failed to connect as worker_user: %v)", err)
-		return
-	}
-	defer workerPool.Close()
+	appPool := dbfixture.Connect(t, dbfixture.AppDSN, "app_user")
+	workerPool := dbfixture.Connect(t, dbfixture.WorkerDSN, "worker_user")
 
 	store := db.NewStore(appPool)
 	settingsService := settings.NewServiceWithStore(store)
@@ -450,7 +424,7 @@ func TestAcceptance_PSY_A12_LivePostgreSQL_TwoHosts(t *testing.T) {
 	hostA := slugA + ".ir"
 	hostB := slugB + ".ir"
 
-	_, err = appPool.Exec(ctx, `
+	_, err := appPool.Exec(ctx, `
 		INSERT INTO tenants (id, name, slug, status)
 		VALUES ($1, $2, $3, 'active'), ($4, $5, $6, 'active')
 	`, tenantA, "کلینیک دکتر علوی", slugA, tenantB, "کلینیک دکتر مرادی", slugB)

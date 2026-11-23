@@ -1,127 +1,108 @@
 import test from 'node:test';
-import assert from 'node:assert';
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import http from 'node:http';
+import { fetchOnHost } from './http-host.mjs';
+import { articleSlug, blogFixture, coverId, relatedSlug } from './blog-fixture.mjs';
 
-const siteDir = new URL('..', import.meta.url).pathname;
-
-test('PSY-7.4: Blog routes redesign (/blog, /blog/[slug]), allowed content blocks, empty list, missing image and invalid route regression', async () => {
-  const port = 4472;
-  const child = spawn('node', ['./dist/server/entry.mjs'], {
-    cwd: siteDir,
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
-    stdio: ['ignore', 'pipe', 'pipe'],
+test('PSY-7.7.6: published blog search, categories, featured and related posts, and strict Host isolation', async () => {
+  const hostA = 'blog-a.test';
+  const hostB = 'blog-b.test';
+  const errorHost = 'api-error.test';
+  const api = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/v1/public/site') return res.end(JSON.stringify({
+      name: req.headers.host, title: req.headers.host, template_id: 'editorial', palette_id: 'stitch-editorial',
+    }));
+    const data = blogFixture(req.url, { empty: req.headers.host === hostB });
+    res.statusCode = req.headers.host === errorHost ? 503 : data === undefined ? 404 : 200;
+    res.end(JSON.stringify(data ?? {}));
   });
-
+  await new Promise(resolve => api.listen(0, '127.0.0.1', resolve));
+  const child = spawn(process.execPath, ['./dist/server/entry.mjs'], {
+    cwd: new URL('../', import.meta.url),
+    env: { ...process.env, PORT: '0', HOST: '127.0.0.1', INTERNAL_API_URL: 'http://127.0.0.1:' + api.address().port },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
   try {
-    await new Promise((resolve, reject) => {
-      child.stdout.on('data', (data) => {
-        if (data.toString().includes('Server listening')) {
-          resolve();
-        }
+    const [chunk] = await once(child.stdout, 'data', { signal: AbortSignal.timeout(6000) });
+    const port = Number(chunk.toString().match(/127\.0\.0\.1:(\d+)/)?.[1]);
+    assert.ok(port);
+    const page = async (path, host = hostA) => {
+      const res = await fetchOnHost(`http://127.0.0.1:${port}${path}`, {
+        headers: { Host: host, 'X-Forwarded-Host': hostA },
       });
-      child.on('error', reject);
-      setTimeout(() => reject(new Error('timeout waiting for server to start')), 8000);
-    });
+      return { status: res.status, cache: res.headers.get('cache-control'), html: await res.text() };
+    };
 
-    const host = 'rezaei-clinic.ir';
+    const listing = await page('/blog');
+    assert.equal(listing.status, 200);
+    assert.match(listing.cache, /public/);
+    assert.match(listing.html, /<h1[^>]*>\s*مقالات و یادداشت‌های تخصصی\s*<\/h1>/);
+    assert.match(listing.html, new RegExp('id="featured-article"[\\s\\S]*href="/blog/' + articleSlug + '"'));
+    assert.equal(listing.html.match(new RegExp('href="/blog/' + articleSlug + '"', 'g'))?.length, 1);
+    assert.match(listing.html, /type="search"[^>]*name="search"/);
+    assert.match(listing.html, /href="\/booking"/);
+    assert.doesNotMatch(listing.html, /متن پیش‌نویس|موضوع پنهان/);
 
-    // ---------------------------------------------------------------------------------
-    // 1. /blog listing
-    // ---------------------------------------------------------------------------------
-    const resBlog = await fetch(`http://127.0.0.1:${port}/blog`, {
-      headers: { 'X-Forwarded-Host': host, Host: host },
-    });
-    assert.strictEqual(resBlog.status, 200);
-    assert.ok(resBlog.headers.get('cache-control')?.includes('public'));
-    const htmlBlog = await resBlog.text();
+    const category = await page('/blog?category=' + encodeURIComponent('روابط'));
+    assert.match(category.cache, /no-store/);
+    assert.match(category.html, new RegExp(articleSlug));
+    assert.match(category.html, new RegExp(relatedSlug));
+    assert.doesNotMatch(category.html, /stress-guide/);
 
-    assert.match(htmlBlog, /یادداشت‌ها و مقالات تخصصی/);
-    assert.match(htmlBlog, /<h1[^>]*>[\s\S]*?مقالات و یادداشت‌های تخصصی[\s\S]*?<\/h1>/);
-    assert.match(htmlBlog, /همه نوشته‌ها/);
-    assert.match(htmlBlog, /نقش خودآگاهی و تنظیم هیجان در روابط بین‌فردی/);
-    // Every CTA in the blog list points to its matching /blog/[slug]
-    assert.match(htmlBlog, /href="\/blog\/self-awareness-and-emotional-regulation"/);
-    assert.match(htmlBlog, /href="\/blog\/managing-performance-anxiety"/);
-    // Cross-link to booking present
-    assert.match(htmlBlog, /href="\/booking"/);
-    // Semantic tokens used, no hardcoded colors
-    assert.match(htmlBlog, /card bg-base-100/);
-    assert.match(htmlBlog, /text-primary/);
-    assert.doesNotMatch(htmlBlog, /color:\s*#0f172a/);
-    assert.doesNotMatch(htmlBlog, /background:\s*#ffffff/);
+    const search = await page('/blog?search=' + encodeURIComponent('تمركز') + '&category=' + encodeURIComponent('اضطراب'));
+    assert.match(search.cache, /no-store/);
+    assert.match(search.html, /stress-guide/);
+    assert.doesNotMatch(search.html, new RegExp(articleSlug));
+    const noMatch = await page('/blog?search=nonexistent');
+    assert.match(noMatch.html, /مقاله‌ای با این جست‌وجو پیدا نشد/);
 
-    // ---------------------------------------------------------------------------------
-    // 2. /blog empty list scenario regression
-    // ---------------------------------------------------------------------------------
-    const resBlogEmpty = await fetch(`http://127.0.0.1:${port}/blog?empty=1`, {
-      headers: { 'X-Forwarded-Host': host, Host: host },
-    });
-    assert.strictEqual(resBlogEmpty.status, 200);
-    const htmlBlogEmpty = await resBlogEmpty.text();
-    assert.match(htmlBlogEmpty, /هنوز مقاله‌ای منتشر نشده است/);
-    assert.match(htmlBlogEmpty, /به زودی یادداشت‌ها و مطالب آموزشی جدید در این بخش قرار خواهد گرفت/);
-    assert.match(htmlBlogEmpty, /href="\/courses"/);
-    assert.doesNotMatch(htmlBlogEmpty, /self-awareness-and-emotional-regulation/);
+    const article = await page('/blog/' + articleSlug + '?status=draft');
+    assert.equal(article.status, 200);
+    assert.match(article.cache, /no-store/, 'signed stream URLs must not be cached in the HTML');
+    assert.match(article.html, /بازگشت به فهرست مقالات/);
+    assert.match(article.html, /نویسندهٔ مقاله، فرزانه امینی/);
+    assert.match(article.html, /بررسی راهکارهای علمی و روان‌شناختی/);
+    assert.match(article.html, /مقدمه‌ای بر هوش هیجانی و ارتباط سالم/);
+    assert.match(article.html, new RegExp('/v1/public/media/' + coverId + '/image'));
+    assert.match(article.html, /<audio[\s\S]*fixture-audio/);
+    assert.match(article.html, /<video[\s\S]*fixture-video/);
+    assert.match(article.html, /شنیدن پادکست آموزشی مرتبط/);
+    assert.match(article.html, /مشاهده ویدئوی تشریح مدل هیجانی/);
+    assert.match(article.html, new RegExp('مطالب مرتبط[\\s\\S]*href="/blog/' + relatedSlug + '"'));
+    assert.doesNotMatch(article.html, /stress-guide|unauthorized-block-marker|unscreened\.png|src="(?:null)?"/);
 
-    // ---------------------------------------------------------------------------------
-    // 3. /blog/[slug] published detail, missing image, allowed blocks, 0 KB client JS
-    // ---------------------------------------------------------------------------------
-    const resBlogDetail = await fetch(
-      `http://127.0.0.1:${port}/blog/self-awareness-and-emotional-regulation`,
-      { headers: { 'X-Forwarded-Host': host, Host: host } }
-    );
-    assert.strictEqual(resBlogDetail.status, 200);
-    assert.ok(resBlogDetail.headers.get('cache-control')?.includes('public'));
-    const htmlBlogDetail = await resBlogDetail.text();
+    const noCover = await page('/blog/' + relatedSlug);
+    assert.equal(noCover.status, 200);
+    assert.match(noCover.html, /data-blog-cover-placeholder/);
+    assert.doesNotMatch(noCover.html, /نویسندهٔ مقاله، فرزانه امینی[\s\S]*<h1/);
+    for (const route of ['/blog/unknown', '/blog/hidden-draft']) {
+      const missing = await page(route);
+      assert.equal(missing.status, 404);
+      assert.match(missing.cache, /no-store/);
+    }
+    const empty = await page('/blog', hostB);
+    assert.equal(empty.status, 200);
+    assert.match(empty.html, /هنوز مقاله‌ای منتشر نشده است/);
+    assert.doesNotMatch(empty.html, new RegExp(articleSlug + '|فرزانه امینی'));
+    assert.equal((await page('/blog/' + articleSlug, hostB)).status, 404);
+    assert.doesNotMatch((await page('/sitemap.xml', hostB)).html, new RegExp(articleSlug));
+    const sitemap = await page('/sitemap.xml');
+    assert.match(sitemap.html, new RegExp(articleSlug));
+    assert.doesNotMatch(sitemap.html, /hidden-draft/);
+    assert.equal((await page('/blog/' + articleSlug, errorHost)).status, 503);
+    const unavailable = await page('/blog', errorHost);
+    assert.match(unavailable.cache, /no-store/);
+    assert.match(unavailable.html, /نمایش مقالات موقتاً در دسترس نیست/);
 
-    // Breadcrumb / back link
-    assert.match(htmlBlogDetail, /href="\/blog"/);
-    assert.match(htmlBlogDetail, /بازگشت به فهرست مقالات/);
-    // Title, author & SEO lead
-    assert.match(htmlBlogDetail, /<h1[^>]*>[\s\S]*?نقش خودآگاهی و تنظیم هیجان در روابط بین‌فردی[\s\S]*?<\/h1>/);
-    assert.match(htmlBlogDetail, /روان‌شناس و مشاور بالینی/);
-    assert.match(htmlBlogDetail, /بررسی راهکارهای علمی و روان‌شناختی/);
-
-    // Allowed content blocks rendered
-    assert.match(htmlBlogDetail, /مقدمه‌ای بر هوش هیجانی و ارتباط سالم/);
-    assert.match(htmlBlogDetail, /<audio/);
-    assert.match(htmlBlogDetail, /<video/);
-    assert.match(htmlBlogDetail, /شنیدن پادکست آموزشی مرتبط/);
-    assert.match(htmlBlogDetail, /مشاهده ویدئوی تشریح مدل هیجانی/);
-
-    // Missing image scenario: cover_url is null, so no broken figure with empty/null src is rendered
-    assert.doesNotMatch(htmlBlogDetail, /src="null"/);
-    assert.doesNotMatch(htmlBlogDetail, /src=""/);
-
-    // Contextual booking CTA card
-    assert.match(htmlBlogDetail, /نیاز به گفت‌وگوی تخصصی درباره این موضوع دارید؟/);
-    assert.match(htmlBlogDetail, /href="\/booking"/);
-
-    // 0 KB client JS check on blog post content page: no client script tags
-    assert.strictEqual(htmlBlogDetail.includes('<script type="module"'), false);
-    assert.doesNotMatch(htmlBlogDetail, /color:\s*#0f172a/);
-    assert.doesNotMatch(htmlBlogDetail, /background:\s*#ffffff/);
-
-    // ---------------------------------------------------------------------------------
-    // 4. /blog/[slug] invalid route scenario regression
-    // ---------------------------------------------------------------------------------
-    const resBlogNotFound = await fetch(
-      `http://127.0.0.1:${port}/blog/non-existent-article-slug`,
-      { headers: { 'X-Forwarded-Host': host, Host: host } }
-    );
-    assert.strictEqual(resBlogNotFound.status, 404);
-    const notFoundText = await resBlogNotFound.text();
-    assert.match(notFoundText, /مطلب مورد نظر یافت نشد/);
-
-    // ---------------------------------------------------------------------------------
-    // 5. /blog/[slug] non-published / draft content scenario regression
-    // ---------------------------------------------------------------------------------
-    const resBlogDraft = await fetch(
-      `http://127.0.0.1:${port}/blog/self-awareness-and-emotional-regulation?status=draft`,
-      { headers: { 'X-Forwarded-Host': host, Host: host } }
-    );
-    assert.strictEqual(resBlogDraft.status, 404);
+    for (const html of [listing.html, article.html]) {
+      assert.doesNotMatch(html, /<script[^>]+type="module"|color:\s*#0f172a|background:\s*#ffffff/);
+    }
   } finally {
     child.kill('SIGTERM');
+    api.closeAllConnections();
+    await new Promise(resolve => api.close(resolve));
   }
 });

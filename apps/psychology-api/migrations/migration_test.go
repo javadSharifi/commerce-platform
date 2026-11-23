@@ -2,14 +2,17 @@ package migrations_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"psychology/api/internal/testsupport/dbfixture"
+
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestMigrationFilesPairingAndIntegrity(t *testing.T) {
@@ -51,8 +54,10 @@ func TestMigrationFilesPairingAndIntegrity(t *testing.T) {
 			continue
 		}
 
-		// Security Checks on upContent
-		if strings.Contains(upContent, "tenant_id") {
+		// Existing-table metadata and foreign-key changes can mention tenant_id
+		// without declaring a new table or replacing its RLS policy.
+		definesTenantScope := strings.Contains(upContent, "CREATE TABLE") || strings.Contains(upContent, "CREATE POLICY")
+		if strings.Contains(upContent, "tenant_id") && definesTenantScope {
 			if !strings.Contains(upContent, "ENABLE ROW LEVEL SECURITY") {
 				t.Errorf("migration %s contains tenant_id but missing ENABLE ROW LEVEL SECURITY", base)
 			}
@@ -61,6 +66,11 @@ func TestMigrationFilesPairingAndIntegrity(t *testing.T) {
 			}
 			if !strings.Contains(upContent, "current_setting('app.tenant_id', true)") {
 				t.Errorf("migration %s missing current_setting('app.tenant_id', true)", base)
+			}
+		}
+		for _, migration := range []string{upContent, downContent} {
+			if strings.Contains(migration, "DISABLE ROW LEVEL SECURITY") || strings.Contains(migration, "NO FORCE ROW LEVEL SECURITY") {
+				t.Errorf("migration %s disables tenant RLS", base)
 			}
 		}
 
@@ -306,35 +316,36 @@ func TestPaletteIdMigration(t *testing.T) {
 }
 
 func TestMigrationUpDownUpLive(t *testing.T) {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("skipping live database test: DATABASE_URL not set")
-	}
-
+	pool := dbfixture.ConnectMigration(t)
+	runtime := dbfixture.Connect(t, dbfixture.AdminDSN, "phase1_admin")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-
-	conn, err := pgx.Connect(ctx, dbURL)
+	conn, err := pool.Acquire(ctx)
 	if err != nil {
-		t.Skipf("skipping live migration test (database connection failed: %v)", err)
-		return
+		t.Fatal(err)
 	}
-	defer conn.Close(ctx)
+	defer conn.Release()
 
-	schemaName := "test_mig_" + strings.ReplaceAll(uuid.New().String(), "-", "")
-	if _, err := conn.Exec(ctx, "CREATE SCHEMA "+schemaName+"; SET search_path TO "+schemaName+", public;"); err != nil {
-		t.Skipf("skipping live migration test (failed to create test schema: %v)", err)
-		return
+	var database, schema string
+	if err := conn.QueryRow(ctx, "SELECT current_database(), current_schema()").Scan(&database, &schema); err != nil {
+		t.Fatal(err)
 	}
-	defer func() {
-		_, _ = conn.Exec(context.Background(), "DROP SCHEMA IF EXISTS "+schemaName+" CASCADE;")
-	}()
+	if schema != "public" || database == os.Getenv("PSYCHOLOGY_TEST_DB_NAME") {
+		t.Fatalf("migration round trip requires public in its own disposable database, got %s.%s", database, schema)
+	}
+	assertPublicCoreRemoved(t, ctx, conn.Conn())
+	var runtimeSettingsOID string
+	if err := runtime.QueryRow(ctx, `SELECT 'public.site_settings'::regclass::oid::text`).Scan(&runtimeSettingsOID); err != nil {
+		t.Fatal(err)
+	}
 
 	files, err := filepath.Glob("*.up.sql")
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no up migration files found")
 	}
 
+	type migration struct{ base, up, down string }
+	migrations := make([]migration, 0, len(files))
 	for _, upFile := range files {
 		base := strings.TrimSuffix(upFile, ".up.sql")
 		downFile := base + ".down.sql"
@@ -347,20 +358,148 @@ func TestMigrationUpDownUpLive(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read %s: %v", downFile, err)
 		}
+		migrations = append(migrations, migration{base, string(upContent), string(downContent)})
+	}
 
-		// 1. UP
-		if _, err := conn.Exec(ctx, string(upContent)); err != nil {
-			t.Fatalf("UP failed on %s: %v", upFile, err)
+	apply := func(description, sql string) {
+		t.Helper()
+		if _, err := conn.Exec(ctx, sql); err != nil {
+			t.Fatalf("%s failed: %v", description, err)
 		}
+	}
+	for _, m := range migrations {
+		apply(m.base+" up", m.up)
+		apply(m.base+" down", m.down)
+		if m.base == "000010_outbox_worker_permissions" {
+			var reverted bool
+			err := conn.QueryRow(ctx, `SELECT
+				NOT has_table_privilege('worker_user', 'public.outbox_events', 'SELECT') AND
+				NOT has_column_privilege('worker_user', 'public.outbox_events', 'status', 'UPDATE') AND
+				EXISTS (SELECT FROM pg_policies WHERE schemaname = 'public' AND tablename = 'outbox_events'
+					AND policyname = 'tenant_isolation_outbox_events') AND
+				NOT EXISTS (SELECT FROM pg_policies WHERE schemaname = 'public' AND tablename = 'outbox_events'
+					AND policyname IN ('outbox_tenant_isolation', 'outbox_worker_policy'))`).Scan(&reverted)
+			if err != nil || !reverted {
+				t.Fatalf("outbox rollback did not restore the original RLS policy and revoke worker access: %v", err)
+			}
+		}
+		apply(m.base+" reapply", m.up)
+	}
+	assertPublicRuntimePermissions(t, ctx, conn.Conn())
+	for i := len(migrations) - 1; i >= 0; i-- {
+		m := migrations[i]
+		apply(m.base+" full rollback", m.down)
+	}
+	assertPublicCoreRemoved(t, ctx, conn.Conn())
+	for _, m := range migrations {
+		apply(m.base+" full reapply", m.up)
+	}
+	assertPublicRuntimePermissions(t, ctx, conn.Conn())
+	assertPublicTenantIsolation(t, ctx, conn.Conn())
+	var afterOID string
+	if err := runtime.QueryRow(ctx, `SELECT 'public.site_settings'::regclass::oid::text`).Scan(&afterOID); err != nil || afterOID != runtimeSettingsOID {
+		t.Fatalf("runtime public schema changed during migration round trip: %v", err)
+	}
 
-		// 2. DOWN
-		if _, err := conn.Exec(ctx, string(downContent)); err != nil {
-			t.Fatalf("DOWN failed on %s: %v", downFile, err)
+	for _, m := range migrations {
+		if m.base == "000012_allow_stitch_editorial_palette" {
+			const palette = "stitch-editorial"
+			var tenantID string
+			err := conn.QueryRow(ctx, `
+				WITH fixture AS (
+					INSERT INTO tenants (name, slug) VALUES ('Rollback fixture', 'rollback-stitch') RETURNING id
+				)
+				INSERT INTO site_settings (tenant_id, palette_id) SELECT id, $1 FROM fixture
+				RETURNING tenant_id::text
+			`, palette).Scan(&tenantID)
+			if err != nil {
+				t.Fatalf("store Stitch palette after reapplying migration: %v", err)
+			}
+			var constraintErr *pgconn.PgError
+			if _, err := conn.Exec(ctx, m.down); !errors.As(err, &constraintErr) || constraintErr.Code != "23514" {
+				t.Fatalf("rollback should reject an existing Stitch palette, got %v", err)
+			}
+			var saved string
+			if err := conn.QueryRow(ctx, "SELECT palette_id FROM site_settings WHERE tenant_id = $1", tenantID).Scan(&saved); err != nil {
+				t.Fatal(err)
+			}
+			if saved != palette {
+				t.Fatalf("failed rollback changed the saved palette to %q", saved)
+			}
 		}
+	}
+}
 
-		// 3. UP again
-		if _, err := conn.Exec(ctx, string(upContent)); err != nil {
-			t.Fatalf("UP again failed on %s: %v", upFile, err)
+func assertPublicCoreRemoved(t *testing.T, ctx context.Context, conn *pgx.Conn) {
+	t.Helper()
+	var empty bool
+	err := conn.QueryRow(ctx, `SELECT to_regclass('public.tenants') IS NULL AND
+		to_regclass('public.site_settings') IS NULL AND to_regclass('public.outbox_events') IS NULL`).Scan(&empty)
+	if err != nil || !empty {
+		t.Fatalf("expected clean public schema before reapplication: %v", err)
+	}
+}
+
+func assertPublicRuntimePermissions(t *testing.T, ctx context.Context, conn *pgx.Conn) {
+	t.Helper()
+	var forcedRLS, policies, grants bool
+	err := conn.QueryRow(ctx, `SELECT
+		(SELECT count(*) = 3 FROM pg_class WHERE oid IN ('public.site_settings'::regclass,
+			'public.memberships'::regclass, 'public.outbox_events'::regclass) AND relrowsecurity AND relforcerowsecurity),
+		(SELECT count(*) = 4 FROM pg_policies WHERE schemaname = 'public' AND
+			(tablename IN ('site_settings', 'memberships') AND policyname = 'tenant_isolation' OR
+			 tablename = 'outbox_events' AND (policyname = 'outbox_tenant_isolation' AND roles = '{app_user}' OR
+			 policyname = 'outbox_worker_policy' AND roles = '{worker_user}'))),
+		has_schema_privilege('app_user', 'public', 'USAGE') AND
+		has_table_privilege('app_user', 'public.site_settings', 'SELECT') AND
+		has_table_privilege('app_user', 'public.site_settings', 'UPDATE') AND
+		has_table_privilege('app_user', 'public.outbox_events', 'INSERT') AND
+		NOT has_table_privilege('app_user', 'public.outbox_events', 'DELETE') AND
+		has_schema_privilege('worker_user', 'public', 'USAGE') AND
+		has_table_privilege('worker_user', 'public.outbox_events', 'SELECT') AND
+		has_column_privilege('worker_user', 'public.outbox_events', 'status', 'UPDATE') AND
+		NOT has_column_privilege('worker_user', 'public.outbox_events', 'tenant_id', 'UPDATE') AND
+		NOT has_table_privilege('worker_user', 'public.outbox_events', 'INSERT') AND
+		NOT has_table_privilege('worker_user', 'public.site_settings', 'SELECT')`).Scan(&forcedRLS, &policies, &grants)
+	if err != nil || !forcedRLS || !policies || !grants {
+		t.Fatalf("public migration state: forced RLS=%t policies=%t grants=%t: %v", forcedRLS, policies, grants, err)
+	}
+}
+
+func assertPublicTenantIsolation(t *testing.T, ctx context.Context, conn *pgx.Conn) {
+	t.Helper()
+	err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		var tenantA string
+		if err := tx.QueryRow(ctx, `WITH seeded AS (
+			INSERT INTO public.tenants (name, slug) VALUES ('Migration A', 'migration-a'), ('Migration B', 'migration-b')
+			RETURNING id, slug
+		), settings AS (
+			INSERT INTO public.site_settings (tenant_id, title) SELECT id, slug FROM seeded
+		), outbox AS (
+			INSERT INTO public.outbox_events (tenant_id, event_type) SELECT id, 'site.updated' FROM seeded
+		)
+		SELECT id::text FROM seeded WHERE slug = 'migration-a'`).Scan(&tenantA); err != nil {
+			return err
 		}
+		if _, err := tx.Exec(ctx, `SET LOCAL ROLE app_user`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `SELECT set_config('app.tenant_id', $1, true)`, tenantA); err != nil {
+			return err
+		}
+		var isolated bool
+		err := tx.QueryRow(ctx, `SELECT
+			(SELECT count(*) = 1 AND bool_and(tenant_id::text = $1) FROM public.site_settings) AND
+			(SELECT count(*) = 1 AND bool_and(tenant_id::text = $1) FROM public.outbox_events)`, tenantA).Scan(&isolated)
+		if err != nil {
+			return err
+		}
+		if !isolated {
+			return errors.New("app_user cannot see exactly its own settings and outbox rows")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("reapplied public RLS isolation: %v", err)
 	}
 }

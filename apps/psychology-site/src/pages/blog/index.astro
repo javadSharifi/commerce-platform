@@ -1,172 +1,96 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { fetchPublicSite, getApiBaseUrl } from '../../lib/site.js';
+import { blogCard, normalizeBlogSearch, publicBlogCache, readBlogIndex } from '../../lib/blog.js';
 import { resolveTemplate } from '../../templates/registry.js';
-import type { BlogCardVM } from '../../templates/view-models.js';
-import { EmptyState } from '@psychology/ui';
 
-// Edge CDN caching: public blog listing
-Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
+const site = Astro.locals.site!;
+const { BlogCard } = resolveTemplate(site.template_id).components;
+const { posts, unavailable } = await readBlogIndex(Astro.request);
+const search = Astro.url.searchParams.get('search')?.trim().slice(0, 120) ?? '';
+const category = Astro.url.searchParams.get('category')?.trim() ?? '';
+const query = normalizeBlogSearch(search);
+const categories = [...new Set(posts.flatMap(post => post.category ? [post.category] : []))]
+  .sort((a, b) => a.localeCompare(b, 'fa-IR'));
+const matches = posts.filter(post => (!category || post.category === category) &&
+  (!query || [post.title, post.seo_description, post.category, post.author_name].some(field =>
+    field && normalizeBlogSearch(field).includes(query),
+  )),
+);
+const feature = !search && !category ? matches.find(post => post.is_featured) : undefined;
+const featured = feature && blogCard(feature);
+const cards = matches.filter(post => post !== feature).map(blogCard);
 
-const site = await fetchPublicSite(Astro.request);
-const activeTemplate = resolveTemplate(site.template_id);
-const BlogCard = activeTemplate.components.BlogCard;
-
-// Fallback sample posts for dev/preview when API is offline
-const fallbackPosts = [
-  {
-    id: 'b1111111-1111-1111-1111-111111111111',
-    title: 'نقش خودآگاهی و تنظیم هیجان در روابط بین‌فردی',
-    slug: 'self-awareness-and-emotional-regulation',
-    seo_description: 'بررسی راهکارهای علمی و روان‌شناختی جهت تقویت خودآگاهی و بهبود مهارت‌های ارتباطی در زندگی روزمره.',
-    published_at: '2026-11-15T10:00:00Z',
-    status: 'published',
-    cover_url: null,
-  },
-  {
-    id: 'b2222222-2222-2222-2222-222222222222',
-    title: 'چگونه اضطراب عملکرد را در موقعیت‌های حساس مدیریت کنیم؟',
-    slug: 'managing-performance-anxiety',
-    seo_description: 'تکنیک‌های شناختی-رفتاری اثربخش برای مهار استرس و افزایش تاب‌آوری در مواجهه با چالش‌های شغلی و تحصیلی.',
-    published_at: '2026-11-18T14:30:00Z',
-    status: 'published',
-    cover_url: null,
-  },
-];
-
-let posts = fallbackPosts;
-
-// Allow explicit empty state query parameter for testing and zero-state verification
-const forceEmpty = Astro.url.searchParams.get('empty') === '1';
-
-if (forceEmpty) {
-  posts = [];
-} else {
-  const apiBase = getApiBaseUrl() || 'http://localhost:8080';
-  const host = Astro.request.headers.get('x-forwarded-host') || Astro.request.headers.get('host') || 'localhost:3000';
-
-  try {
-    const res = await fetch(`${apiBase}/v1/public/blog`, {
-      headers: { Host: host, 'X-Forwarded-Host': host },
-      signal: AbortSignal.timeout(1000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        // Strictly only show published posts
-        posts = data.filter((p: any) => p.status === 'published' || !p.status);
-      }
-    }
-  } catch {
-    // Graceful fallback to sample data for dev/preview
-  }
+function categoryLink(value: string) {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (value) params.set('category', value);
+  return params.size ? '/blog?' + params : '/blog';
 }
 
-function formatDatePersian(dateStr?: string | null) {
-  if (!dateStr) return '';
-  try {
-    return new Intl.DateTimeFormat('fa-IR', {
-      dateStyle: 'medium',
-      timeZone: 'Asia/Tehran',
-    }).format(new Date(dateStr));
-  } catch {
-    return dateStr;
-  }
-}
-
-const blogVMs: BlogCardVM[] = posts.map((post) => ({
-  id: post.id,
-  slug: post.slug,
-  title: post.title,
-  excerpt: post.seo_description,
-  dateLabel: formatDatePersian(post.published_at),
-  coverUrl: post.cover_url || null,
-}));
+Astro.response.headers.set('Cache-Control', Astro.url.search || unavailable ? 'private, no-store' : publicBlogCache);
 ---
 
-<BaseLayout
-  title={`مقالات و یادداشت‌های تخصصی | ${site.title}`}
-  description="مجموعه مقالات، یادداشت‌ها و آموزش‌های معتبر روان‌شناسی و سلامت روان"
-  paletteId={site.palette_id}
-  templateId={site.template_id}
-  themeRadius={site.theme_radius}
-  themeScale={site.theme_scale}
->
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-    <!-- Header with Editorial Badge and Typography -->
-    <header class="flex flex-col items-start gap-4 max-w-3xl mb-8">
-      <span class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-        <span class="w-2 h-2 rounded-full bg-primary" aria-hidden="true"></span>
-        یادداشت‌ها و مقالات تخصصی
-      </span>
+<BaseLayout title={`مقالات و یادداشت‌های تخصصی | ${site.title}`} description={site.description}
+  paletteId={site.palette_id} templateId={site.template_id} themeRadius={site.theme_radius} themeScale={site.theme_scale}>
+  <header class="bg-base-200/55 px-4 py-12 text-center sm:py-16">
+    <h1 class="mb-6 text-3xl font-extrabold leading-tight sm:text-5xl">مقالات و یادداشت‌های تخصصی</h1>
+    <form action="/blog" method="get" role="search" class="mx-auto flex max-w-xl items-center gap-2">
+      <label for="blog-search" class="sr-only">جست‌وجو در مقالات</label>
+      <input id="blog-search" type="search" name="search" value={search} maxlength="120"
+        class="input input-bordered min-w-0 flex-1 rounded-full" placeholder="عنوان یا موضوع مقاله" />
+      {category && <input type="hidden" name="category" value={category} />}
+      <button class="btn btn-primary rounded-full" type="submit">جست‌وجو</button>
+    </form>
+  </header>
 
-      <h1 class="text-3xl sm:text-4xl font-extrabold text-base-content tracking-tight leading-tight">
-        مقالات و یادداشت‌های تخصصی
-      </h1>
-
-      <p class="text-base-content/75 text-base sm:text-lg leading-relaxed">
-        جستارهایی آرام درباره سلامت روان، روابط عاطفی، طرحواره‌های ذهنی و زیستن آگاهانه‌تر در دنیای پرشتاب امروز.
-      </p>
-
-      <!-- Category Filter Pills -->
-      <div class="flex flex-wrap items-center gap-2 pt-2" role="tablist" aria-label="دسته‌بندی مقالات">
-        <span class="btn btn-sm btn-primary rounded-full px-4 text-xs font-medium cursor-default">
-          همه نوشته‌ها
-        </span>
-        <a href="#relationships" class="btn btn-sm btn-ghost border border-base-300 rounded-full px-4 text-xs font-normal hover:border-primary">
-          روابط عاطفی
-        </a>
-        <a href="#self" class="btn btn-sm btn-ghost border border-base-300 rounded-full px-4 text-xs font-normal hover:border-primary">
-          خودشناسی و طرحواره
-        </a>
-        <a href="#anxiety" class="btn btn-sm btn-ghost border border-base-300 rounded-full px-4 text-xs font-normal hover:border-primary">
-          اضطراب و استرس
-        </a>
-        <a href="#health" class="btn btn-sm btn-ghost border border-base-300 rounded-full px-4 text-xs font-normal hover:border-primary">
-          سلامت روان
+  <div class="mx-auto max-w-7xl space-y-10 px-4 py-10 sm:px-6 lg:px-8">
+    {(categories.length > 0 || category) && (
+      <nav aria-label="دسته‌بندی مقالات" class="flex flex-wrap gap-2">
+        <a href={categoryLink('')} aria-current={!category ? 'true' : undefined}
+          class:list={['btn btn-sm rounded-full', category ? 'btn-outline' : 'btn-primary']}>همه نوشته‌ها</a>
+        {categories.map(value => (
+          <a href={categoryLink(value)} aria-current={category === value ? 'true' : undefined}
+            class:list={['btn btn-sm rounded-full', category === value ? 'btn-primary' : 'btn-outline']}>{value}</a>
+        ))}
+      </nav>
+    )}
+    {unavailable ? (
+      <p class="alert alert-warning" role="status">نمایش مقالات موقتاً در دسترس نیست.</p>
+    ) : matches.length === 0 && (
+      <div class="rounded-2xl bg-base-200 p-8 text-center">
+        <p>{search || category ? 'مقاله‌ای با این جست‌وجو پیدا نشد.' : 'هنوز مقاله‌ای منتشر نشده است.'}</p>
+        <a class="btn btn-outline btn-sm mt-4 rounded-full" href={search || category ? '/blog' : '/courses'}>
+          {search || category ? 'مشاهده همه نوشته‌ها' : 'مشاهده دوره‌های آموزشی'}
         </a>
       </div>
-    </header>
+    )}
 
-    <!-- Articles Grid or Empty State -->
-    {blogVMs.length === 0 ? (
-      <div class="py-8">
-        <EmptyState
-          title="هنوز مقاله‌ای منتشر نشده است"
-          description="به زودی یادداشت‌ها و مطالب آموزشی جدید در این بخش قرار خواهد گرفت."
-        >
-          <a href="/courses" class="btn btn-primary rounded-full">
-            مشاهده دوره‌های آموزشی
-          </a>
-        </EmptyState>
-      </div>
-    ) : (
-      <section aria-label="لیست مقالات">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-          {blogVMs.map((vm) => (
-            <BlogCard {...vm} />
-          ))}
+    {featured && (
+      <section id="featured-article" class="card bg-base-100 grid overflow-hidden rounded-3xl border border-base-300 sm:grid-cols-2">
+        {featured.coverUrl ? (
+          <img src={featured.coverUrl} alt="" class="aspect-video h-full w-full bg-base-200 object-cover" />
+        ) : (
+          <div aria-hidden="true" class="aspect-video w-full bg-base-200"></div>
+        )}
+        <div class="flex flex-col items-start justify-center gap-4 p-6 sm:p-9">
+          <span class="badge badge-secondary badge-outline">مقالهٔ ویژه</span>
+          <h2 class="text-2xl font-bold sm:text-3xl">
+            <a class="hover:text-primary focus-visible:ring-2 focus-visible:ring-primary" href={`/blog/${featured.slug}`}>{featured.title}</a>
+          </h2>
+          {featured.excerpt && <p class="text-base-content/75">{featured.excerpt}</p>}
+          {feature?.author_name && <p class="text-sm text-base-content/70">{feature.author_name}</p>}
         </div>
       </section>
     )}
 
-    <!-- Consultation Banner Cross-Link -->
-    <section class="mt-16 bg-base-200/60 border border-base-300 rounded-2xl p-6 sm:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-      <div class="flex flex-col gap-2 max-w-xl">
-        <div class="flex items-center gap-2">
-          <span class="badge badge-secondary badge-sm text-xs font-semibold">مشاوره حضوری و آنلاین</span>
-          <span class="text-xs text-base-content/65">گفت‌وگوی امن و بدون قضاوت</span>
+    {cards.length > 0 && (
+      <section aria-labelledby="articles-heading">
+        <h2 id="articles-heading" class="mb-5 text-2xl font-bold">{search || category ? 'نتایج جست‌وجو' : 'مقالات'}</h2>
+        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {cards.map(card => <BlogCard {...card} />)}
         </div>
-        <h2 class="text-xl sm:text-2xl font-bold text-base-content">
-          نیاز به بررسی تخصصی و گفت‌وگو با درمانگر دارید؟
-        </h2>
-        <p class="text-sm text-base-content/75 leading-relaxed">
-          برای جلسات مشاوره فردی، تنظیم هیجان یا زوج‌درمانی می‌توانید به صورت آنلاین وقت ویزیت خود را هماهنگ کنید.
-        </p>
-      </div>
-      <a href="/booking" class="btn btn-primary rounded-full px-6 font-semibold shrink-0">
-        درخواست نوبت مشاوره
-      </a>
-    </section>
+      </section>
+    )}
+    <a href="/booking" class="btn btn-outline rounded-full">درخواست نوبت مشاوره</a>
   </div>
 </BaseLayout>

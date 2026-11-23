@@ -108,7 +108,9 @@ CREATE TABLE site_settings (
     template_version text        NOT NULL DEFAULT '1.0.0',
     theme_radius     text        NOT NULL DEFAULT 'md' CHECK (theme_radius IN ('sm', 'md', 'lg')),
     theme_scale      text        NOT NULL DEFAULT 'md' CHECK (theme_scale IN ('sm', 'md', 'lg')),
-    palette_id       text        NOT NULL DEFAULT 'calm-sage' CHECK (palette_id IN ('calm-sage', 'ocean-trust', 'warm-sand', 'royal-plum'))
+    palette_id       text        NOT NULL DEFAULT 'calm-sage' CHECK (palette_id IN ('calm-sage', 'ocean-trust', 'warm-sand', 'royal-plum', 'stitch-editorial')),
+    home_profile     jsonb       NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(home_profile) = 'object'),
+    portrait_media_id uuid
 );
 
 ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
@@ -118,6 +120,10 @@ CREATE POLICY tenant_isolation ON site_settings
     USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 ```
+
+بازگشت migration شمارهٔ `000012` تا وقتی رکوردی از `stitch-editorial` استفاده می‌کند رد می‌شود. برای بازگشت، هر مطب باید ابتدا از مسیر مجاز انتشار ظاهر پالت دیگری انتخاب کند.
+
+migration شمارهٔ `000013` دادهٔ اختیاری صفحهٔ اصلی و کلید خارجی ترکیبی `(tenant_id, portrait_media_id)` به `media_assets(tenant_id, id)` را اضافه می‌کند. حذف رسانه، فقط شناسهٔ پرتره را خالی می‌کند.
 
 ### ۴.۴ جدول `panel_identities` (کاربران پنل مدیریت کلینیک)
 هویت کلی اعضای کادر درمان و پنل مدیریت (مستقل از اینکه در کدام کلینیک‌ها عضو هستند).
@@ -356,6 +362,8 @@ CREATE POLICY tenant_isolation ON workshops
 
 ---
 
+migration شمارهٔ `000014` ستون `topic` از نوع `text NOT NULL DEFAULT ''` با حداکثر ۸۰ نویسه را به کارگاه اضافه می‌کند. مقدار خالی یعنی کارگاه بدون موضوع است.
+
 ### ۵.۳ جدول `workshop_registrations` (ثبت‌نام‌ها و رزرو صندلی)
 
 هر ردیف یک صندلی از کارگاه را نمایندگی می‌کند. ثبت‌نام رایگان بلافاصله `confirmed` شده و ثبت‌نام پولی `pending_payment` با مهلت انقضای ۱۵ دقیقه‌ای می‌گیرد.
@@ -532,6 +540,8 @@ CREATE POLICY tenant_isolation ON blog_posts
     USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 ```
+
+migration شمارهٔ `000015` ستون‌های اختیاری نویسنده، دسته‌بندی، نشان ویژه و شناسهٔ تصویر شاخص را اضافه می‌کند. نویسنده و دسته‌بندی پیش‌فرض خالی دارند. کلید خارجی `(tenant_id, cover_media_id)` تصویر شاخص را به رسانهٔ همان مطب محدود می‌کند. حذف رسانه فقط شناسهٔ تصویر شاخص را خالی می‌کند.
 
 ---
 
@@ -1029,6 +1039,8 @@ CREATE TABLE courses (
     CONSTRAINT courses_tenant_slug_uq UNIQUE (tenant_id, slug)
 );
 ```
+
+migration شمارهٔ `000014` ستون `topic` از نوع `text NOT NULL DEFAULT ''` با حداکثر ۸۰ نویسه را به دوره اضافه می‌کند. مقدار خالی یعنی دوره بدون موضوع است.
 
 ### ۵. جدول `course_lessons` (جلسات و سرفصل‌های دوره)
 هر جلسه به یک رسانه ویدیویی یا صوتی در کلاس دسترسی خصوصی دوره متصل است.

@@ -1,53 +1,26 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { fetchPublicSite, getApiBaseUrl } from '../../lib/site.js';
-
-// Edge CDN caching: published public workshop detail
-Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
+import { publicSiteClient } from '../../lib/site.js';
+import { publicEducationCache, readEducation } from '../../lib/education.js';
+import { formatPrice } from '../../lib/home.js';
 
 const { id } = Astro.params;
-const site = await fetchPublicSite(Astro.request);
-
-// Fallback sample data if API is offline
-const fallbackWorkshop = {
-  id: id || 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
-  title: 'کارگاه روان‌درمانی تحلیلی و تنظیم هیجان',
-  slug: 'analytic-psychotherapy-workshop',
-  description: 'در این کارگاه چهار ساعته، به بررسی الگوهای دفاعی ناخودآگاه، شناسایی تله‌های هیجانی و تکنیک‌های عملی تنظیم خشم و اضطراب می‌پردازیم. این دوره مناسب تمام علاقه‌مندان به خودشناسی و رشد فردی است.',
-  instructor_name: 'دکتر مریم علوی',
-  starts_at: '2026-12-10T14:00:00Z',
-  ends_at: '2026-12-10T18:00:00Z',
-  registration_deadline: '2026-12-09T23:59:00Z',
-  location: 'تهران، سالن کنفرانس کلینیک مهر',
-  price_rials: 5000000,
-  remaining_capacity: 5,
-  is_registration_open: true,
-};
-
-let workshop = fallbackWorkshop;
-
-const apiBase = getApiBaseUrl() || 'http://localhost:8080';
-try {
-  const host = Astro.request.headers.get('x-forwarded-host') || Astro.request.headers.get('host') || 'localhost:3000';
-  const res = await fetch(`${apiBase}/v1/public/workshops/${id}`, {
-    headers: { Host: host, 'X-Forwarded-Host': host },
-    signal: AbortSignal.timeout(1000),
+const site = Astro.locals.site!;
+const api = publicSiteClient(Astro.request);
+const result = await readEducation('workshop detail', api && id ? () => api.getPublicWorkshop(encodeURIComponent(id)) : undefined);
+const workshop = result.data;
+if (!workshop) {
+  const unavailable = result.status === 503;
+  return new Response(unavailable ? 'نمایش کارگاه موقتاً در دسترس نیست.' : 'کارگاه مورد نظر یافت نشد.', {
+    status: unavailable ? 503 : 404, headers: { 'Cache-Control': 'private, no-store', 'Content-Type': 'text/plain; charset=utf-8' },
   });
-  if (res.ok) {
-    const data = await res.json();
-    if (data && data.title && (data.remaining_capacity !== undefined || data.capacity !== undefined || data.price_rials !== undefined)) {
-      workshop = data;
-    }
-  }
-} catch {
-  // Graceful fallback
 }
+Astro.response.headers.set('Cache-Control', publicEducationCache);
 
-// Regression support: sold out capacity state can be tested via query param or API remaining_capacity
-const isSoldOutParam = Astro.url.searchParams.get('sold_out') === '1';
-const remainingCapacity = isSoldOutParam ? 0 : (workshop.remaining_capacity ?? 0);
+const remainingCapacity = workshop.remaining_capacity;
 const isFull = remainingCapacity <= 0;
 const isFree = workshop.price_rials === 0;
+const registrationOpen = workshop.is_registration_open && !isFull;
 
 function formatDateTehran(dateStr: string) {
   try {
@@ -61,11 +34,6 @@ function formatDateTehran(dateStr: string) {
   }
 }
 
-function formatPriceToman(priceRials: number) {
-  if (priceRials === 0) return 'رایگان';
-  const toman = Math.floor(priceRials / 10);
-  return `${toman.toLocaleString('fa-IR')} تومان`;
-}
 ---
 
 <BaseLayout
@@ -104,7 +72,7 @@ function formatPriceToman(priceRials: number) {
         <div class="sm:text-end shrink-0">
           <div class="text-xs text-base-content/60 mb-0.5">شهریه کارگاه:</div>
           <div class="text-2xl sm:text-3xl font-black text-primary tracking-tight">
-            {formatPriceToman(workshop.price_rials)}
+            {formatPrice(workshop.price_rials)}
           </div>
           {workshop.price_rials > 0 && (
             <div class="text-xs text-base-content/50 mt-0.5">
@@ -149,19 +117,19 @@ function formatPriceToman(priceRials: number) {
 
       <!-- Registration Box -->
       <div id="registration-section" class="border-t border-base-200 pt-6">
-        <h3 class="text-lg font-bold text-base-content mb-1">
-          فرم ثبت‌نام آنلاین در کارگاه
-        </h3>
-        <p class="text-xs text-base-content/70 mb-5">
+        <h2 class="text-lg font-bold text-base-content mb-1">
+          {registrationOpen ? 'فرم ثبت‌نام آنلاین در کارگاه' : 'وضعیت ثبت‌نام'}
+        </h2>
+        {registrationOpen && <p class="text-xs text-base-content/70 mb-5">
           {isFree
             ? 'این کارگاه به صورت رایگان برگزار می‌شود و پس از تکمیل فرم، صندلی شما فوراً قطعی می‌گردد.'
             : 'پس از ثبت فرم، صندلی شما به مدت ۱۵ دقیقه رزرو موقت شده و جهت پرداخت به درگاه امن بانکی هدایت می‌شوید.'}
-        </p>
+        </p>}
 
         {isFull ? (
           <div class="flex flex-col gap-3 max-w-md">
             <div class="alert alert-error text-xs font-semibold leading-relaxed">
-              متأسفانه ظرفیت این کارگاه تکمیل شده است. در صورت انصراف شرکت‌کنندگان یا تعریف دوره جدید، صندلی‌ها باز خواهند شد.
+              ظرفیت این کارگاه تکمیل شده است.
             </div>
             <button disabled class="btn btn-disabled w-full text-sm font-bold rounded-full">
               تکمیل ظرفیت
@@ -223,7 +191,7 @@ function formatPriceToman(priceRials: number) {
               type="submit"
               class="btn btn-primary w-full text-sm font-bold mt-2 rounded-full"
             >
-              {isFree ? 'ثبت و تایید نهایی ثبت‌نام رایگان' : `رزرو صندلی و پرداخت (${formatPriceToman(workshop.price_rials)})`}
+              {isFree ? 'ثبت و تایید نهایی ثبت‌نام رایگان' : `رزرو صندلی و پرداخت (${formatPrice(workshop.price_rials)})`}
             </button>
           </form>
         )}
@@ -267,7 +235,7 @@ function formatPriceToman(priceRials: number) {
         submitBtn.textContent = 'در حال ثبت اطلاعات...';
 
         try {
-          const res = await fetch(`/v1/public/workshops/${workshopId}/register`, {
+          const res = await fetch(`/v1/public/workshops/${encodeURIComponent(workshopId)}/register`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

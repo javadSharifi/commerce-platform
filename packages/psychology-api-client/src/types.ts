@@ -22,7 +22,16 @@ export interface PaginationMeta {
 export type ThemeRadius = 'sm' | 'md' | 'lg';
 export type ThemeScale = 'sm' | 'md' | 'lg';
 
+export interface HomeProfile {
+  introduction?: string;
+  specialties?: string[];
+  credentials?: string[];
+  office_hours?: string;
+  portrait_media_id?: string;
+}
+
 export interface PublicSiteResponse {
+  home_profile?: HomeProfile;
   name: string;
   title: string;
   description: string;
@@ -68,6 +77,7 @@ export interface AdminMeResponse {
 }
 
 export interface SiteSettingsResponse {
+  home_profile?: HomeProfile;
   tenant_id: string;
   primary_domain?: string;
   title: string;
@@ -99,6 +109,7 @@ export interface UpdateSiteAppearanceRequest {
 }
 
 export interface UpdateSiteSettingsRequest {
+  home_profile?: HomeProfile;
   title: string;
   description: string;
   phone?: string;
@@ -116,6 +127,7 @@ export interface BuyerProfileResponse {
 export interface PublicWorkshopItem {
   id: string;
   title: string;
+  topic?: string;
   slug: string;
   instructor_name: string;
   starts_at: string;
@@ -163,21 +175,23 @@ export interface ContentBlock {
   data: Record<string, unknown>;
 }
 
-export interface PublicBlogPostItem {
-  id: string;
-  title: string;
-  slug: string;
-  seo_description: string;
-  published_at: string;
+interface BlogMetadata {
+  author_name?: string;
+  category?: string;
+  is_featured?: boolean;
+  cover_media_id?: string | null;
 }
 
-export interface PublicBlogPostDetail {
+export interface PublicBlogPostItem extends BlogMetadata {
   id: string;
   title: string;
   slug: string;
   seo_description: string;
+  published_at?: string | null;
+}
+
+export interface PublicBlogPostDetail extends PublicBlogPostItem {
   content_blocks: ContentBlock[];
-  published_at: string;
 }
 
 export interface StreamUrlResponse {
@@ -189,6 +203,7 @@ export interface StreamUrlResponse {
 export type WorkshopStatus = 'draft' | 'published' | 'closed' | 'cancelled';
 
 export interface AdminWorkshopItem {
+  topic?: string;
   id: string;
   title: string;
   slug: string;
@@ -211,6 +226,7 @@ export interface AdminWorkshopDetail extends AdminWorkshopItem {
 }
 
 export interface CreateWorkshopRequest {
+  topic?: string;
   title: string;
   slug: string;
   description?: string;
@@ -224,6 +240,7 @@ export interface CreateWorkshopRequest {
 }
 
 export interface UpdateWorkshopRequest {
+  topic?: string;
   title?: string;
   slug?: string;
   description?: string;
@@ -278,7 +295,7 @@ export interface RefundResponse {
 // ---------------- Admin Blog ----------------
 export type BlogPostStatus = 'draft' | 'published';
 
-export interface AdminBlogPostItem {
+export interface AdminBlogPostItem extends BlogMetadata {
   id: string;
   title: string;
   slug: string;
@@ -287,7 +304,7 @@ export interface AdminBlogPostItem {
   created_at: string;
 }
 
-export interface AdminBlogPostDetail {
+export interface AdminBlogPostDetail extends BlogMetadata {
   id: string;
   title: string;
   slug: string;
@@ -299,14 +316,14 @@ export interface AdminBlogPostDetail {
   updated_at: string;
 }
 
-export interface CreateBlogPostRequest {
+export interface CreateBlogPostRequest extends BlogMetadata {
   title: string;
   slug: string;
   seo_description: string;
   content_blocks: ContentBlock[];
 }
 
-export interface UpdateBlogPostRequest {
+export interface UpdateBlogPostRequest extends BlogMetadata {
   title?: string;
   slug?: string;
   seo_description?: string;
@@ -390,6 +407,7 @@ export interface CreateAppointmentRequest {
   slot_id: string;
   guest_name: string;
   guest_phone: string;
+  /** @deprecated The API ignores this legacy field. */
   notes?: string;
 }
 
@@ -546,6 +564,7 @@ export type CourseStatus = 'draft' | 'published' | 'archived';
 export interface PublicCourseItem {
   id: string;
   title: string;
+  topic?: string;
   slug: string;
   description: string;
   instructor_name: string;
@@ -554,6 +573,7 @@ export interface PublicCourseItem {
   status: 'published';
   published_at?: string | null;
   total_lessons_count?: number;
+  lessons_count?: number;
   total_duration_seconds?: number;
 }
 
@@ -569,6 +589,7 @@ export interface PublicLessonItem {
 export interface PublicCourseDetail {
   id: string;
   title: string;
+  topic?: string;
   slug: string;
   description: string;
   instructor_name: string;
@@ -639,6 +660,7 @@ export interface BuyerCourseEntitlementItem {
 }
 
 export interface AdminCourseItem {
+  topic?: string;
   id: string;
   title: string;
   slug: string;
@@ -654,6 +676,7 @@ export interface AdminCourseItem {
 }
 
 export interface CreateCourseRequest {
+  topic?: string;
   title: string;
   slug: string;
   description?: string;
@@ -663,6 +686,7 @@ export interface CreateCourseRequest {
 }
 
 export interface UpdateCourseRequest {
+  topic?: string;
   title?: string;
   slug?: string;
   description?: string;

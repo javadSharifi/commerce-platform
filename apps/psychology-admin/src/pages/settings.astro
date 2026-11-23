@@ -108,6 +108,7 @@ const previewParams = new URLSearchParams({
   scale: appearance.theme_scale,
 });
 const initialPreviewUrl = `${publicSiteBase}/preview?${previewParams.toString()}`;
+const homeProfile = settings.home_profile;
 ---
 
 <AdminLayout title="تنظیمات قالب و هویت بصری" currentNav="settings">
@@ -183,7 +184,7 @@ const initialPreviewUrl = `${publicSiteBase}/preview?${previewParams.toString()}
 
         <div>
           <label class="block text-xs font-semibold text-base-content/90 mb-1.5">
-            توضیحات کوتاه و بیوگرافی معرفی
+            توضیحات کوتاه
           </label>
           <textarea
             id="content-description"
@@ -223,6 +224,42 @@ const initialPreviewUrl = `${publicSiteBase}/preview?${previewParams.toString()}
             />
           </div>
         </div>
+
+        <fieldset class="space-y-4 border-t border-base-200 pt-4">
+          <legend class="text-sm font-semibold">معرفی صفحهٔ اصلی</legend>
+          <div>
+            <label for="home-introduction" class="mb-1 block text-sm font-medium">معرفی مطب یا درمانگر</label>
+            <textarea id="home-introduction" name="home_introduction" maxlength="2000" rows="4"
+              class="textarea textarea-bordered w-full">{homeProfile?.introduction ?? ''}</textarea>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="home-specialties" class="mb-1 block text-sm font-medium">حوزه‌های تخصصی</label>
+              <textarea id="home-specialties" name="home_specialties" rows="4" aria-describedby="home-list-hint"
+                class="textarea textarea-bordered w-full">{homeProfile?.specialties?.join('\n') ?? ''}</textarea>
+            </div>
+            <div>
+              <label for="home-credentials" class="mb-1 block text-sm font-medium">مدارک و سوابق قابل انتشار</label>
+              <textarea id="home-credentials" name="home_credentials" rows="4" aria-describedby="home-list-hint"
+                class="textarea textarea-bordered w-full">{homeProfile?.credentials?.join('\n') ?? ''}</textarea>
+            </div>
+          </div>
+          <p id="home-list-hint" class="text-xs text-base-content/70">برای هر فهرست تا ۸ مورد وارد کنید، هر مورد در یک سطر.</p>
+          <div>
+            <label for="home-office-hours" class="mb-1 block text-sm font-medium">ساعت کاری عمومی مطب</label>
+            <textarea id="home-office-hours" name="home_office_hours" maxlength="240" rows="2"
+              class="textarea textarea-bordered w-full">{homeProfile?.office_hours ?? ''}</textarea>
+          </div>
+          <div>
+            <label for="home-portrait" class="mb-1 block text-sm font-medium">شناسهٔ پرتره</label>
+            <input id="home-portrait" name="home_portrait" maxlength="36" dir="ltr"
+              value={homeProfile?.portrait_media_id ?? ''} aria-describedby="home-portrait-hint"
+              class="input input-bordered w-full" />
+            <p id="home-portrait-hint" class="mt-1 text-xs text-base-content/70">
+              شناسهٔ یک تصویر عمومی و تأییدشده را از <a class="link" href="/media">کتابخانهٔ رسانه</a> کپی کنید.
+            </p>
+          </div>
+        </fieldset>
 
         <div class="flex justify-end pt-3">
           <button
@@ -338,6 +375,9 @@ const initialPreviewUrl = `${publicSiteBase}/preview?${previewParams.toString()}
                   <div class="flex items-center gap-1.5 pt-2 border-t border-base-200/60">
                     <span class="text-[11px] text-base-content/60 ml-2">نمونه رنگ‌ها:</span>
                     <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorBase100};`} title="پس‌زمینه"></span>
+                    {pal.tokens.colorSurfaceCard && (
+                      <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorSurfaceCard};`} title="سطح کارت"></span>
+                    )}
                     <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorPrimary};`} title="رنگ اصلی"></span>
                     <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorSecondary};`} title="رنگ دوم"></span>
                     <span class="w-3.5 h-3.5 rounded-full border border-black/10" style={`background-color: ${pal.tokens.colorAccent};`} title="تاکیدی"></span>
@@ -563,6 +603,12 @@ const initialPreviewUrl = `${publicSiteBase}/preview?${previewParams.toString()}
 
     // 1. Content Form Submission (Only sends content fields to /api/admin/site)
     if (contentForm) {
+      let homeProfileEdited = false;
+      contentForm.addEventListener('input', (event) => {
+        const field = event.target as HTMLInputElement | null;
+        if (field?.name?.startsWith('home_')) homeProfileEdited = true;
+      });
+
       contentForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         hideAlerts();
@@ -572,6 +618,8 @@ const initialPreviewUrl = `${publicSiteBase}/preview?${previewParams.toString()}
         const description = (formData.get('description') as string) || '';
         const phone = (formData.get('phone') as string) || '';
         const address = (formData.get('address') as string) || '';
+        const homeField = (name: string) => String(formData.get(name) ?? '').trim();
+        const homeList = (name: string) => homeField(name).split(/\r?\n/).map(item => item.trim()).filter(Boolean);
 
         if (!title.trim()) {
           alertErrorMsg.textContent = 'عنوان مطب الزامی است و نمی‌تواند خالی باشد.';
@@ -593,6 +641,13 @@ const initialPreviewUrl = `${publicSiteBase}/preview?${previewParams.toString()}
               description,
               phone,
               address,
+              home_profile: homeProfileEdited ? {
+                introduction: homeField('home_introduction'),
+                specialties: homeList('home_specialties'),
+                credentials: homeList('home_credentials'),
+                office_hours: homeField('home_office_hours'),
+                portrait_media_id: homeField('home_portrait') || undefined,
+              } : undefined,
             }),
           });
 

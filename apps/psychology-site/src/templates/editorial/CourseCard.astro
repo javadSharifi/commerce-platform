@@ -12,9 +12,7 @@ const { slug, title, instructorName, priceLabel, lessonsCountLabel, coverUrl } =
       <img src={coverUrl} alt={title} class="w-full h-full object-cover" loading="lazy" />
     </figure>
   ) : (
-    <div class="aspect-video w-full bg-base-200/80 flex items-center justify-center text-base-content/40 text-sm">
-      بدون تصویر
-    </div>
+    <div aria-hidden="true" class="aspect-video w-full bg-base-200/80"></div>
   )}
 
   <div class="card-body p-6 flex flex-col flex-1 justify-between">

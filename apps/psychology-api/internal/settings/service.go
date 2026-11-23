@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"psychology/api/internal/media"
 	"psychology/api/internal/platform/cache"
 	"psychology/api/internal/platform/tenantctx"
 	"psychology/api/internal/settings/settingsdb"
@@ -41,41 +42,44 @@ var activeTemplateVersions = map[string]string{
 
 // activePaletteIDs tracks supported color palettes.
 var activePaletteIDs = map[string]bool{
-	"calm-sage":   true,
-	"ocean-trust": true,
-	"warm-sand":   true,
-	"royal-plum":  true,
+	"calm-sage":        true,
+	"ocean-trust":      true,
+	"warm-sand":        true,
+	"royal-plum":       true,
+	"stitch-editorial": true,
 }
 
 type PublicSiteProfile struct {
-	Name            string  `json:"name"`
-	Title           string  `json:"title"`
-	Description     string  `json:"description"`
-	Phone           string  `json:"phone,omitempty"`
-	Address         string  `json:"address,omitempty"`
-	PrimaryColor    string  `json:"primary_color"`
-	LogoURL         *string `json:"logo_url,omitempty"`
-	TemplateID      string  `json:"template_id"`
-	TemplateVersion string  `json:"template_version"`
-	ThemeRadius     string  `json:"theme_radius"`
-	ThemeScale      string  `json:"theme_scale"`
-	PaletteID       string  `json:"palette_id"`
+	HomeProfile     *HomeProfile `json:"home_profile,omitempty"`
+	Name            string       `json:"name"`
+	Title           string       `json:"title"`
+	Description     string       `json:"description"`
+	Phone           string       `json:"phone,omitempty"`
+	Address         string       `json:"address,omitempty"`
+	PrimaryColor    string       `json:"primary_color"`
+	LogoURL         *string      `json:"logo_url,omitempty"`
+	TemplateID      string       `json:"template_id"`
+	TemplateVersion string       `json:"template_version"`
+	ThemeRadius     string       `json:"theme_radius"`
+	ThemeScale      string       `json:"theme_scale"`
+	PaletteID       string       `json:"palette_id"`
 }
 
 type SiteSettings struct {
-	TenantID        uuid.UUID  `json:"tenant_id"`
-	PrimaryDomain   string     `json:"primary_domain,omitempty"`
-	Title           string     `json:"title"`
-	Description     string     `json:"description"`
-	Phone           string     `json:"phone"`
-	Address         string     `json:"address"`
-	PrimaryColor    string     `json:"primary_color"`
-	LogoMediaID     *uuid.UUID `json:"logo_media_id,omitempty"`
-	TemplateID      string     `json:"template_id"`
-	TemplateVersion string     `json:"template_version"`
-	ThemeRadius     string     `json:"theme_radius"`
-	ThemeScale      string     `json:"theme_scale"`
-	PaletteID       string     `json:"palette_id"`
+	HomeProfile     *HomeProfile `json:"home_profile,omitempty"`
+	TenantID        uuid.UUID    `json:"tenant_id"`
+	PrimaryDomain   string       `json:"primary_domain,omitempty"`
+	Title           string       `json:"title"`
+	Description     string       `json:"description"`
+	Phone           string       `json:"phone"`
+	Address         string       `json:"address"`
+	PrimaryColor    string       `json:"primary_color"`
+	LogoMediaID     *uuid.UUID   `json:"logo_media_id,omitempty"`
+	TemplateID      string       `json:"template_id"`
+	TemplateVersion string       `json:"template_version"`
+	ThemeRadius     string       `json:"theme_radius"`
+	ThemeScale      string       `json:"theme_scale"`
+	PaletteID       string       `json:"palette_id"`
 }
 
 type SiteAppearance struct {
@@ -101,6 +105,7 @@ type UpdateSettingsParams struct {
 }
 
 type UpdateProfileParams struct {
+	HomeProfile  *HomeProfile
 	Title        string
 	Description  string
 	Phone        string
@@ -203,7 +208,12 @@ func (s *Service) GetPublicProfile(ctx context.Context, tenantID uuid.UUID) (*Pu
 				paletteID = "calm-sage"
 			}
 
+			home, err := decodeHomeProfile(row.HomeProfile, row.PortraitMediaID)
+			if err != nil {
+				return err
+			}
 			profile = &PublicSiteProfile{
+				HomeProfile:     home,
 				Name:            row.ClinicName,
 				Title:           title,
 				Description:     row.Description.String,
@@ -263,7 +273,12 @@ func (s *Service) GetPublicProfile(ctx context.Context, tenantID uuid.UUID) (*Pu
 		paletteID = "calm-sage"
 	}
 
+	home, err := decodeHomeProfile(row.HomeProfile, row.PortraitMediaID)
+	if err != nil {
+		return nil, err
+	}
 	return &PublicSiteProfile{
+		HomeProfile:     home,
 		Name:            row.ClinicName,
 		Title:           title,
 		Description:     row.Description.String,
@@ -337,7 +352,12 @@ func (s *Service) GetSettings(ctx context.Context, tenantID uuid.UUID) (*SiteSet
 				paletteID = "calm-sage"
 			}
 
+			home, err := decodeHomeProfile(row.HomeProfile, row.PortraitMediaID)
+			if err != nil {
+				return err
+			}
 			siteSettings = &SiteSettings{
+				HomeProfile:     home,
 				TenantID:        fromPgUUID(row.TenantID),
 				PrimaryDomain:   primaryDomain,
 				Title:           row.Title,
@@ -411,7 +431,12 @@ func (s *Service) GetSettings(ctx context.Context, tenantID uuid.UUID) (*SiteSet
 		paletteID = "calm-sage"
 	}
 
+	home, err := decodeHomeProfile(row.HomeProfile, row.PortraitMediaID)
+	if err != nil {
+		return nil, err
+	}
 	return &SiteSettings{
+		HomeProfile:     home,
 		TenantID:        fromPgUUID(row.TenantID),
 		PrimaryDomain:   primaryDomain,
 		Title:           row.Title,
@@ -710,6 +735,11 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, params 
 		return nil, ErrInvalidColor
 	}
 
+	homeText, portrait, err := encodeHomeProfile(params.HomeProfile)
+	if err != nil {
+		return nil, err
+	}
+
 	if s.store != nil {
 		if _, ok := tenantctx.ID(ctx); !ok {
 			ctx = tenantctx.With(ctx, tenantID)
@@ -721,15 +751,29 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, params 
 				logoMediaID = toPgUUID(*params.LogoMediaID)
 			}
 
+			if portrait.Valid {
+				if err := media.ValidatePublicImage(ctx, tx, tid, fromPgUUID(portrait)); err != nil {
+					switch {
+					case errors.Is(err, media.ErrMediaNotFound), errors.Is(err, media.ErrMediaNotPublic),
+						errors.Is(err, media.ErrMediaNotVerified), errors.Is(err, media.ErrInvalidMimeType),
+						errors.Is(err, media.ErrFileSizeExceeded):
+						return ErrInvalidPortrait
+					default:
+						return err
+					}
+				}
+			}
 			q := settingsdb.New(tx)
 			row, err := q.UpsertSiteProfile(ctx, settingsdb.UpsertSiteProfileParams{
-				TenantID:     toPgUUID(tid),
-				Title:        title,
-				Description:  strings.TrimSpace(params.Description),
-				Phone:        strings.TrimSpace(params.Phone),
-				Address:      strings.TrimSpace(params.Address),
-				PrimaryColor: primaryColor,
-				LogoMediaID:  logoMediaID,
+				TenantID:        toPgUUID(tid),
+				Title:           title,
+				Description:     strings.TrimSpace(params.Description),
+				Phone:           strings.TrimSpace(params.Phone),
+				Address:         strings.TrimSpace(params.Address),
+				PrimaryColor:    primaryColor,
+				LogoMediaID:     logoMediaID,
+				HomeProfile:     homeText,
+				PortraitMediaID: portrait,
 			})
 			if err != nil {
 				return err
@@ -737,7 +781,10 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, params 
 
 			// Record Outbox cache invalidation event within the SAME transaction (AP-11 / PSY-5.3)
 			host, err := q.GetPrimaryVerifiedDomain(ctx, toPgUUID(tid))
-			if err == nil && host != "" {
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("resolve profile publication host: %w", err)
+			}
+			if host != "" {
 				if err := cache.InsertCacheInvalidationEvent(ctx, tx, tid, "site.updated", host, []string{"/", "/courses", "/workshops", "/blog"}); err != nil {
 					return fmt.Errorf("failed to record cache invalidation event: %w", err)
 				}
@@ -749,7 +796,12 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, params 
 				savedLogoID = &id
 			}
 
+			home, err := decodeHomeProfile(row.HomeProfile, row.PortraitMediaID)
+			if err != nil {
+				return err
+			}
 			updated = &SiteSettings{
+				HomeProfile:     home,
 				TenantID:        fromPgUUID(row.TenantID),
 				PrimaryDomain:   host,
 				Title:           row.Title,
@@ -772,6 +824,9 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, params 
 		return updated, nil
 	}
 
+	if portrait.Valid {
+		return nil, ErrInvalidPortrait
+	}
 	primaryDomain, _ := s.queries.GetPrimaryVerifiedDomain(ctx, toPgUUID(tenantID))
 
 	var logoMediaID pgtype.UUID
@@ -780,13 +835,15 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, params 
 	}
 
 	row, err := s.queries.UpsertSiteProfile(ctx, settingsdb.UpsertSiteProfileParams{
-		TenantID:     toPgUUID(tenantID),
-		Title:        title,
-		Description:  strings.TrimSpace(params.Description),
-		Phone:        strings.TrimSpace(params.Phone),
-		Address:      strings.TrimSpace(params.Address),
-		PrimaryColor: primaryColor,
-		LogoMediaID:  logoMediaID,
+		TenantID:        toPgUUID(tenantID),
+		Title:           title,
+		Description:     strings.TrimSpace(params.Description),
+		Phone:           strings.TrimSpace(params.Phone),
+		Address:         strings.TrimSpace(params.Address),
+		PrimaryColor:    primaryColor,
+		LogoMediaID:     logoMediaID,
+		HomeProfile:     homeText,
+		PortraitMediaID: portrait,
 	})
 	if err != nil {
 		return nil, err
@@ -798,7 +855,12 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, params 
 		savedLogoID = &id
 	}
 
+	home, err := decodeHomeProfile(row.HomeProfile, row.PortraitMediaID)
+	if err != nil {
+		return nil, err
+	}
 	return &SiteSettings{
+		HomeProfile:     home,
 		TenantID:        fromPgUUID(row.TenantID),
 		PrimaryDomain:   primaryDomain,
 		Title:           row.Title,

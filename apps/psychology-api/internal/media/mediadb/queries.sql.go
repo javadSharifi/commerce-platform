@@ -267,6 +267,43 @@ func (q *Queries) GetTotalMediaUsageBytes(ctx context.Context, arg GetTotalMedia
 	return total_used_bytes, err
 }
 
+const hasPublicMediaReference = `-- name: HasPublicMediaReference :one
+SELECT EXISTS (
+    SELECT 1 FROM blog_posts AS p
+    WHERE p.tenant_id = $1 AND p.status = 'published'
+      AND (
+          p.cover_media_id = $2::uuid
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p.content_blocks) = 'array'
+                  THEN p.content_blocks ELSE '[]'::jsonb END) AS block(value)
+              WHERE block.value->>'type' IN ('image', 'audio', 'video')
+                AND block.value->'data'->>'media_id' = ($2::uuid)::text
+          )
+      )
+) OR EXISTS (
+    SELECT 1 FROM courses AS c
+    WHERE c.tenant_id = $1 AND c.status = 'published' AND c.deleted_at IS NULL
+      AND c.cover_media_id = $2::uuid
+) OR EXISTS (
+    SELECT 1 FROM site_settings AS s
+    WHERE s.tenant_id = $1
+      AND (s.portrait_media_id = $2::uuid OR s.logo_media_id = $2::uuid)
+)
+`
+
+type HasPublicMediaReferenceParams struct {
+	TenantID pgtype.UUID
+	MediaID  pgtype.UUID
+}
+
+func (q *Queries) HasPublicMediaReference(ctx context.Context, arg HasPublicMediaReferenceParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, hasPublicMediaReference, arg.TenantID, arg.MediaID)
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listExpiredMediaUploads = `-- name: ListExpiredMediaUploads :many
 SELECT id, tenant_id, staging_key, original_name, access_class, expected_mime_type, expected_size_bytes, expires_at, status, initiated_by, created_at FROM media_uploads
 WHERE status = 'reserved' AND expires_at < $1

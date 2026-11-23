@@ -42,6 +42,8 @@ export interface HomeHeroVM {
   badgeText?: string;
   title: string;
   description: string;
+  portraitUrl?: string;
+  portraitAlt?: string;
   primaryCta: {
     label: string;
     href: string;
@@ -69,10 +71,12 @@ export interface WorkshopCardVM {
   priceLabel: string;
   dateLabel: string;
   capacityLabel: string;
+  registrationOpen?: boolean;
   coverUrl?: string | null;
 }
 
 export interface BlogCardVM {
+  category?: string;
   id: string;
   slug: string;
   title: string;

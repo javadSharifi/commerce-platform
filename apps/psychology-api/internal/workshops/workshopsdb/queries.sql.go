@@ -117,11 +117,12 @@ INSERT INTO workshops (
     registration_deadline,
     capacity,
     price_rials,
-    status
+    status,
+    topic
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
-RETURNING id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at
+RETURNING id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic
 `
 
 type CreateWorkshopParams struct {
@@ -137,6 +138,7 @@ type CreateWorkshopParams struct {
 	Capacity             int32
 	PriceRials           int64
 	Status               string
+	Topic                string
 }
 
 func (q *Queries) CreateWorkshop(ctx context.Context, arg CreateWorkshopParams) (Workshop, error) {
@@ -153,6 +155,7 @@ func (q *Queries) CreateWorkshop(ctx context.Context, arg CreateWorkshopParams) 
 		arg.Capacity,
 		arg.PriceRials,
 		arg.Status,
+		arg.Topic,
 	)
 	var i Workshop
 	err := row.Scan(
@@ -171,6 +174,7 @@ func (q *Queries) CreateWorkshop(ctx context.Context, arg CreateWorkshopParams) 
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Topic,
 	)
 	return i, err
 }
@@ -371,7 +375,7 @@ func (q *Queries) GetRegistrationByPurchaseIDForUpdate(ctx context.Context, arg 
 }
 
 const getWorkshopByID = `-- name: GetWorkshopByID :one
-SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at FROM workshops
+SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic FROM workshops
 WHERE tenant_id = $1 AND id = $2
 `
 
@@ -399,12 +403,13 @@ func (q *Queries) GetWorkshopByID(ctx context.Context, arg GetWorkshopByIDParams
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Topic,
 	)
 	return i, err
 }
 
 const getWorkshopByIDForUpdate = `-- name: GetWorkshopByIDForUpdate :one
-SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at FROM workshops
+SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic FROM workshops
 WHERE tenant_id = $1 AND id = $2
 FOR UPDATE
 `
@@ -433,12 +438,13 @@ func (q *Queries) GetWorkshopByIDForUpdate(ctx context.Context, arg GetWorkshopB
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Topic,
 	)
 	return i, err
 }
 
 const getWorkshopBySlug = `-- name: GetWorkshopBySlug :one
-SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at FROM workshops
+SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic FROM workshops
 WHERE tenant_id = $1 AND slug = $2
 `
 
@@ -466,12 +472,13 @@ func (q *Queries) GetWorkshopBySlug(ctx context.Context, arg GetWorkshopBySlugPa
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Topic,
 	)
 	return i, err
 }
 
 const listPublishedWorkshops = `-- name: ListPublishedWorkshops :many
-SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at FROM workshops
+SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic FROM workshops
 WHERE tenant_id = $1
   AND status = 'published'
   AND ends_at >= now()
@@ -503,6 +510,7 @@ func (q *Queries) ListPublishedWorkshops(ctx context.Context, tenantID pgtype.UU
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Topic,
 		); err != nil {
 			return nil, err
 		}
@@ -558,7 +566,7 @@ func (q *Queries) ListRegistrationsByWorkshop(ctx context.Context, arg ListRegis
 }
 
 const listWorkshops = `-- name: ListWorkshops :many
-SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at FROM workshops
+SELECT id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic FROM workshops
 WHERE tenant_id = $1
   AND ($2::text IS NULL OR status = $2)
 ORDER BY starts_at DESC
@@ -594,6 +602,7 @@ func (q *Queries) ListWorkshops(ctx context.Context, arg ListWorkshopsParams) ([
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Topic,
 		); err != nil {
 			return nil, err
 		}
@@ -657,9 +666,10 @@ SET title = $3,
     registration_deadline = $10,
     capacity = $11,
     price_rials = $12,
+    topic = COALESCE($13::text, topic),
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at
+RETURNING id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic
 `
 
 type UpdateWorkshopParams struct {
@@ -675,6 +685,7 @@ type UpdateWorkshopParams struct {
 	RegistrationDeadline pgtype.Timestamptz
 	Capacity             int32
 	PriceRials           int64
+	Topic                pgtype.Text
 }
 
 func (q *Queries) UpdateWorkshop(ctx context.Context, arg UpdateWorkshopParams) (Workshop, error) {
@@ -691,6 +702,7 @@ func (q *Queries) UpdateWorkshop(ctx context.Context, arg UpdateWorkshopParams) 
 		arg.RegistrationDeadline,
 		arg.Capacity,
 		arg.PriceRials,
+		arg.Topic,
 	)
 	var i Workshop
 	err := row.Scan(
@@ -709,6 +721,7 @@ func (q *Queries) UpdateWorkshop(ctx context.Context, arg UpdateWorkshopParams) 
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Topic,
 	)
 	return i, err
 }
@@ -718,7 +731,7 @@ UPDATE workshops
 SET capacity = $3,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at
+RETURNING id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic
 `
 
 type UpdateWorkshopCapacityParams struct {
@@ -746,6 +759,7 @@ func (q *Queries) UpdateWorkshopCapacity(ctx context.Context, arg UpdateWorkshop
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Topic,
 	)
 	return i, err
 }
@@ -755,7 +769,7 @@ UPDATE workshops
 SET status = $3,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at
+RETURNING id, tenant_id, title, slug, description, instructor_name, starts_at, ends_at, location, registration_deadline, capacity, price_rials, status, created_at, updated_at, topic
 `
 
 type UpdateWorkshopStatusParams struct {
@@ -783,6 +797,7 @@ func (q *Queries) UpdateWorkshopStatus(ctx context.Context, arg UpdateWorkshopSt
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Topic,
 	)
 	return i, err
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -181,7 +182,7 @@ func main() {
 		settingsHandler = settings.NewHandler(settingsService, domainResolver, authService)
 
 		workshopsStore := workshopsdb.New(pool)
-		workshopsService := workshops.NewService(workshopsStore)
+		workshopsService := workshops.NewService(workshopsStore).WithCatalogStore(store)
 		workshopsHandler = workshops.NewHandler(workshopsService, domainResolver, authService)
 
 		var paymentProvider payments.PaymentProvider = payments.NewMockPaymentProvider()
@@ -196,7 +197,7 @@ func main() {
 		workshopsHandler.SetPaymentService(paymentsService)
 
 		blogStore := blogdb.New(pool)
-		blogService := blog.NewService(blogStore)
+		blogService := blog.NewService(blogStore).WithStore(store)
 		blogHandler = blog.NewHandler(blogService, domainResolver, authService)
 
 		var storageProvider media.StorageProvider = media.NewMockStorageProvider()
@@ -210,17 +211,17 @@ func main() {
 			})
 		}
 		mediaStore := mediadb.New(pool)
-		mediaService := media.NewService(mediaStore, storageProvider)
+		mediaService := media.NewService(mediaStore, storageProvider).WithPublicReadStore(store)
 		mediaHandler = media.NewHandler(mediaService, domainResolver, authService)
 
 		bookingStore := bookingdb.New(pool)
 		bookingService := booking.NewService(bookingStore)
-		bookingHandler = booking.NewHandler(bookingService, domainResolver, authService)
+		bookingHandler = booking.NewHandler(bookingService, domainResolver, authService).WithPublicStore(store)
 
 		otpSender := courses.NewMockOTPSender()
 		buyerSvc := courses.NewBuyerService(coursesStore, otpSender, mediaService)
 		mediaValidator := &mediaAssetValidatorAdapter{store: mediaStore}
-		adminSvc := courses.NewAdminCourseService(coursesStore, mediaValidator)
+		adminSvc := courses.NewAdminCourseService(coursesStore, mediaValidator).WithCatalogStore(store)
 		coursesHandler = courses.NewHandler(buyerSvc, adminSvc, domainResolver, authService, paymentsService)
 
 		reportsStore := reportsdb.New(pool)
@@ -265,7 +266,7 @@ func main() {
 	)
 
 	srv := &http.Server{
-		Addr:              ":" + port,
+		Addr:              net.JoinHostPort(os.Getenv("HOST"), port),
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -273,10 +274,15 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	listener, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		logger.Error("server failed to listen", "error", err)
+		os.Exit(1)
+	}
 	serverErr := make(chan error, 1)
 	go func() {
-		logger.Info("starting psychology API server with unified /v1 routing and standard timeouts", "port", port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Info("starting psychology API server with unified /v1 routing and standard timeouts", "port", port, "address", listener.Addr().String())
+		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
 	}()

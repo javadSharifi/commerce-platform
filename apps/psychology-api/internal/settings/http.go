@@ -50,11 +50,12 @@ func (h *Handler) getAppearanceOwnerUserID() (uuid.UUID, bool) {
 }
 
 type updateProfileRequest struct {
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Phone       string     `json:"phone"`
-	Address     string     `json:"address"`
-	LogoMediaID *uuid.UUID `json:"logo_media_id"`
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	Phone       string       `json:"phone"`
+	Address     string       `json:"address"`
+	LogoMediaID *uuid.UUID   `json:"logo_media_id"`
+	HomeProfile *HomeProfile `json:"home_profile"`
 }
 
 type updateAppearanceRequest struct {
@@ -194,7 +195,7 @@ func (h *Handler) handleUpdateAdminSite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	bodyBytes, err := io.ReadAll(r.Body)
+	bodyBytes, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "INVALID_BODY", "خطا در خواندن بدنه درخواست.")
 		return
@@ -234,11 +235,18 @@ func (h *Handler) handleUpdateAdminSite(w http.ResponseWriter, r *http.Request) 
 		Phone:       req.Phone,
 		Address:     req.Address,
 		LogoMediaID: req.LogoMediaID,
+		HomeProfile: req.HomeProfile,
 	})
 	if err != nil {
 		switch err {
 		case ErrEmptyTitle:
 			writeJSONError(w, http.StatusBadRequest, "EMPTY_TITLE", "عنوان کلینیک الزامی است.")
+			return
+		case ErrInvalidHomeProfile:
+			writeJSONError(w, http.StatusBadRequest, "INVALID_HOME_PROFILE", "تعداد یا طول فیلدهای معرفی صفحهٔ اصلی بیش از حد مجاز است.")
+			return
+		case ErrInvalidPortrait:
+			writeJSONError(w, http.StatusBadRequest, "INVALID_PORTRAIT", "پرتره باید تصویر عمومی تأییدشدهٔ همین مطب باشد.")
 			return
 		default:
 			writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "خطا در به‌روزرسانی تنظیمات محتوایی.")

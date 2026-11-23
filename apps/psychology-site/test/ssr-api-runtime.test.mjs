@@ -8,7 +8,12 @@ test('PSY-5.15: SSR runtime with INTERNAL_API_URL, unknown host 404, unreachable
   let apiCallCount = 0;
   const mockApi = http.createServer((req, res) => {
     apiCallCount++;
-    const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0];
+    const host = (req.headers.host || '').split(':')[0];
+
+    if (['clinic-alpha.ir', 'clinic-beta.ir'].includes(host) &&
+        ['/v1/public/courses', '/v1/public/workshops', '/v1/public/blog'].includes(req.url)) {
+      return res.writeHead(200, { 'Content-Type': 'application/json' }).end('[]');
+    }
 
     if (req.url === '/v1/public/site') {
       if (host === 'clinic-alpha.ir') {
@@ -68,6 +73,19 @@ test('PSY-5.15: SSR runtime with INTERNAL_API_URL, unknown host 404, unreachable
 
   // 2. Spawn psychology-site production build with runtime INTERNAL_API_URL
   const sitePort = 4396;
+  const getAsHost = (host, forwardedHost) => new Promise((resolve, reject) => {
+    http.get({
+      hostname: '127.0.0.1', port: sitePort, path: '/',
+      headers: { Host: host, ...(forwardedHost && { 'X-Forwarded-Host': forwardedHost }) },
+    }, async response => {
+      try {
+        const body = Buffer.concat(await Array.fromAsync(response));
+        resolve(new Response(body, { status: response.statusCode, headers: response.headers }));
+      } catch (err) {
+        reject(err);
+      }
+    }).on('error', reject);
+  });
   const siteDir = new URL('..', import.meta.url).pathname;
   const child = spawn('node', ['./dist/server/entry.mjs'], {
     cwd: siteDir,
@@ -100,9 +118,7 @@ test('PSY-5.15: SSR runtime with INTERNAL_API_URL, unknown host 404, unreachable
     // -------------------------------------------------------------------------
     // Scenario 1: Host Alpha receives its own profile at runtime via INTERNAL_API_URL
     // -------------------------------------------------------------------------
-    const resAlpha = await fetch(`http://127.0.0.1:${sitePort}/`, {
-      headers: { Host: 'clinic-alpha.ir', 'X-Forwarded-Host': 'clinic-alpha.ir' },
-    });
+    const resAlpha = await getAsHost('clinic-alpha.ir', 'clinic-beta.ir');
     assert.strictEqual(resAlpha.status, 200);
     assert.ok(resAlpha.headers.get('cache-control')?.includes('public'));
     const htmlAlpha = await resAlpha.text();
@@ -114,9 +130,7 @@ test('PSY-5.15: SSR runtime with INTERNAL_API_URL, unknown host 404, unreachable
     // -------------------------------------------------------------------------
     // Scenario 2: Host Beta receives its distinct profile at runtime via INTERNAL_API_URL
     // -------------------------------------------------------------------------
-    const resBeta = await fetch(`http://127.0.0.1:${sitePort}/`, {
-      headers: { Host: 'clinic-beta.ir', 'X-Forwarded-Host': 'clinic-beta.ir' },
-    });
+    const resBeta = await getAsHost('clinic-beta.ir');
     assert.strictEqual(resBeta.status, 200);
     assert.ok(resBeta.headers.get('cache-control')?.includes('public'));
     const htmlBeta = await resBeta.text();
@@ -128,9 +142,7 @@ test('PSY-5.15: SSR runtime with INTERNAL_API_URL, unknown host 404, unreachable
     // -------------------------------------------------------------------------
     // Scenario 3: Unknown Host receives explicit 404 without shared cache (no-store)
     // -------------------------------------------------------------------------
-    const resUnknown = await fetch(`http://127.0.0.1:${sitePort}/`, {
-      headers: { Host: 'unknown-random-clinic.ir', 'X-Forwarded-Host': 'unknown-random-clinic.ir' },
-    });
+    const resUnknown = await getAsHost('unknown-random-clinic.ir', 'clinic-alpha.ir');
     assert.strictEqual(resUnknown.status, 404);
     assert.strictEqual(resUnknown.headers.get('cache-control'), 'private, no-store');
     const htmlUnknown = await resUnknown.text();
@@ -143,9 +155,7 @@ test('PSY-5.15: SSR runtime with INTERNAL_API_URL, unknown host 404, unreachable
     // -------------------------------------------------------------------------
     await new Promise((resolve) => mockApi.close(resolve));
 
-    const resUnreachable = await fetch(`http://127.0.0.1:${sitePort}/`, {
-      headers: { Host: 'clinic-alpha.ir' },
-    });
+    const resUnreachable = await getAsHost('clinic-alpha.ir');
     assert.strictEqual(resUnreachable.status, 503);
     assert.strictEqual(resUnreachable.headers.get('cache-control'), 'private, no-store');
     const htmlUnreachable = await resUnreachable.text();

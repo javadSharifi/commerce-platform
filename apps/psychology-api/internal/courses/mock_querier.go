@@ -238,6 +238,7 @@ func (m *MockCoursesQuerier) CreateCourse(ctx context.Context, arg coursesdb.Cre
 		ID:             pgtype.UUID{Bytes: id, Valid: true},
 		TenantID:       arg.TenantID,
 		Title:          arg.Title,
+		Topic:          arg.Topic,
 		Slug:           arg.Slug,
 		Description:    arg.Description,
 		InstructorName: arg.InstructorName,
@@ -323,6 +324,9 @@ func (m *MockCoursesQuerier) UpdateCourse(ctx context.Context, arg coursesdb.Upd
 	c.CoverMediaID = arg.CoverMediaID
 	c.Status = arg.Status
 	c.PublishedAt = arg.PublishedAt
+	if arg.Topic.Valid {
+		c.Topic = arg.Topic.String
+	}
 	c.UpdatedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	m.Courses[id.String()] = c
 	return c, nil

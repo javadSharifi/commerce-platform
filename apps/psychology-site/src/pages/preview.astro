@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import HomePageContent from '../components/HomePageContent.astro';
 import { resolveTemplate } from '../templates/registry.js';
 import { fetchPublicSite } from '../lib/site.js';
+import { getHomeContent } from '../lib/home.js';
 import {
   DEFAULT_PALETTE_ID,
   isValidPaletteId,
@@ -15,6 +16,7 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
 
 // Tenant is strictly determined from the incoming Host (Hard Rule 1)
 const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
+const content = await getHomeContent(Astro.request);
 
 // Read and validate preview query parameters: template, palette, radius, scale (PSY-6.6.1 / PSY-D10)
 // 1. Template: absent or empty uses published value; non-empty invalid safely falls back to minimal
@@ -72,5 +74,5 @@ if (qScale === null || qScale === '') {
     حالت پیش‌نمایش ظاهر (تغییرات هنوز منتشر نشده است)
   </div>
 
-  <HomePageContent site={site} templateId={previewTemplateId} />
+  <HomePageContent site={site} templateId={previewTemplateId} {...content} />
 </BaseLayout>

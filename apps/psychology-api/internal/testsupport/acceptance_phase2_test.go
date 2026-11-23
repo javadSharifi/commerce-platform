@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -444,7 +445,7 @@ func (m *pilotBookingStore) GetAppointmentByID(ctx context.Context, arg bookingd
 	tID := fromPgUUID(arg.TenantID)
 	app, ok := m.appointments[id]
 	if !ok || fromPgUUID(app.TenantID) != tID {
-		return bookingdb.Appointment{}, fmt.Errorf("appointment not found")
+		return bookingdb.Appointment{}, pgx.ErrNoRows
 	}
 	return app, nil
 }
@@ -567,7 +568,7 @@ func (m *pilotBookingStore) GetAppointmentDetail(ctx context.Context, arg bookin
 		Status:             app.Status,
 		GuestName:          app.GuestName,
 		GuestPhone:         app.GuestPhone,
-		GuestLookupHash:   app.GuestLookupHash,
+		GuestLookupHash:    app.GuestLookupHash,
 		Notes:              app.Notes,
 		ExpiresAt:          app.ExpiresAt,
 		ConfirmedAt:        app.ConfirmedAt,
@@ -606,7 +607,7 @@ func (m *pilotBookingStore) ListAdminAppointments(ctx context.Context, arg booki
 			Status:             app.Status,
 			GuestName:          app.GuestName,
 			GuestPhone:         app.GuestPhone,
-			GuestLookupHash:   app.GuestLookupHash,
+			GuestLookupHash:    app.GuestLookupHash,
 			Notes:              app.Notes,
 			ExpiresAt:          app.ExpiresAt,
 			ConfirmedAt:        app.ConfirmedAt,

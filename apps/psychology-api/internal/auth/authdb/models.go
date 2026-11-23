@@ -62,6 +62,10 @@ type BlogPost struct {
 	PublishedAt    pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	AuthorName     string
+	Category       string
+	IsFeatured     bool
+	CoverMediaID   pgtype.UUID
 }
 
 type BuyerAccount struct {
@@ -108,6 +112,7 @@ type Course struct {
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
+	Topic          string
 }
 
 type CourseEntitlement struct {
@@ -285,6 +290,8 @@ type SiteSetting struct {
 	ThemeRadius     string
 	ThemeScale      string
 	PaletteID       string
+	HomeProfile     []byte
+	PortraitMediaID pgtype.UUID
 }
 
 type Tenant struct {
@@ -352,6 +359,7 @@ type Workshop struct {
 	Status               string
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
+	Topic                string
 }
 
 type WorkshopRegistration struct {

@@ -167,36 +167,17 @@ paths:
       tags:
         - Public Blog
       summary: List published blog articles
-      description: Returns paginated list of published blog posts for the current clinic.
+      description: Returns the published articles for the requested clinic in newest-first order.
       operationId: getPublicBlogPosts
-      parameters:
-        - in: query
-          name: page
-          schema:
-            type: integer
-            default: 1
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            default: 10
       responses:
         '200':
           description: List of published blog articles
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - items
-                  - meta
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/PublicBlogPostItem'
-                  meta:
-                    $ref: '#/components/schemas/PaginationMeta'
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicBlogPostItem'
 
   /public/blog/{slug}:
     get:
@@ -228,6 +209,36 @@ paths:
   # ----------------------------------------------------
   # PUBLIC MEDIA STREAMING
   # ----------------------------------------------------
+  /public/media/{id}/image:
+    get:
+      tags:
+        - Public Media
+      summary: Redirect to a verified public image for the current host
+      operationId: redirectPublicImage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '302':
+          description: Short-lived image URL. The redirect must not be cached.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+            Cache-Control:
+              schema:
+                type: string
+                example: private, no-store
+        '404':
+          description: Site or verified public image not found
+        '502':
+          description: Signing the image URL failed
+
   /public/media/{id}/stream-url:
     get:
       tags:
@@ -1197,6 +1208,11 @@ paths:
       responses:
         '201':
           description: Appointment requested successfully
+          headers:
+            Set-Cookie:
+              description: HttpOnly tracking credential scoped to the matching appointment page.
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -2456,6 +2472,34 @@ components:
           example: 3
 
     # ---------------- Public Site ----------------
+    HomeProfile:
+      type: object
+      description: Optional plain-text content published on the clinic homepage. Omit on update to preserve existing content, or send an empty object to clear it.
+      properties:
+        introduction:
+          type: string
+          maxLength: 2000
+        specialties:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 120
+        credentials:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 120
+        office_hours:
+          type: string
+          maxLength: 240
+          description: Public display text. Appointment availability comes from the booking calendar.
+        portrait_media_id:
+          type: string
+          format: uuid
+          description: Verified public JPEG, PNG or WebP asset belonging to the same clinic.
+
     PublicSiteResponse:
       type: object
       required:
@@ -2469,6 +2513,8 @@ components:
         - theme_scale
         - palette_id
       properties:
+        home_profile:
+          $ref: '#/components/schemas/HomeProfile'
         name:
           type: string
           example: "کلینیک روان‌شناسی مهر"
@@ -2600,6 +2646,8 @@ components:
         - theme_radius
         - theme_scale
       properties:
+        home_profile:
+          $ref: '#/components/schemas/HomeProfile'
         tenant_id:
           type: string
           format: uuid
@@ -2642,6 +2690,8 @@ components:
       required:
         - title
       properties:
+        home_profile:
+          $ref: '#/components/schemas/HomeProfile'
         title:
           type: string
           minLength: 1
@@ -2736,6 +2786,10 @@ components:
         - remaining_capacity
         - is_registration_open
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب.
         id:
           type: string
           format: uuid
@@ -2779,6 +2833,10 @@ components:
         - remaining_capacity
         - is_registration_open
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب.
         id:
           type: string
           format: uuid
@@ -2897,8 +2955,19 @@ components:
         - title
         - slug
         - seo_description
-        - published_at
       properties:
+        author_name:
+          type: string
+          maxLength: 120
+        category:
+          type: string
+          maxLength: 80
+        is_featured:
+          type: boolean
+        cover_media_id:
+          type: string
+          format: uuid
+          description: Verified public image belonging to the same clinic.
         id:
           type: string
           format: uuid
@@ -2920,8 +2989,19 @@ components:
         - slug
         - seo_description
         - content_blocks
-        - published_at
       properties:
+        author_name:
+          type: string
+          maxLength: 120
+        category:
+          type: string
+          maxLength: 80
+        is_featured:
+          type: boolean
+        cover_media_id:
+          type: string
+          format: uuid
+          description: Verified public image belonging to the same clinic.
         id:
           type: string
           format: uuid
@@ -2969,6 +3049,10 @@ components:
         - status
         - created_at
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب.
         id:
           type: string
           format: uuid
@@ -3020,6 +3104,10 @@ components:
         - created_at
         - updated_at
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب.
         id:
           type: string
           format: uuid
@@ -3074,6 +3162,10 @@ components:
         - capacity
         - price_rials
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب. فاصله‌های ابتدا و انتها حذف و فاصله‌های پیاپی یکی می‌شوند.
         title:
           type: string
           minLength: 2
@@ -3107,6 +3199,10 @@ components:
     UpdateWorkshopRequest:
       type: object
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب. رشتهٔ خالی موضوع را حذف می‌کند و حذف کلید مقدار موجود را نگه می‌دارد. فاصله‌های ابتدا و انتها حذف و فاصله‌های پیاپی یکی می‌شوند.
         title:
           type: string
           minLength: 2
@@ -3256,6 +3352,18 @@ components:
         - status
         - created_at
       properties:
+        author_name:
+          type: string
+          maxLength: 120
+        category:
+          type: string
+          maxLength: 80
+        is_featured:
+          type: boolean
+        cover_media_id:
+          type: string
+          format: uuid
+          description: Verified public image belonging to the same clinic.
         id:
           type: string
           format: uuid
@@ -3286,6 +3394,18 @@ components:
         - created_at
         - updated_at
       properties:
+        author_name:
+          type: string
+          maxLength: 120
+        category:
+          type: string
+          maxLength: 80
+        is_featured:
+          type: boolean
+        cover_media_id:
+          type: string
+          format: uuid
+          description: Verified public image belonging to the same clinic.
         id:
           type: string
           format: uuid
@@ -3321,6 +3441,17 @@ components:
         - seo_description
         - content_blocks
       properties:
+        author_name:
+          type: string
+          maxLength: 120
+        category:
+          type: string
+          maxLength: 80
+        is_featured:
+          type: boolean
+        cover_media_id:
+          type: string
+          description: UUID of a verified public image in this clinic. An empty string clears the image. Omitted fields are preserved on update.
         title:
           type: string
           minLength: 2
@@ -3337,6 +3468,17 @@ components:
     UpdateBlogPostRequest:
       type: object
       properties:
+        author_name:
+          type: string
+          maxLength: 120
+        category:
+          type: string
+          maxLength: 80
+        is_featured:
+          type: boolean
+        cover_media_id:
+          type: string
+          description: UUID of a verified public image in this clinic. An empty string clears the image. Omitted fields are preserved on update.
         title:
           type: string
           minLength: 2
@@ -3562,7 +3704,8 @@ components:
           example: '09123456789'
         notes:
           type: string
-          default: ''
+          deprecated: true
+          description: Legacy input is ignored. A reason for seeking treatment is not collected.
 
     PublicAppointmentResponse:
       type: object
@@ -3994,6 +4137,10 @@ components:
         - price_rials
         - status
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب.
         id:
           type: string
           format: uuid
@@ -4019,6 +4166,8 @@ components:
           type: string
           format: date-time
           nullable: true
+        lessons_count:
+          type: integer
         total_lessons_count:
           type: integer
         total_duration_seconds:
@@ -4035,6 +4184,10 @@ components:
         - status
         - lessons
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب.
         id:
           type: string
           format: uuid
@@ -4258,6 +4411,10 @@ components:
         - created_at
         - updated_at
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب.
         id:
           type: string
           format: uuid
@@ -4300,6 +4457,10 @@ components:
         - instructor_name
         - price_rials
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب. فاصله‌های ابتدا و انتها حذف و فاصله‌های پیاپی یکی می‌شوند.
         title:
           type: string
         slug:
@@ -4319,6 +4480,10 @@ components:
     UpdateCourseRequest:
       type: object
       properties:
+        topic:
+          type: string
+          maxLength: 80
+          description: موضوع عمومی اختیاری برای فیلتر آموزش همان مطب. رشتهٔ خالی موضوع را حذف می‌کند و حذف کلید مقدار موجود را نگه می‌دارد. فاصله‌های ابتدا و انتها حذف و فاصله‌های پیاپی یکی می‌شوند.
         title:
           type: string
         slug:

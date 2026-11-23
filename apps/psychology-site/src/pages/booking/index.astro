@@ -1,220 +1,64 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { fetchPublicSite } from '../../lib/site.js';
+import { publicSiteClient } from '../../lib/site.js';
 import BookingFlow from '../../components/BookingFlow';
+import type { PublicAppointmentSlot, PublicTherapistItem } from '@psychology/api-client';
+import { tehranDay } from '../../lib/booking-date.js';
 
-// Edge CDN caching: therapists directory & booking profiles (fresh slots, no stale s-maxage)
-Astro.response.headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
-
-const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
-
-// Fallback therapists for SSR/preview when backend is offline
-const fallbackTherapists = [
-  {
-    id: 'e48a12bc-1111-4000-8000-000000000001',
-    name: 'دکتر مریم علوی',
-    slug: 'dr-maryam-alavi',
-    title: 'متخصص روان‌درمانی فردی و زوج‌درمانی',
-    bio: 'بیش از ۱۰ سال سابقه مشاوره بالینی، عضو انجمن روان‌شناسی ایران و مدرس دوره‌های رشد فردی.',
-    session_duration_minutes: 50,
-  },
-  {
-    id: 'e48a12bc-2222-4000-8000-000000000002',
-    name: 'دکتر رضا مرادی',
-    slug: 'dr-reza-moradi',
-    title: 'روان‌شناس سلامت و درمانگر شناختی‌رفتاری (CBT)',
-    bio: 'رویکرد مبتنی بر شواهد در درمان اضطراب، وسواس فکری و ارتقای بهزیستی روان‌شناختی.',
-    session_duration_minutes: 45,
-  },
-];
-
-let therapists = fallbackTherapists;
-const apiBase =
-  (typeof process !== 'undefined' && process.env && process.env.INTERNAL_API_URL) ||
-  import.meta.env.INTERNAL_API_URL ||
-  (typeof process !== 'undefined' && process.env && process.env.PUBLIC_API_URL) ||
-  import.meta.env.PUBLIC_API_URL ||
-  'http://localhost:8080';
-const clientApiBase =
-  (typeof process !== 'undefined' && process.env && process.env.PUBLIC_API_URL) ||
-  import.meta.env.PUBLIC_API_URL ||
-  '';
-const host = Astro.request.headers.get('host') || 'localhost:3000';
-
-try {
-  const res = await fetch(`${apiBase}/v1/public/therapists`, {
-    headers: { Host: host },
-    signal: AbortSignal.timeout(1200),
-  });
-  if (res.ok) {
-    const data = await res.json();
-    if (Array.isArray(data) && data.length > 0) {
-      therapists = data;
-    }
-  }
-} catch {
-  // Graceful fallback to static demo therapists
-}
-
-// Generate fallback slots for the first therapist for preview
-const now = new Date();
-const baseTomorrow = new Date(now.getTime() + 24 * 3600 * 1000);
-baseTomorrow.setUTCHours(10, 0, 0, 0);
-
-const baseDayAfter = new Date(now.getTime() + 48 * 3600 * 1000);
-baseDayAfter.setUTCHours(12, 0, 0, 0);
-
-const fallbackSlots = [
-  {
-    id: 's1111111-0000-4000-8000-000000000001',
-    therapist_id: therapists[0]?.id || '',
-    starts_at: baseTomorrow.toISOString(),
-    ends_at: new Date(baseTomorrow.getTime() + 50 * 60 * 1000).toISOString(),
-    status: 'available',
-  },
-  {
-    id: 's2222222-0000-4000-8000-000000000002',
-    therapist_id: therapists[0]?.id || '',
-    starts_at: new Date(baseTomorrow.getTime() + 60 * 60 * 1000).toISOString(),
-    ends_at: new Date(baseTomorrow.getTime() + 110 * 60 * 1000).toISOString(),
-    status: 'available',
-  },
-  {
-    id: 's3333333-0000-4000-8000-000000000003',
-    therapist_id: therapists[0]?.id || '',
-    starts_at: baseDayAfter.toISOString(),
-    ends_at: new Date(baseDayAfter.getTime() + 50 * 60 * 1000).toISOString(),
-    status: 'available',
-  },
-];
-
-let initialSlots = fallbackSlots;
-if (therapists[0]?.id) {
+const site = Astro.locals.site!;
+const api = publicSiteClient(Astro.request);
+const today = tehranDay(new Date());
+let therapists: PublicTherapistItem[] = [];
+let initialSlots: PublicAppointmentSlot[] = [];
+let directoryUnavailable = !api;
+let slotsUnavailable = false;
+if (api) {
   try {
-    const slotsRes = await fetch(`${apiBase}/v1/public/therapists/${therapists[0].id}/slots`, {
-      headers: { Host: host },
-      signal: AbortSignal.timeout(1200),
-    });
-    if (slotsRes.ok) {
-      const sData = await slotsRes.json();
-      if (Array.isArray(sData) && sData.length > 0) {
-        initialSlots = sData;
-      }
+    therapists = await api.listPublicTherapists();
+    if (!Array.isArray(therapists)) throw new Error('Unexpected therapist list');
+  } catch (err) {
+    console.error('Public therapist list unavailable', err instanceof Error ? err.name : 'UnknownError');
+    therapists = [];
+    directoryUnavailable = true;
+  }
+  if (therapists[0]) {
+    try {
+      initialSlots = await api.listPublicTherapistSlots(encodeURIComponent(therapists[0].id), today);
+      if (!Array.isArray(initialSlots)) throw new Error('Unexpected slot list');
+    } catch (err) {
+      console.error('Public appointment slots unavailable', err instanceof Error ? err.name : 'UnknownError');
+      initialSlots = [];
+      slotsUnavailable = true;
     }
-  } catch {
-    // Keep fallback
   }
 }
-
-const todayIso = now.toISOString().slice(0, 10);
-const clinicPhone = site?.phone || '۰۲۱-۸۸۸۸۸۸۸۸';
-const clinicAddress = site?.address || 'تهران، خیابان شریعتی، کلینیک تخصصی روان‌شناسی و مشاوره';
+const firstSlot = initialSlots.find(slot => slot.therapist_id === therapists[0]?.id &&
+  slot.status === 'available' && Date.parse(slot.starts_at) > Date.now());
+const date = firstSlot ? tehranDay(new Date(firstSlot.starts_at)) : today;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
 ---
 
 <BaseLayout
   title={`رزرو نوبت مشاوره حضوری | ${site.title}`}
-  description="انتخاب زمان آزاد، تعیین وقت مشاوره با روان‌شناسان و پیگیری خصوصی نوبت"
-  paletteId={site.palette_id}
-  templateId={site.template_id}
-  themeRadius={site.theme_radius}
-  themeScale={site.theme_scale}
+  description="انتخاب درمانگر و سانس حضوری و پیگیری خصوصی درخواست نوبت"
+  paletteId={site.palette_id} templateId={site.template_id} themeRadius={site.theme_radius} themeScale={site.theme_scale}
 >
-  <div class="max-w-5xl lg:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full overflow-x-hidden">
-    <!-- Header Section (Stitch visual cues) -->
-    <header class="mb-10 max-w-3xl">
-      <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3">
-        <span class="inline-block w-2 h-2 rounded-full bg-primary" aria-hidden="true"></span>
-        <span>رزرو وقت مشاوره • محرمانه و مطمئن</span>
-      </div>
-      <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-base-content tracking-tight mb-3">
-        درخواست نوبت مشاوره و روان‌درمانی
-      </h1>
-      <p class="text-sm sm:text-base text-base-content/70 leading-relaxed text-pretty">
-        درمانگر، روز و سانس خالی مناسب خود را انتخاب نمایید. پس از ثبت نوبت، زمان برای شما به مدت ۲ ساعت رزرو موقت شده و لینک پیگیری خصوصی در اختیارتان قرار می‌گیرد.
-      </p>
-    </header>
-
-    <!-- 2-Column Responsive Layout -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-      <!-- Main Column: Interactive BookingFlow Island (8 cols) -->
-      <main class="lg:col-span-8 flex flex-col gap-6">
-        <BookingFlow
-          client:visible
-          therapists={therapists}
-          initialSlots={initialSlots}
-          initialTherapistId={therapists[0]?.id}
-          initialDate={todayIso}
-          apiBase={clientApiBase}
-        />
-      </main>
-
-      <!-- Sidebar Column: Trust, Confidentiality & Clinic Guidance (4 cols) -->
-      <aside class="lg:col-span-4 flex flex-col gap-6">
-        <!-- Trust & Confidentiality Card -->
-        <div class="card bg-base-100 border border-base-200 rounded-2xl p-6 shadow-xs flex flex-col gap-4">
-          <div class="flex items-center justify-between pb-3 border-b border-base-200">
-            <h2 class="font-bold text-base text-base-content flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path>
-                <path d="m9 12 2 2 4-4"></path>
-              </svg>
-              <span>اصول رازداری و هماهنگی</span>
-            </h2>
-            <span class="badge badge-primary badge-outline text-xs">اطلاعیه مراجعان</span>
-          </div>
-
-          <ul class="flex flex-col gap-3.5 text-xs sm:text-sm text-base-content/80 leading-relaxed">
-            <li class="flex items-start gap-2.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"></span>
-              <span><strong>حفظ کامل حریم خصوصی:</strong> کلیه مکالمات و سوابق پرونده شما با درمانگر طبق موازین اخلاقی و حرفه‌ای کاملاً محرمانه است.</span>
-            </li>
-            <li class="flex items-start gap-2.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"></span>
-              <span><strong>رزرو موقت ۲ ساعته:</strong> سانس انتخاب‌شده به مدت ۲ ساعت برای شما نگاه داشته می‌شود تا پذیرش با شما تماس بگیرد.</span>
-            </li>
-            <li class="flex items-start gap-2.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"></span>
-              <span><strong>لغو و جابه‌جایی:</strong> تا ۲۴ ساعت پیش از شروع جلسه، امکان هماهنگی برای تغییر زمان یا انصراف وجود دارد.</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Clinic Contact & Hours Card -->
-        <div class="card bg-base-100 border border-base-200 rounded-2xl p-6 shadow-xs flex flex-col gap-4">
-          <h3 class="font-bold text-base text-base-content flex items-center gap-2 pb-3 border-b border-base-200">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
-              <line x1="16" x2="16" y1="2" y2="6"></line>
-              <line x1="8" x2="8" y1="2" y2="6"></line>
-              <line x1="3" x2="21" y1="10" y2="10"></line>
-            </svg>
-            <span>اطلاعات تماس و نشانی</span>
-          </h3>
-
-          <div class="flex flex-col gap-3 text-xs sm:text-sm text-base-content/80">
-            <div class="flex items-start gap-2.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/60 mt-1 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
-                <circle cx="12" cy="10" r="3"></circle>
-              </svg>
-              <span>{clinicAddress}</span>
-            </div>
-            <div class="flex items-center gap-2.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-              </svg>
-              <span>تلفن تماس: <strong class="font-mono text-base-content" dir="ltr">{clinicPhone}</strong></span>
-            </div>
-            <div class="flex items-center gap-2.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>
-              <span>ساعات پذیرش: شنبه تا چهارشنبه ۱۰:۰۰ الی ۱۹:۰۰</span>
-            </div>
-          </div>
-        </div>
-      </aside>
-    </div>
+  <header class="bg-base-200/55 px-4 py-12 text-center sm:py-16">
+    <p class="mb-3 text-sm font-semibold text-primary">رزرو وقت مشاوره • محرمانه و مطمئن</p>
+    <h1 class="mx-auto max-w-4xl text-3xl font-extrabold leading-tight sm:text-5xl">درخواست نوبت مشاوره و روان‌درمانی</h1>
+    <p class="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-base-content/75 sm:text-base">
+      درمانگر و زمان جلسهٔ حضوری را انتخاب کنید. پذیرش برای تأیید درخواست با شما تماس می‌گیرد.
+    </p>
+  </header>
+  <div class="mx-auto w-full max-w-5xl overflow-x-hidden px-4 py-8 sm:px-6 lg:max-w-7xl lg:px-8">
+    {directoryUnavailable ? (
+      <p class="alert alert-warning" role="status">دریافت فهرست درمانگران موقتاً ممکن نیست.</p>
+    ) : therapists.length === 0 ? (
+      <p class="rounded-2xl bg-base-200 p-8 text-center">در حال حاضر درمانگری برای رزرو حضوری معرفی نشده است.</p>
+    ) : (
+      <BookingFlow client:visible therapists={therapists} initialSlots={initialSlots} initialDate={date}
+        today={today} initialSlotsUnavailable={slotsUnavailable} clinicAddress={site.address}
+        clinicPhone={site.phone} officeHours={site.home_profile?.office_hours} />
+    )}
   </div>
 </BaseLayout>

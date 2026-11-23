@@ -97,9 +97,10 @@ INSERT INTO courses (
     price_rials,
     cover_media_id,
     status,
-    published_at
+    published_at,
+    topic
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
 RETURNING *;
 
@@ -136,6 +137,7 @@ SET title = $3,
     cover_media_id = $8,
     status = $9,
     published_at = $10,
+    topic = COALESCE(sqlc.narg('topic')::text, topic),
     updated_at = NOW()
 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
 RETURNING *;

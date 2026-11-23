@@ -10,6 +10,7 @@ import (
 
 	"psychology/api/internal/auth"
 	"psychology/api/internal/domain"
+	"psychology/api/internal/education"
 	"psychology/api/internal/payments"
 	"psychology/api/internal/platform/tenantctx"
 
@@ -550,6 +551,10 @@ func (h *Handler) handleUpdateAdminCourse(w http.ResponseWriter, r *http.Request
 
 	c, err := h.adminService.UpdateCourse(r.Context(), tenantID, courseID, in)
 	if err != nil {
+		if errors.Is(err, education.ErrInvalidTopic) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_TOPIC", err.Error())
+			return
+		}
 		if errors.Is(err, ErrCourseNotFound) {
 			writeJSONError(w, http.StatusNotFound, "COURSE_NOT_FOUND", err.Error())
 			return

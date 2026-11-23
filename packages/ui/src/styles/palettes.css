@@ -1,6 +1,6 @@
-/* Semantic DaisyUI tokens for Platform Palettes (PSY-6.1) */
+/* The palette on the document root takes precedence over template color defaults. */
 
-[data-palette="calm-sage"] {
+html[data-palette="calm-sage"] {
   color-scheme: light;
   --color-base-100: #f6f8f6;
   --color-base-200: #ebf0eb;
@@ -16,7 +16,7 @@
   --color-neutral-content: #f7fafc;
 }
 
-[data-palette="ocean-trust"] {
+html[data-palette="ocean-trust"] {
   color-scheme: light;
   --color-base-100: #f0f7fc;
   --color-base-200: #e2eff8;
@@ -32,7 +32,7 @@
   --color-neutral-content: #f8fafc;
 }
 
-[data-palette="warm-sand"] {
+html[data-palette="warm-sand"] {
   color-scheme: light;
   --color-base-100: #faf6f0;
   --color-base-200: #f5ede2;
@@ -48,7 +48,7 @@
   --color-neutral-content: #fef3c7;
 }
 
-[data-palette="royal-plum"] {
+html[data-palette="royal-plum"] {
   color-scheme: light;
   --color-base-100: #faf5ff;
   --color-base-200: #f3e8ff;
@@ -62,4 +62,27 @@
   --color-accent-content: #ffffff;
   --color-neutral: #3b0764;
   --color-neutral-content: #faf5ff;
+}
+
+html[data-palette="stitch-editorial"] {
+  color-scheme: light;
+  --color-base-100: #faf9f6;
+  --color-base-200: #f3efe9;
+  --color-base-300: #eae6df;
+  --color-surface-card: #ffffff;
+  --color-base-content: #1e2422;
+  --color-content-muted: #55605c;
+  --color-primary: #2d4f43;
+  --color-primary-hover: #223d34;
+  --color-primary-content: #ffffff;
+  --color-secondary: #e8dfd5;
+  --color-secondary-content: #1e2422;
+  --color-accent: #c9825b;
+  --color-accent-content: #2c2c2c;
+  --color-neutral: #1e2422;
+  --color-neutral-content: #faf9f6;
+}
+
+html[data-palette="stitch-editorial"] .card.bg-base-100 {
+  background-color: var(--color-surface-card);
 }

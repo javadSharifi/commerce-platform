@@ -55,21 +55,12 @@
 
 ## ۵. روش کار برای هر تسک
 
-> خلاصه است. جزئیات کامل (شروع جلسه، قالب سوال، دیباگ، Git، تحویل بین جلسه‌ها) در `docs/WORKFLOW.md`؛ **قبل از اولین تسک هر جلسه بخوانش.**
+برای سؤال یا بررسیِ فقط‌خواندنی، همین قواعد و منابع مرتبط با درخواست را بخوان.
+برای اجرای تسک، از [بخش شروع جلسه](docs/WORKFLOW.md#۱-شروع-جلسه) آغاز کن و بخش‌های دیگر روش کار را در مرحلهٔ مربوط بخوان.
 
-**قبل از شروع**
-1. تسک را در `docs/psychology/TASKS.md` پیدا کن (مثلاً `PSY-0.7`). فقط همان تسک (یا گروه کوچک کنارش) را انجام بده.
-2. اگر `docs/psychology/modules/<module>.md` یا `docs/patterns/` مرتبط وجود دارد، بخوانش و از **الگوی موجود** پیروی کن.
-3. در ۳ تا ۵ خط بنویس چه می‌خواهی بکنی و کدام فایل‌ها را عوض می‌کنی. اگر بیش از ۵ فایل شد، تسک را کوچک‌تر کن.
-
-**حین کار**
-4. اول تست (یا حداقل سناریوی تست) بنویس، بعد پیاده‌سازی.
-5. از الگوهای موجود در کد پیروی کن؛ سبک جدید اختراع نکن.
-6. ساده‌ترین راه **درست** را انتخاب کن، نه ساده‌ترین راه.
-
-**بعد از پایان**
-7. تست و lint را اجرا کن (بخش ۷). اگر چیزی fail شد، درستش کن، نه اینکه دورش بزنی.
-8. گزارش بده (بخش ۸).
+1. تسک را در `docs/psychology/TASKS.md` با شناسه پیدا کن. پیش‌نیاز، معیار پذیرش، مشخصات ماژول و الگوی مرتبط را بخوان. محدوده همان تسک یا گروه کوچک تأییدشده است.
+2. پیش از تغییر، در ۳ تا ۵ خط طرح و فایل‌ها را بنویس. اگر بیش از ۵ فایل شد، تسک را کوچک‌تر کن.
+3. اول تست یا سناریوی تست، بعد پیاده‌سازی با الگوی موجود. تأیید و گزارش طبق بخش‌های ۷ و ۸.
 
 ---
 
@@ -111,26 +102,11 @@
 
 ---
 
-## ۹. نقشه فایل‌ها
+## ۹. مسیرهای مستندات
 
-| فایل | کاربرد |
-| --- | --- |
-| `docs/psychology/PROJECT_BRIEF.md` | هدف، معماری، مفاهیم، توضیح فازها |
-| [نقشهٔ پروژه](docs/psychology/PROJECT_MAP.md) | ساختار Monorepo و محل هر قابلیت، برای مراجعه هنگام پیدا کردن مسیر |
-| `docs/psychology/TASKS.md` | چک‌لیست تسک‌ها (منبع حقیقت برای «کار بعدی چیست») |
-| `docs/ANTI_PATTERNS.md` | «کار آسان ولی غلط» ← «کار درست» (AP-01 تا AP-22) |
-| `docs/patterns/README.md` | فهرست الگوها، کتابخانه‌های پایه‌ی مجاز، قراردادهای مشترک |
-| `docs/patterns/01-tenant-scoped-module.md` | هر endpoint/سرویس روی داده‌ی tenant-scoped |
-| `docs/patterns/02-migration-rls.md` | هر جدول یا تغییر جدول (Migration + RLS) |
-| `docs/patterns/03-tenant-isolation-test.md` | تست ایزولاسیون و تست‌های نگهبان |
-| `docs/patterns/04-ui-and-templates.md` | سیستم طراحی مشترک، قواعد RTL و ساخت قالب‌های سایت |
-| `docs/psychology/modules/README.md` | فهرست مشخصات ماژول‌ها، سناریوهای تست و پیش‌نیازهای هر ماژول |
-| `docs/psychology/modules/ui-templates.md` | مشخصات فاز `PSY-5`، کامپوننت‌های مشترک، تقویم شمسی و موتور چندقالبی |
-| `docs/psychology/DECISIONS.md` | تصمیم‌های معماری و قواعد محصول |
-| `docs/WORKFLOW.md` | روش کار قدم‌به‌قدم: شروع جلسه، حلقه‌ی تسک، چه موقع بپرسم، دیباگ، Git |
-| `docs/psychology/PROGRESS.md` | وضعیت فعلی و تحویل بین جلسه‌ها *(اگر وجود ندارد، طبق WORKFLOW بخش ۹ بساز)* |
-| `docs/psychology/database.md` | Schema نهایی |
-| `packages/contracts/psychology/openapi.yaml` | قرارداد API |
-| [docs/psychology/README.md](docs/psychology/README.md) | ورود به نقشهٔ راه و مشخصات مستقل سایت‌ساز روان‌شناس‌ها |
+- [راهنمای پروژه](docs/psychology/README.md)، [نقشهٔ کد](docs/psychology/PROJECT_MAP.md) و [فهرست ماژول‌ها](docs/psychology/modules/README.md)
+- [تسک‌ها](docs/psychology/TASKS.md)، [پذیرش](docs/psychology/ACCEPTANCE.md) و [تصمیم‌ها](docs/psychology/DECISIONS.md)
+- [الگوها و کتابخانه‌های مجاز](docs/patterns/README.md)، [ضدالگوها](docs/ANTI_PATTERNS.md) و [روش کار](docs/WORKFLOW.md)
+- [خلاصهٔ وضعیت](docs/psychology/PROGRESS.md#وضعیت-فعلی)، [Schema](docs/psychology/database.md) و [OpenAPI](packages/contracts/psychology/openapi.yaml)
 
-اگر فایلی «هنوز ساخته نشده» است، **محتوایش را حدس نزن**؛ همین‌جا و در `docs/psychology/PROJECT_BRIEF.md` بمان یا بپرس.
+اگر سندی هنوز وجود ندارد، محتوایش را حدس نزن. به [بریف پروژه](docs/psychology/PROJECT_BRIEF.md) رجوع کن یا بپرس.

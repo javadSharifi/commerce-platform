@@ -1,3 +1,6 @@
+import { blogFixture } from './blog-fixture.mjs';
+import { educationFixture } from './education-fixture.mjs';
+import { fetchOnHost } from './http-host.mjs';
 import test from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
@@ -26,7 +29,7 @@ test('Templates Registry and SSR BaseLayout verification', async () => {
     });
 
     // 1. Verify Templates Registry via /api/templates
-    const apiRes = await fetch(`http://127.0.0.1:${port}/api/templates`);
+    const apiRes = await fetchOnHost(`http://127.0.0.1:${port}/api/templates`);
     assert.strictEqual(apiRes.status, 200);
     const registeredTemplates = await apiRes.json();
 
@@ -58,7 +61,7 @@ test('Templates Registry and SSR BaseLayout verification', async () => {
     }
 
     // 2. Default SSR request renders minimal template
-    const resDefault = await fetch(`http://127.0.0.1:${port}/`);
+    const resDefault = await fetchOnHost(`http://127.0.0.1:${port}/`);
     assert.strictEqual(resDefault.status, 200);
     const htmlDefault = await resDefault.text();
     assert.match(htmlDefault, /data-theme="minimal"/);
@@ -68,7 +71,7 @@ test('Templates Registry and SSR BaseLayout verification', async () => {
     assert.match(htmlDefault, /قالب اختصاصی مینیمال/);
 
     // 3. Clinical SSR request on /preview renders clinical template
-    const resClinical = await fetch(`http://127.0.0.1:${port}/preview?template=clinical`);
+    const resClinical = await fetchOnHost(`http://127.0.0.1:${port}/preview?template=clinical`);
     assert.strictEqual(resClinical.status, 200);
     const htmlClinical = await resClinical.text();
     assert.match(htmlClinical, /data-theme="clinical"/);
@@ -76,14 +79,14 @@ test('Templates Registry and SSR BaseLayout verification', async () => {
     assert.match(htmlClinical, /قالب کلینیکال/);
 
     // 4. Unknown template safely falls back to minimal template
-    const resFallback = await fetch(`http://127.0.0.1:${port}/preview?template=unknown_xyz_random`);
+    const resFallback = await fetchOnHost(`http://127.0.0.1:${port}/preview?template=unknown_xyz_random`);
     assert.strictEqual(resFallback.status, 200);
     const htmlFallback = await resFallback.text();
     assert.match(htmlFallback, /data-theme="minimal"/);
     assert.match(htmlFallback, /قالب اختصاصی مینیمال/);
 
     // 5. Empty template safely falls back to minimal template
-    const resEmpty = await fetch(`http://127.0.0.1:${port}/preview?template=`);
+    const resEmpty = await fetchOnHost(`http://127.0.0.1:${port}/preview?template=`);
     assert.strictEqual(resEmpty.status, 200);
     const htmlEmpty = await resEmpty.text();
     assert.match(htmlEmpty, /data-theme="minimal"/);
@@ -91,7 +94,7 @@ test('Templates Registry and SSR BaseLayout verification', async () => {
 
     // 6. Inherited Object prototype properties safely fall back to minimal
     for (const protoKey of ['toString', 'valueOf', 'constructor', '__proto__', 'hasOwnProperty', 'isPrototypeOf']) {
-      const resProto = await fetch(`http://127.0.0.1:${port}/preview?template=${protoKey}`);
+      const resProto = await fetchOnHost(`http://127.0.0.1:${port}/preview?template=${protoKey}`);
       assert.strictEqual(
         resProto.status,
         200,
@@ -161,7 +164,7 @@ test('PSY-5.17: Home page / fallback to minimal for unknown and inherited protot
 
     for (const testId of ['toString', 'valueOf', 'constructor', '__proto__', 'nonexistent_template_xyz']) {
       currentTemplateId = testId;
-      const resHome = await fetch(`http://127.0.0.1:${sitePort}/`, {
+      const resHome = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
         headers: { Host: 'rezaei-clinic.ir', 'X-Forwarded-Host': 'rezaei-clinic.ir' },
       });
       assert.strictEqual(
@@ -183,7 +186,7 @@ test('PSY-5.17: Home page / fallback to minimal for unknown and inherited protot
   }
 });
 
-test('PSY-6.1: Four Palettes SSR Render, Fixed Template with Changed Palette, and Fixed Palette with Changed Template', async () => {
+test('Registered palettes and templates can be selected independently in SSR', async () => {
   const sitePort = 4416;
   const child = spawn('node', ['./dist/server/entry.mjs'], {
     cwd: siteDir,
@@ -209,7 +212,7 @@ test('PSY-6.1: Four Palettes SSR Render, Fixed Template with Changed Palette, an
     const host = 'rezaei-clinic.ir';
 
     // 1. Default SSR render of default palette (calm-sage)
-    const resDefault = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resDefault = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resDefault.status, 200);
@@ -217,14 +220,14 @@ test('PSY-6.1: Four Palettes SSR Render, Fixed Template with Changed Palette, an
     assert.match(htmlDefault, /data-palette="calm-sage"/, 'Default SSR must render calm-sage palette');
 
     // 2. Preview with default palette (calm-sage) and non-default palette (ocean-trust)
-    const resSage = await fetch(`http://127.0.0.1:${sitePort}/preview?palette=calm-sage`, {
+    const resSage = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?palette=calm-sage`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resSage.status, 200);
     const htmlSage = await resSage.text();
     assert.match(htmlSage, /data-palette="calm-sage"/);
 
-    const resOcean = await fetch(`http://127.0.0.1:${sitePort}/preview?palette=ocean-trust`, {
+    const resOcean = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?palette=ocean-trust`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resOcean.status, 200);
@@ -232,8 +235,8 @@ test('PSY-6.1: Four Palettes SSR Render, Fixed Template with Changed Palette, an
     assert.match(htmlOcean, /data-palette="ocean-trust"/);
 
     // 3. Fixed Template (minimal) with 4 Changed Palettes
-    for (const pal of ['calm-sage', 'ocean-trust', 'warm-sand', 'royal-plum']) {
-      const resPal = await fetch(`http://127.0.0.1:${sitePort}/preview?template=minimal&palette=${pal}`, {
+    for (const pal of ['calm-sage', 'ocean-trust', 'warm-sand', 'royal-plum', 'stitch-editorial']) {
+      const resPal = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?template=minimal&palette=${pal}`, {
         headers: { Host: host, 'X-Forwarded-Host': host },
       });
       assert.strictEqual(resPal.status, 200);
@@ -243,7 +246,7 @@ test('PSY-6.1: Four Palettes SSR Render, Fixed Template with Changed Palette, an
     }
 
     // 4. Fixed Palette (ocean-trust) with Changed Template (minimal vs clinical)
-    const resMinOcean = await fetch(
+    const resMinOcean = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=minimal&palette=ocean-trust`,
       { headers: { Host: host, 'X-Forwarded-Host': host } }
     );
@@ -252,7 +255,7 @@ test('PSY-6.1: Four Palettes SSR Render, Fixed Template with Changed Palette, an
     assert.match(htmlMinOcean, /data-theme="minimal"/);
     assert.match(htmlMinOcean, /data-palette="ocean-trust"/);
 
-    const resClinOcean = await fetch(
+    const resClinOcean = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=clinical&palette=ocean-trust`,
       { headers: { Host: host, 'X-Forwarded-Host': host } }
     );
@@ -263,7 +266,7 @@ test('PSY-6.1: Four Palettes SSR Render, Fixed Template with Changed Palette, an
 
     // 5. Safe fallback for unknown and prototype keys: falls back to calm-sage
     for (const invalidPal of ['unknown_pal', 'toString', 'valueOf', 'constructor', '__proto__']) {
-      const resFallback = await fetch(`http://127.0.0.1:${sitePort}/preview?palette=${invalidPal}`, {
+      const resFallback = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?palette=${invalidPal}`, {
         headers: { Host: host, 'X-Forwarded-Host': host },
       });
       assert.strictEqual(resFallback.status, 200, `Unknown palette ${invalidPal} must return 200 OK`);
@@ -305,7 +308,7 @@ test('PSY-6.2: Optional Shell in Templates Registry, BaseLayout Meta Ownership a
     const host = 'rezaei-clinic.ir';
 
     // 1. Home page / renders minimal-shell
-    const resHome = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resHome = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resHome.status, 200);
@@ -314,14 +317,14 @@ test('PSY-6.2: Optional Shell in Templates Registry, BaseLayout Meta Ownership a
     assert.match(htmlHome, /<main class="flex-1 w-full"/, 'Shell must provide main content container');
 
     // 2. Preview page with minimal vs clinical shell
-    const resPrevMin = await fetch(`http://127.0.0.1:${sitePort}/preview?template=minimal`, {
+    const resPrevMin = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?template=minimal`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resPrevMin.status, 200);
     const htmlPrevMin = await resPrevMin.text();
     assert.match(htmlPrevMin, /class="[^"]*minimal-shell[^"]*"/, 'Preview minimal must use minimal-shell');
 
-    const resPrevClin = await fetch(`http://127.0.0.1:${sitePort}/preview?template=clinical`, {
+    const resPrevClin = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?template=clinical`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resPrevClin.status, 200);
@@ -343,7 +346,7 @@ test('PSY-6.2: Optional Shell in Templates Registry, BaseLayout Meta Ownership a
 
     // 4. Inner Routes Regression: All inner routes render within the template Shell
     const innerRoutes = [
-      { path: '/courses', checkText: 'دوره‌های آموزشی تخصصی' },
+      { path: '/courses', checkText: 'دوره‌ها و کارگاه‌های آموزشی' },
       { path: '/workshops', checkText: 'کارگاه‌های تخصصی و آموزشی' },
       { path: '/blog', checkText: 'مقالات و یادداشت‌های تخصصی' },
       { path: '/booking', checkText: 'درخواست نوبت مشاوره' },
@@ -351,7 +354,7 @@ test('PSY-6.2: Optional Shell in Templates Registry, BaseLayout Meta Ownership a
     ];
 
     for (const route of innerRoutes) {
-      const res = await fetch(`http://127.0.0.1:${sitePort}${route.path}`, {
+      const res = await fetchOnHost(`http://127.0.0.1:${sitePort}${route.path}`, {
         headers: { Host: host, 'X-Forwarded-Host': host },
       });
       assert.strictEqual(res.status, 200, `Route ${route.path} must return 200 OK`);
@@ -371,7 +374,12 @@ test('PSY-6.3: Mobile-App Template SSR Render, Bottom Navigation Bar (4 Destinat
   const sitePort = 4419;
   const http = await import('node:http');
 
-  const mockServer = http.createServer((_req, res) => {
+  const mockServer = http.createServer((req, res) => {
+    const education = educationFixture(req.url);
+    if (education !== undefined) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(education));
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
@@ -417,7 +425,7 @@ test('PSY-6.3: Mobile-App Template SSR Render, Bottom Navigation Bar (4 Destinat
     const host = 'hamrah-clinic.ir';
 
     // 1. Home page / with mobile-app template
-    const resHome = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resHome = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resHome.status, 200);
@@ -444,7 +452,7 @@ test('PSY-6.3: Mobile-App Template SSR Render, Bottom Navigation Bar (4 Destinat
     assert.match(htmlHome, /<meta name="viewport" content="width=device-width/);
 
     // 2. Course Details page (/courses/anxiety-management) in mobile-app shell
-    const resCourse = await fetch(`http://127.0.0.1:${sitePort}/courses/anxiety-management`, {
+    const resCourse = await fetchOnHost(`http://127.0.0.1:${sitePort}/courses/anxiety-management`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resCourse.status, 200);
@@ -455,7 +463,7 @@ test('PSY-6.3: Mobile-App Template SSR Render, Bottom Navigation Bar (4 Destinat
     assert.match(htmlCourse, /دوره جامع مدیریت استرس و اضطراب فراگیر/, 'Must contain course details');
 
     // 3. Booking page (/booking) in mobile-app shell
-    const resBooking = await fetch(`http://127.0.0.1:${sitePort}/booking`, {
+    const resBooking = await fetchOnHost(`http://127.0.0.1:${sitePort}/booking`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resBooking.status, 200);
@@ -467,7 +475,7 @@ test('PSY-6.3: Mobile-App Template SSR Render, Bottom Navigation Bar (4 Destinat
     assert.match(htmlBooking, /overflow-x-hidden/, 'Must contain mobile overflow-x guard');
 
     // 4. Preview endpoint with template=mobile-app
-    const resPreview = await fetch(`http://127.0.0.1:${sitePort}/preview?template=mobile-app`, {
+    const resPreview = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?template=mobile-app`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resPreview.status, 200);
@@ -485,7 +493,12 @@ test('PSY-6.6.1: Site routes take published/preview palette and private routes r
   const sitePort = 4402;
   const mockApiPort = 4403;
 
-  const mockServer = http.createServer((_req, res) => {
+  const mockServer = http.createServer((req, res) => {
+    const education = educationFixture(req.url) ?? blogFixture(req.url, { withMedia: false });
+    if (education !== undefined) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(education));
+    }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.writeHead(200);
     res.end(
@@ -531,7 +544,7 @@ test('PSY-6.6.1: Site routes take published/preview palette and private routes r
     const host = 'warm-clinic.ir';
 
     // 1. Home page / takes published palette (warm-sand)
-    const resHome = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resHome = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resHome.status, 200);
@@ -539,7 +552,7 @@ test('PSY-6.6.1: Site routes take published/preview palette and private routes r
     assert.match(htmlHome, /data-palette="warm-sand"/);
 
     // 2. Preview page /preview takes override palette (royal-plum) and has private, no-store
-    const resPreview = await fetch(`http://127.0.0.1:${sitePort}/preview?palette=royal-plum`, {
+    const resPreview = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?palette=royal-plum`, {
       headers: { Host: host, 'X-Forwarded-Host': host },
     });
     assert.strictEqual(resPreview.status, 200);
@@ -558,7 +571,7 @@ test('PSY-6.6.1: Site routes take published/preview palette and private routes r
     ];
 
     for (const dPath of detailPaths) {
-      const res = await fetch(`http://127.0.0.1:${sitePort}${dPath}`, {
+      const res = await fetchOnHost(`http://127.0.0.1:${sitePort}${dPath}`, {
         headers: { Host: host, 'X-Forwarded-Host': host },
       });
       assert.strictEqual(res.status, 200, `Path ${dPath} must return 200 OK`);
@@ -575,10 +588,10 @@ test('PSY-6.6.1: Site routes take published/preview palette and private routes r
     ];
 
     for (const pPath of privatePaths) {
-      const res = await fetch(`http://127.0.0.1:${sitePort}${pPath}`, {
+      const res = await fetchOnHost(`http://127.0.0.1:${sitePort}${pPath}`, {
         headers: { Host: host, 'X-Forwarded-Host': host },
       });
-      assert.strictEqual(res.status, 200, `Path ${pPath} must return 200 OK`);
+      assert.strictEqual(res.status, pPath.startsWith('/appointments/') ? 404 : 200, `Path ${pPath} must return 200 OK`);
       const cacheHeader = res.headers.get('cache-control') || '';
       assert.match(cacheHeader, /no-store/, `Path ${pPath} must strictly carry no-store`);
       assert.match(cacheHeader, /private/, `Path ${pPath} must strictly carry private`);

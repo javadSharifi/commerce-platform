@@ -1,11 +1,21 @@
+import { bookingFixture } from './booking-fixture.mjs';
+import { fetchOnHost } from './http-host.mjs';
 import test from 'node:test';
+import http from 'node:http';
 import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 
 test('PSY-5.8.3: Interactive pages migration (account/courses, appointments, booking) with no-store and PersianDatePicker Island', async () => {
   const port = 4395;
+  const api = http.createServer((req, res) => {
+    if (bookingFixture(req, res)) return;
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+      name: 'مطب آزمایشی', title: 'مطب آزمایشی', template_id: 'minimal',
+    }));
+  });
+  await new Promise(resolve => api.listen(0, '127.0.0.1', resolve));
   const child = spawn('node', ['./dist/server/entry.mjs'], {
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
+    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', INTERNAL_API_URL: 'http://127.0.0.1:' + api.address().port },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -23,7 +33,7 @@ test('PSY-5.8.3: Interactive pages migration (account/courses, appointments, boo
     const host = 'rezaei-clinic.ir';
 
     // 1. Account Courses Dashboard (/account/courses)
-    const resAccountCourses = await fetch(`http://127.0.0.1:${port}/account/courses`, {
+    const resAccountCourses = await fetchOnHost(`http://127.0.0.1:${port}/account/courses`, {
       headers: { Host: host },
     });
     assert.strictEqual(resAccountCourses.status, 200);
@@ -39,7 +49,7 @@ test('PSY-5.8.3: Interactive pages migration (account/courses, appointments, boo
     assert.doesNotMatch(htmlAccountCourses, /background:\s*#ffffff/);
 
     // 2. Account Course Playback (/account/courses/c-demo-1)
-    const resCourseViewer = await fetch(`http://127.0.0.1:${port}/account/courses/c-demo-1`, {
+    const resCourseViewer = await fetchOnHost(`http://127.0.0.1:${port}/account/courses/c-demo-1`, {
       headers: { Host: host },
     });
     assert.strictEqual(resCourseViewer.status, 200);
@@ -54,7 +64,7 @@ test('PSY-5.8.3: Interactive pages migration (account/courses, appointments, boo
     assert.doesNotMatch(htmlViewer, /color:\s*#0f172a/);
 
     // 3. Private Appointment Details (/appointments/appt-demo-1)
-    const resAppt = await fetch(`http://127.0.0.1:${port}/appointments/appt-demo-1?lookup_hash=hash-test-123`, {
+    const resAppt = await fetchOnHost(`http://127.0.0.1:${port}/appointments/appt-demo-1?lookup_hash=hash-test-123`, {
       headers: { Host: host },
     });
     assert.strictEqual(resAppt.status, 200);
@@ -69,12 +79,12 @@ test('PSY-5.8.3: Interactive pages migration (account/courses, appointments, boo
     assert.doesNotMatch(htmlAppt, /color:\s*#0f172a/);
 
     // 4. Booking Page (/booking) with PersianDatePicker Island
-    const resBooking = await fetch(`http://127.0.0.1:${port}/booking`, {
+    const resBooking = await fetchOnHost(`http://127.0.0.1:${port}/booking`, {
       headers: { Host: host },
     });
     assert.strictEqual(resBooking.status, 200);
     const ccBooking = resBooking.headers.get('cache-control') || '';
-    assert.ok(ccBooking.includes('public'), 'Booking page must have public caching');
+    assert.match(ccBooking, /private, no-store/);
     assert.ok(!ccBooking.includes('s-maxage'), 'Booking page must NOT have s-maxage stale cache');
     const htmlBooking = await resBooking.text();
     assert.match(htmlBooking, /درخواست نوبت مشاوره و روان‌درمانی/);
@@ -102,6 +112,8 @@ test('PSY-5.8.3: Interactive pages migration (account/courses, appointments, boo
     assert.match(htmlBooking, /grid-cols-1/, 'Must support 1-column layout on mobile viewports');
   } finally {
     child.kill('SIGTERM');
+    api.closeAllConnections();
+    await new Promise(resolve => api.close(resolve));
   }
 });
 
@@ -196,7 +208,7 @@ test('PSY-5.18: Booking flow with live API sends Gregorian ISO date for slots an
       setTimeout(() => reject(new Error('timeout waiting for site server to start')), 6000);
     });
 
-    const resBooking = await fetch(`http://127.0.0.1:${sitePort}/booking`, {
+    const resBooking = await fetchOnHost(`http://127.0.0.1:${sitePort}/booking`, {
       headers: {
         Host: 'mehr-clinic.ir',
         'X-Forwarded-Host': 'mehr-clinic.ir',

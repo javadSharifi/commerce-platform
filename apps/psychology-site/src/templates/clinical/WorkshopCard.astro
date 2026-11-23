@@ -3,7 +3,7 @@ import type { WorkshopCardVM } from '../view-models.js';
 
 interface Props extends WorkshopCardVM {}
 
-const { id, title, instructorName, priceLabel, dateLabel, capacityLabel, coverUrl } = Astro.props;
+const { id, title, instructorName, priceLabel, dateLabel, capacityLabel, coverUrl, registrationOpen } = Astro.props;
 ---
 
 <div class="card bg-base-100 border border-base-300 hover:border-primary/60 transition-all duration-200 overflow-hidden shadow-xs rounded-xl flex flex-col h-full">
@@ -40,7 +40,7 @@ const { id, title, instructorName, priceLabel, dateLabel, capacityLabel, coverUr
         <span class="font-bold text-primary text-base">{priceLabel}</span>
       </div>
       <a href={`/workshops/${id}`} class="btn btn-sm btn-primary rounded-lg font-medium">
-        ثبت‌نام آنلاین
+        {registrationOpen === false ? 'مشاهده کارگاه' : 'ثبت‌نام آنلاین'}
       </a>
     </div>
   </div>

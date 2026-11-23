@@ -1,4 +1,6 @@
 import { ApiClientError, PsychologyApiClient, type PublicSiteResponse } from '@psychology/api-client';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 
 export const DEFAULT_SITE: PublicSiteResponse = {
   name: 'کلینیک روان‌شناسی و مشاوره مهر',
@@ -31,23 +33,45 @@ export type PublicSiteResult =
   | { ok: false; status: 404; code: 'HOST_NOT_FOUND'; message: string }
   | { ok: false; status: 502 | 503; code: 'API_UNAVAILABLE'; message: string };
 
-export async function fetchPublicSiteResult(request: Request): Promise<PublicSiteResult> {
-  const apiBase = getApiBaseUrl();
-  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000';
+const fetchPublicApi: typeof fetch = (input, options) => new Promise((resolve, reject) => {
+  const url = new URL(String(input));
+  const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
+  // Node fetch substitutes the upstream URL's Host. Go resolves the public clinic from Host.
+  const upstream = request(url, {
+    method: options?.method ?? 'GET',
+    headers: Object.fromEntries(new Headers(options?.headers)),
+    signal: AbortSignal.timeout(2000),
+  }, async response => {
+    try {
+      const body = Buffer.concat(await Array.fromAsync(response));
+      resolve(new Response(body.byteLength ? new Uint8Array(body) : null, { status: response.statusCode }));
+    } catch (err) {
+      reject(err);
+    }
+  });
+  upstream.on('error', reject).end(typeof options?.body === 'string' ? options.body : undefined);
+});
 
-  if (!apiBase) {
+export function publicSiteClient(request: Request): PsychologyApiClient | undefined {
+  const baseUrl = getApiBaseUrl();
+  if (!baseUrl) return undefined;
+  const host = request.headers.get('host') || new URL(request.url).host;
+  return new PsychologyApiClient({ baseUrl, headers: { Host: host }, fetch: fetchPublicApi });
+}
+
+export function fetchPublicResource(request: Request, path: string): Promise<Response> {
+  const host = request.headers.get('host') || new URL(request.url).host;
+  return fetchPublicApi(new URL(path, getApiBaseUrl() || 'http://localhost:8080'), { headers: { Host: host } });
+}
+
+export async function fetchPublicSiteResult(request: Request): Promise<PublicSiteResult> {
+  const client = publicSiteClient(request);
+  if (!client) {
     // When INTERNAL_API_URL is not configured (offline UI template tests), allow default mock site
     return { ok: true, site: DEFAULT_SITE };
   }
 
   try {
-    const client = new PsychologyApiClient({
-      baseUrl: apiBase,
-      headers: {
-        Host: host,
-        'X-Forwarded-Host': host,
-      },
-    });
     const site = await client.getPublicSite();
     if (site && site.name) {
       return { ok: true, site };

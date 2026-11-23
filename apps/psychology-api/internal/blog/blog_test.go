@@ -151,8 +151,12 @@ func (m *mockBlogQuerier) UpdateBlogPost(ctx context.Context, arg blogdb.UpdateB
 
 	bp.Title = arg.Title
 	bp.Slug = arg.Slug
-	bp.SeoDescription = arg.SeoDescription
-	bp.ContentBlocks = arg.ContentBlocks
+	if arg.SeoDescription.Valid {
+		bp.SeoDescription = arg.SeoDescription.String
+	}
+	if arg.ContentBlocks != nil {
+		bp.ContentBlocks = arg.ContentBlocks
+	}
 	bp.UpdatedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	m.posts[fromPgUUID(arg.ID).String()] = bp
 	return bp, nil
@@ -702,5 +706,20 @@ func TestCrossTenantIsolation(t *testing.T) {
 
 	if recMasquerade.Code != http.StatusForbidden {
 		t.Errorf("expected 403 Forbidden when pretending to belong to another tenant, got: %d", recMasquerade.Code)
+	}
+}
+
+func TestLegacyNullBlocksMapToEmptyArray(t *testing.T) {
+	tenantID := uuid.New()
+	store := newMockBlogQuerier()
+	store.posts["legacy"] = blogdb.BlogPost{
+		TenantID: toPgUUID(tenantID), Slug: "legacy", Status: "published", ContentBlocks: []byte("null"),
+	}
+	post, err := blog.NewService(store).GetPublishedPostBySlug(context.Background(), tenantID, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if post.ContentBlocks == nil || len(post.ContentBlocks) != 0 {
+		t.Fatalf("legacy null blocks must map to an empty array, got %#v", post.ContentBlocks)
 	}
 }

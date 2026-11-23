@@ -2,12 +2,14 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import HomePageContent from '../components/HomePageContent.astro';
 import { fetchPublicSite } from '../lib/site.js';
-
-// Edge CDN and reverse proxy caching: public canonical homepage
-Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
+import { getHomeContent } from '../lib/home.js';
 
 // Fetch published tenant settings for the current Host
 const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
+const content = await getHomeContent(Astro.request);
+Astro.response.headers.set('Cache-Control', content.unavailable
+  ? 'no-store'
+  : 'public, max-age=0, s-maxage=3600, stale-while-revalidate=60');
 ---
 
 <BaseLayout
@@ -18,5 +20,5 @@ const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
   themeRadius={site.theme_radius}
   themeScale={site.theme_scale}
 >
-  <HomePageContent site={site} templateId={site.template_id} />
+  <HomePageContent site={site} templateId={site.template_id} {...content} />
 </BaseLayout>

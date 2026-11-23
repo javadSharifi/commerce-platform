@@ -1,3 +1,5 @@
+import { bookingFixture, fixtureTime } from './booking-fixture.mjs';
+import { fetchOnHost } from './http-host.mjs';
 import test from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
@@ -149,15 +151,15 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     {
       id: 'slot-sharifi-101',
       therapist_id: 'th-sharifi-01',
-      starts_at: '2026-11-23T10:00:00Z',
-      ends_at: '2026-11-23T10:50:00Z',
+      starts_at: fixtureTime(0),
+      ends_at: fixtureTime(50),
       status: 'available',
     },
     {
       id: 'slot-sharifi-102',
       therapist_id: 'th-sharifi-01',
-      starts_at: '2026-11-23T11:30:00Z',
-      ends_at: '2026-11-23T12:20:00Z',
+      starts_at: fixtureTime(60),
+      ends_at: fixtureTime(110),
       status: 'booked',
     },
   ];
@@ -296,6 +298,8 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     }
 
     // 6. Therapists & Slots
+    if (pathname.startsWith('/v1/public/appointments/') && bookingFixture(req, res, cleanHost !== hostA)) return;
+
     if (pathname === '/v1/public/therapists') {
       if (cleanHost === hostA) {
         res.writeHead(200);
@@ -380,7 +384,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     const reqB = { Host: hostB, 'X-Forwarded-Host': hostB };
 
     // 1a. Preview Host A with template=editorial & palette=calm-sage
-    const resPreviewA = await fetch(
+    const resPreviewA = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=editorial&palette=calm-sage`,
       { headers: reqA }
     );
@@ -395,7 +399,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.match(htmlPreviewA, /data-palette="calm-sage"/, 'Preview must render calm-sage palette');
 
     // 1b. Verify Host A root / before publishing is still minimal
-    const resRootBeforeA = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resRootBeforeA = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: reqA,
     });
     assert.strictEqual(resRootBeforeA.status, 200);
@@ -403,7 +407,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.match(htmlRootBeforeA, /data-theme="minimal"/, 'Host A root must remain minimal prior to publishing');
 
     // 1c. Publish "editorial" template with "calm-sage" on Host A via Mock API
-    const putResA = await fetch(`http://127.0.0.1:${mockApiPort}/v1/admin/site/appearance`, {
+    const putResA = await fetchOnHost(`http://127.0.0.1:${mockApiPort}/v1/admin/site/appearance`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -418,7 +422,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.strictEqual(putResA.status, 200, 'Appearance publishing must succeed');
 
     // 1d. Now fetch Host A root /: must render published editorial template
-    const resRootAfterA = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resRootAfterA = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: reqA,
     });
     assert.strictEqual(resRootAfterA.status, 200);
@@ -429,7 +433,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.doesNotMatch(htmlRootAfterA, /مرکز مشاوره و روان‌شناسی مرادی/, 'Zero tenant leak: Clinic B name must not appear in Clinic A');
 
     // 1e. Verify Host B root / remains clinical and warm-sand (Isolation)
-    const resRootB = await fetch(`http://127.0.0.1:${sitePort}/`, {
+    const resRootB = await fetchOnHost(`http://127.0.0.1:${sitePort}/`, {
       headers: reqB,
     });
     assert.strictEqual(resRootB.status, 200);
@@ -442,7 +446,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     // =========================================================================
     // SCENARIO 2: One Template with Two Palettes & One Palette with Two Templates
     // =========================================================================
-    const resCalmSage = await fetch(
+    const resCalmSage = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=editorial&palette=calm-sage`,
       { headers: reqA }
     );
@@ -450,7 +454,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.match(htmlCalmSage, /data-theme="editorial"/);
     assert.match(htmlCalmSage, /data-palette="calm-sage"/);
 
-    const resOceanTrust = await fetch(
+    const resOceanTrust = await fetchOnHost(
       `http://127.0.0.1:${sitePort}/preview?template=editorial&palette=ocean-trust`,
       { headers: reqA }
     );
@@ -463,7 +467,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     // =========================================================================
 
     // 3a. /courses listing on Host A
-    const resCoursesA = await fetch(`http://127.0.0.1:${sitePort}/courses`, {
+    const resCoursesA = await fetchOnHost(`http://127.0.0.1:${sitePort}/courses`, {
       headers: reqA,
     });
     assert.strictEqual(resCoursesA.status, 200);
@@ -475,7 +479,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.doesNotMatch(htmlCoursesA, /<script[^>]*astro-island/, 'Content page must have 0 KB client JS');
 
     // 3b. /courses/[slug] detail
-    const resCourseDetailA = await fetch(`http://127.0.0.1:${sitePort}/courses/stress-anxiety-management`, {
+    const resCourseDetailA = await fetchOnHost(`http://127.0.0.1:${sitePort}/courses/stress-anxiety-management`, {
       headers: reqA,
     });
     assert.strictEqual(resCourseDetailA.status, 200);
@@ -484,13 +488,13 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.match(htmlCourseDetailA, /دکتر محمد جواد شریفی/, 'Must render instructor name');
 
     // 3c. Invalid course slug returns 404
-    const resCourse404 = await fetch(`http://127.0.0.1:${sitePort}/courses/nonexistent-slug-xyz`, {
+    const resCourse404 = await fetchOnHost(`http://127.0.0.1:${sitePort}/courses/nonexistent-slug-xyz`, {
       headers: reqA,
     });
     assert.strictEqual(resCourse404.status, 404, 'Invalid course slug must return 404');
 
     // 3d. /workshops listing on Host A
-    const resWorkshopsA = await fetch(`http://127.0.0.1:${sitePort}/workshops`, {
+    const resWorkshopsA = await fetchOnHost(`http://127.0.0.1:${sitePort}/workshops`, {
       headers: reqA,
     });
     assert.strictEqual(resWorkshopsA.status, 200);
@@ -499,7 +503,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.match(htmlWorkshopsA, /href="\/workshops\/ws-sharifi-1"/, 'CTA must link to specific workshop ID');
 
     // 3e. /blog listing and blog draft isolation
-    const resBlogA = await fetch(`http://127.0.0.1:${sitePort}/blog`, {
+    const resBlogA = await fetchOnHost(`http://127.0.0.1:${sitePort}/blog`, {
       headers: reqA,
     });
     assert.strictEqual(resBlogA.status, 200);
@@ -508,7 +512,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.doesNotMatch(htmlBlogA, /پیش‌نویس منتشرنشده/, 'Draft articles must never be rendered in public blog');
 
     // 3f. /blog/[slug] article detail
-    const resArticleA = await fetch(`http://127.0.0.1:${sitePort}/blog/identifying-hidden-anxiety`, {
+    const resArticleA = await fetchOnHost(`http://127.0.0.1:${sitePort}/blog/identifying-hidden-anxiety`, {
       headers: reqA,
     });
     assert.strictEqual(resArticleA.status, 200);
@@ -517,7 +521,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     assert.match(htmlArticleA, /خستگی مزمن بدون دلیل پزشکی/, 'Must render whitelisted paragraph block');
 
     // 3g. Invalid blog slug returns 404
-    const resBlog404 = await fetch(`http://127.0.0.1:${sitePort}/blog/nonexistent-blog-slug-404`, {
+    const resBlog404 = await fetchOnHost(`http://127.0.0.1:${sitePort}/blog/nonexistent-blog-slug-404`, {
       headers: reqA,
     });
     assert.strictEqual(resBlog404.status, 404, 'Invalid blog slug must return 404');
@@ -525,7 +529,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     // =========================================================================
     // SCENARIO 4: Booking Flow on Host A with Editorial Template
     // =========================================================================
-    const resBookingA = await fetch(`http://127.0.0.1:${sitePort}/booking`, {
+    const resBookingA = await fetchOnHost(`http://127.0.0.1:${sitePort}/booking`, {
       headers: reqA,
     });
     assert.strictEqual(resBookingA.status, 200);
@@ -561,7 +565,7 @@ test('PSY-A14 Acceptance Test: Editorial Redesign, Multi-Tenant Appearance Selec
     // SCENARIO 6: Private Account & Appointment Routes Strict no-store Verification
     // =========================================================================
     const checkPrivateNoStore = async (urlPath) => {
-      const res = await fetch(`http://127.0.0.1:${sitePort}${urlPath}`, {
+      const res = await fetchOnHost(`http://127.0.0.1:${sitePort}${urlPath}`, {
         headers: reqA,
       });
       assert.strictEqual(res.status, 200, `${urlPath} must return 200 OK`);

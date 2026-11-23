@@ -33,7 +33,8 @@ SELECT t.name as clinic_name,
        COALESCE(s.template_version, '1.0.0')::text as template_version,
        COALESCE(s.theme_radius, 'md')::text as theme_radius,
        COALESCE(s.theme_scale, 'md')::text as theme_scale,
-       COALESCE(s.palette_id, 'calm-sage')::text as palette_id
+       COALESCE(s.palette_id, 'calm-sage')::text as palette_id,
+       COALESCE(s.home_profile, '{}'::jsonb)::text AS home_profile, s.portrait_media_id
 FROM tenants t
 LEFT JOIN site_settings s ON s.tenant_id = t.id
 WHERE t.id = $1 AND t.status = 'active'
@@ -52,6 +53,8 @@ type GetPublicSiteProfileRow struct {
 	ThemeRadius     string
 	ThemeScale      string
 	PaletteID       string
+	HomeProfile     string
+	PortraitMediaID pgtype.UUID
 }
 
 func (q *Queries) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (GetPublicSiteProfileRow, error) {
@@ -70,6 +73,8 @@ func (q *Queries) GetPublicSiteProfile(ctx context.Context, id pgtype.UUID) (Get
 		&i.ThemeRadius,
 		&i.ThemeScale,
 		&i.PaletteID,
+		&i.HomeProfile,
+		&i.PortraitMediaID,
 	)
 	return i, err
 }
@@ -109,7 +114,8 @@ func (q *Queries) GetSiteAppearance(ctx context.Context, tenantID pgtype.UUID) (
 
 const getSiteSettings = `-- name: GetSiteSettings :one
 SELECT tenant_id, title, description, phone, address, primary_color, logo_media_id,
-       template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at
+       template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at,
+       home_profile::text AS home_profile, portrait_media_id
 FROM site_settings
 WHERE tenant_id = $1
 `
@@ -129,6 +135,8 @@ type GetSiteSettingsRow struct {
 	PaletteID       string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	HomeProfile     string
+	PortraitMediaID pgtype.UUID
 }
 
 func (q *Queries) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (GetSiteSettingsRow, error) {
@@ -149,6 +157,8 @@ func (q *Queries) GetSiteSettings(ctx context.Context, tenantID pgtype.UUID) (Ge
 		&i.PaletteID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.HomeProfile,
+		&i.PortraitMediaID,
 	)
 	return i, err
 }
@@ -213,9 +223,11 @@ func (q *Queries) UpsertSiteAppearance(ctx context.Context, arg UpsertSiteAppear
 
 const upsertSiteProfile = `-- name: UpsertSiteProfile :one
 INSERT INTO site_settings (
-    tenant_id, title, description, phone, address, primary_color, logo_media_id, updated_at
+    tenant_id, title, description, phone, address, primary_color, logo_media_id, updated_at,
+    home_profile, portrait_media_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+VALUES ($1, $2, $3, $4, $5, $6, $7, now(),
+        COALESCE($8::text::jsonb, '{}'::jsonb), $9)
 ON CONFLICT (tenant_id) DO UPDATE
 SET title = EXCLUDED.title,
     description = EXCLUDED.description,
@@ -223,19 +235,25 @@ SET title = EXCLUDED.title,
     address = EXCLUDED.address,
     primary_color = EXCLUDED.primary_color,
     logo_media_id = EXCLUDED.logo_media_id,
+    home_profile = COALESCE($8::text::jsonb, site_settings.home_profile),
+    portrait_media_id = CASE WHEN $8::text IS NOT NULL
+        THEN EXCLUDED.portrait_media_id ELSE site_settings.portrait_media_id END,
     updated_at = now()
 RETURNING tenant_id, title, description, phone, address, primary_color, logo_media_id,
-          template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at
+          template_id, template_version, theme_radius, theme_scale, palette_id, created_at, updated_at,
+          home_profile::text AS home_profile, portrait_media_id
 `
 
 type UpsertSiteProfileParams struct {
-	TenantID     pgtype.UUID
-	Title        string
-	Description  string
-	Phone        string
-	Address      string
-	PrimaryColor string
-	LogoMediaID  pgtype.UUID
+	TenantID        pgtype.UUID
+	Title           string
+	Description     string
+	Phone           string
+	Address         string
+	PrimaryColor    string
+	LogoMediaID     pgtype.UUID
+	HomeProfile     pgtype.Text
+	PortraitMediaID pgtype.UUID
 }
 
 type UpsertSiteProfileRow struct {
@@ -253,6 +271,8 @@ type UpsertSiteProfileRow struct {
 	PaletteID       string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	HomeProfile     string
+	PortraitMediaID pgtype.UUID
 }
 
 func (q *Queries) UpsertSiteProfile(ctx context.Context, arg UpsertSiteProfileParams) (UpsertSiteProfileRow, error) {
@@ -264,6 +284,8 @@ func (q *Queries) UpsertSiteProfile(ctx context.Context, arg UpsertSiteProfilePa
 		arg.Address,
 		arg.PrimaryColor,
 		arg.LogoMediaID,
+		arg.HomeProfile,
+		arg.PortraitMediaID,
 	)
 	var i UpsertSiteProfileRow
 	err := row.Scan(
@@ -281,6 +303,8 @@ func (q *Queries) UpsertSiteProfile(ctx context.Context, arg UpsertSiteProfilePa
 		&i.PaletteID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.HomeProfile,
+		&i.PortraitMediaID,
 	)
 	return i, err
 }

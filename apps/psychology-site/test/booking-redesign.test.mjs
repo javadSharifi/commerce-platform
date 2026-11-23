@@ -1,3 +1,4 @@
+import { bookingFixture, fixtureTime } from './booking-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
@@ -17,6 +18,8 @@ test('PSY-7.5: In-person consultation booking redesign, BookingFlow, available v
   const mockServer = http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathname = url.pathname;
+
+    if (pathname.startsWith('/v1/public/appointments/') && bookingFixture(req, res)) return;
 
     // 1. Public Site Data
     if (pathname === '/v1/public/site') {
@@ -74,22 +77,22 @@ test('PSY-7.5: In-person consultation booking redesign, BookingFlow, available v
           {
             id: 'slot-available-101',
             therapist_id: 'th-sharifi-01',
-            starts_at: '2026-11-23T10:00:00Z',
-            ends_at: '2026-11-23T10:50:00Z',
+            starts_at: fixtureTime(0),
+            ends_at: fixtureTime(50),
             status: 'available',
           },
           {
             id: 'slot-booked-102',
             therapist_id: 'th-sharifi-01',
-            starts_at: '2026-11-23T11:30:00Z',
-            ends_at: '2026-11-23T12:20:00Z',
+            starts_at: fixtureTime(90),
+            ends_at: fixtureTime(140),
             status: 'booked',
           },
           {
             id: 'slot-conflict-103',
             therapist_id: 'th-sharifi-01',
-            starts_at: '2026-11-23T15:00:00Z',
-            ends_at: '2026-11-23T15:50:00Z',
+            starts_at: fixtureTime(420),
+            ends_at: fixtureTime(470),
             status: 'available',
           },
         ])
@@ -207,16 +210,18 @@ test('PSY-7.5: In-person consultation booking redesign, BookingFlow, available v
 
     // 1. Verify Cache-Control (public, max-age=0, must-revalidate; no stale s-maxage)
     const cc = resBooking.headers.get('cache-control') || '';
-    assert.ok(cc.includes('public'), 'Cache-Control must be public');
-    assert.ok(cc.includes('max-age=0') || cc.includes('must-revalidate'), 'Cache-Control must specify fresh revalidation');
+    assert.ok(cc.includes('private') && cc.includes('no-store'), 'Live availability must bypass cache');
     assert.ok(!cc.includes('s-maxage'), 'Cache-Control must NOT contain stale s-maxage');
 
     const html = await resBooking.text();
+    assert.match(html, /خلاصه نوبت انتخابی/);
+    assert.match(html, /id="booking-summary"/);
+
 
     // 2. Verify Editorial Header & Badges (Stitch _5/code.html visual cues)
     assert.match(html, /رزرو وقت مشاوره • محرمانه و مطمئن/, 'Header must feature trust badge');
     assert.match(html, /درخواست نوبت مشاوره و روان‌درمانی/, 'Header must feature main H1 headline');
-    assert.match(html, /به مدت ۲ ساعت رزرو موقت/, 'Header lead text must mention 2-hour hold');
+    assert.match(html, /تأیید درخواست با شما تماس می‌گیرد/);
 
     // 3. Verify 2-Column Desktop & 1-Column Mobile Responsive Layout
     assert.match(html, /dir="rtl"/, 'Page must be RTL');
@@ -226,8 +231,7 @@ test('PSY-7.5: In-person consultation booking redesign, BookingFlow, available v
 
     // 4. Verify Trust & Confidentiality Sidebar Card
     assert.match(html, /اصول رازداری و هماهنگی/, 'Sidebar must contain confidentiality section');
-    assert.match(html, /حفظ کامل حریم خصوصی/, 'Must highlight privacy guarantee');
-    assert.match(html, /اطلاعات تماس و نشانی/, 'Sidebar must contain clinic contact information');
+    assert.match(html, /شمارهٔ تماس برای هماهنگی/);
     assert.match(html, /۰۲۱-۲۲۸۴۹۱۰۳/, 'Clinic phone number must be rendered');
     assert.match(html, /تهران، خیابان شریعتی/, 'Clinic address must be rendered');
 
@@ -275,6 +279,35 @@ test('PSY-7.5: In-person consultation booking redesign, BookingFlow, available v
     // Verify Modal component from @psychology/ui
     const { Modal } = await import('@psychology/ui');
     assert.strictEqual(typeof Modal, 'function', 'Modal from @psychology/ui must be a function');
+
+    const tracking = await fetch(`http://127.0.0.1:${sitePort}/appointments/appt-demo-1`, {
+      headers: { Cookie: 'appointment_lookup=hash-test-123' },
+    });
+    assert.equal(tracking.status, 200);
+    assert.match(await tracking.text(), /در انتظار تأیید و تماس پذیرش/);
+    for (const [path, token, status] of [['appt-demo-1', '', 404], ['appt-demo-1', 'wrong', 404], ['unavailable', 'hash-test-123', 503]]) {
+      const res = await fetch(`http://127.0.0.1:${sitePort}/appointments/${path}`, {
+        headers: token ? { Cookie: 'appointment_lookup=' + token } : {},
+      });
+      assert.equal(res.status, status);
+      assert.match(res.headers.get('cache-control'), /no-store/);
+      assert.doesNotMatch(await res.text(), /در انتظار تأیید و تماس پذیرش|مراجع آزمایشی/);
+    }
+
+    const cancel = await fetch(`http://127.0.0.1:${sitePort}/appointments/appt-demo-1/cancel`, {
+      method: 'POST',
+      headers: { Cookie: 'appointment_lookup=hash-test-123', 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(cancel.status, 200);
+    assert.match(cancel.headers.get('cache-control'), /no-store/);
+
+    const crossSiteCancel = await fetch(`http://127.0.0.1:${sitePort}/appointments/appt-demo-1/cancel`, {
+      method: 'POST',
+      headers: { Origin: 'https://other-clinic.test', Cookie: 'appointment_lookup=hash-test-123', 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(crossSiteCancel.status, 403);
 
     // 10. Verify API Interactions directly via Mock Server (Real status handling: 201, 409, 429, 400)
     // 10a. Successful Booking (201 Created)

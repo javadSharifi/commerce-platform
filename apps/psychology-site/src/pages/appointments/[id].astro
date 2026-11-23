@@ -1,321 +1,116 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { fetchPublicSite, getApiBaseUrl } from '../../lib/site.js';
+import { publicSiteClient } from '../../lib/site.js';
+import { ApiClientError, type PublicAppointmentResponse } from '@psychology/api-client';
 
-// Set strict cache-control header to prevent private appointment caching
 Astro.response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+Astro.response.headers.set('Referrer-Policy', 'no-referrer');
+const site = Astro.locals.site!;
+const id = Astro.params.id ?? '';
+const legacyHash = Astro.url.searchParams.get('hash') || Astro.url.searchParams.get('lookup_hash');
+const hash = Astro.cookies.get('appointment_lookup')?.value || legacyHash;
+const api = publicSiteClient(Astro.request);
+let appointment: PublicAppointmentResponse | undefined;
+let unavailable = false;
 
-const { id } = Astro.params;
-const site = Astro.locals.site || (await fetchPublicSite(Astro.request));
-
-const url = new URL(Astro.request.url);
-const lookupHash = url.searchParams.get('hash') || url.searchParams.get('lookup_hash') || '';
-
-// Fallback appointment for SSR/preview
-const now = new Date();
-const sampleStart = new Date(now.getTime() + 24 * 3600 * 1000);
-sampleStart.setUTCHours(11, 0, 0, 0);
-const sampleEnd = new Date(sampleStart.getTime() + 50 * 60 * 1000);
-
-const fallbackAppointment = {
-  id: id || '',
-  therapist_id: 'e48a12bc-1111-4000-8000-000000000001',
-  therapist_name: 'دکتر مریم علوی',
-  guest_name: 'مراجع محترم',
-  status: 'pending',
-  expires_at: new Date(now.getTime() + 2 * 3600 * 1000).toISOString(),
-  starts_at: sampleStart.toISOString(),
-  ends_at: sampleEnd.toISOString(),
-};
-
-let appointmentData = fallbackAppointment;
-let fetchError = '';
-let isUnauthorized = false;
-
-const apiBase = getApiBaseUrl() || 'http://localhost:8080';
-const clientApiBase = import.meta.env.PUBLIC_API_URL || '';
-const host = Astro.request.headers.get('x-forwarded-host') || Astro.request.headers.get('host') || 'localhost:3000';
-
-if (lookupHash && id) {
+if (hash && api) {
   try {
-    const res = await fetch(`${apiBase}/v1/public/appointments/${id}?hash=${encodeURIComponent(lookupHash)}`, {
-      headers: {
-        Host: host,
-        'X-Forwarded-Host': host,
-        'X-Guest-Lookup-Hash': lookupHash,
-      },
-      signal: AbortSignal.timeout(1200),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && (data.starts_at || data.slot_id || data.guest_name || (data.status && data.status !== 'active'))) {
-        appointmentData = data;
-      }
-    } else if (res.status === 404 || res.status === 403) {
-      if (id === 'appt-demo-1' || !import.meta.env.PROD) {
-        appointmentData = fallbackAppointment;
-      } else {
-        isUnauthorized = true;
-        fetchError = 'اطلاعات نوبت یافت نشد یا کلید پیگیری خصوصی نامعتبر است.';
-      }
-    }
-  } catch {
-    // API offline in dev
+    const data = await api.getPublicAppointmentStatus(encodeURIComponent(id), hash);
+    if (data.id !== id || !Number.isFinite(Date.parse(data.starts_at)) ||
+        !Number.isFinite(Date.parse(data.ends_at))) throw new Error('Unexpected appointment response');
+    appointment = data;
+  } catch (err) {
+    unavailable = !(err instanceof ApiClientError && [400, 403, 404].includes(err.status));
+    if (unavailable) console.error('Appointment tracking unavailable', err instanceof Error ? err.name : 'UnknownError');
   }
-} else if (!lookupHash) {
-  if (import.meta.env.PROD) {
-    isUnauthorized = true;
-    fetchError = 'برای مشاهده نوبت نیاز به پیوند اختصاصی پیگیری دارید.';
-  }
+} else {
+  unavailable = Boolean(hash);
 }
 
-function formatDateTehran(dateStr: string) {
-  try {
-    return new Intl.DateTimeFormat('fa-IR', {
-      timeZone: 'Asia/Tehran',
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(new Date(dateStr));
-  } catch {
-    return dateStr;
-  }
+if (!appointment) Astro.response.status = unavailable ? 503 : 404;
+if (appointment && legacyHash && hash) {
+  Astro.cookies.set('appointment_lookup', hash, {
+    path: `/appointments/${encodeURIComponent(id)}`, httpOnly: true, sameSite: 'lax',
+    secure: Astro.url.protocol === 'https:',
+  });
 }
 
-function formatTimeTehran(dateStr: string) {
-  try {
-    return new Intl.DateTimeFormat('fa-IR', {
-      timeZone: 'Asia/Tehran',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(dateStr));
-  } catch {
-    return dateStr;
-  }
-}
-
-function getStatusBadge(st: string) {
-  switch (st) {
-    case 'confirmed':
-      return { text: 'تأییدشده و قطعی', badgeClass: 'badge-success', icon: '✓' };
-    case 'pending':
-      return { text: 'در انتظار تأیید و تماس پذیرش', badgeClass: 'badge-info', icon: '⏳' };
-    case 'cancelled':
-      return { text: 'لغو شده', badgeClass: 'badge-error', icon: '✕' };
-    case 'expired':
-      return { text: 'منقضی‌شده', badgeClass: 'badge-ghost', icon: '⏱' };
-    case 'completed':
-      return { text: 'جلسه برگزار شد', badgeClass: 'badge-neutral', icon: '✓' };
-    default:
-      return { text: st, badgeClass: 'badge-ghost', icon: '•' };
-  }
-}
-
-const badge = getStatusBadge(appointmentData.status);
-const isFuture = new Date(appointmentData.starts_at).getTime() > Date.now();
-const canCancel = (appointmentData.status === 'pending' || appointmentData.status === 'confirmed') && isFuture;
+const status = {
+  pending: 'در انتظار تأیید و تماس پذیرش',
+  confirmed: 'تأییدشده و قطعی',
+  cancelled: 'لغو شده',
+  expired: 'منقضی‌شده',
+  completed: 'جلسه برگزار شد',
+} as const;
+const dateTime = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+  dateStyle: 'long', timeStyle: 'short', timeZone: 'Asia/Tehran',
+});
+const canCancel = appointment && ['pending', 'confirmed'].includes(appointment.status) &&
+  Date.parse(appointment.starts_at) > Date.now();
 ---
 
-<BaseLayout
-  title={`پیگیری خصوصی نوبت مشاوره | ${site.title}`}
-  paletteId={site.palette_id}
-  templateId={site.template_id}
-  themeRadius={site.theme_radius}
-  themeScale={site.theme_scale}
-  robots="noindex, nofollow"
->
-  <div class="max-w-xl mx-auto px-4 py-10">
-    <div class="card bg-base-100 border border-base-200 rounded-box p-6 sm:p-8 shadow-xs">
-      {isUnauthorized ? (
-        <div class="text-center py-6">
-          <div class="w-14 h-14 rounded-full bg-error/20 text-error inline-flex items-center justify-center text-2xl mb-4">
-            🔒
-          </div>
-          <h1 class="text-xl font-bold text-base-content mb-2">
-            دسترسی به اطلاعات نوبت محدود است
-          </h1>
-          <p class="text-xs text-base-content/70 leading-relaxed mb-6">
-            {fetchError || 'جهت حفظ حریم خصوصی مراجعین، مشاهده وضعیت نوبت فقط از طریق پیوند اختصاصی صادر شده امکان‌پذیر است.'}
-          </p>
-          <a href="/booking" class="btn btn-primary btn-sm">
-            بازگشت به تقویم نوبت‌دهی
-          </a>
+<BaseLayout title={`پیگیری خصوصی نوبت | ${site.title}`} paletteId={site.palette_id} templateId={site.template_id}
+  themeRadius={site.theme_radius} themeScale={site.theme_scale} robots="noindex, nofollow">
+  <div class="mx-auto max-w-xl px-4 py-10">
+    <article class="card bg-base-100 rounded-2xl border border-base-200 p-6 sm:p-8">
+      <h1 class="mb-4 text-2xl font-extrabold">وضعیت نوبت مشاوره</h1>
+      {appointment ? (
+        <div class="space-y-5">
+          <p class="badge badge-primary badge-outline">{status[appointment.status] ?? 'وضعیت نامشخص'}</p>
+          <dl class="rounded-xl bg-base-200/55 p-4 text-sm">
+            <dt>نام مراجع</dt><dd class="mb-3 font-semibold">{appointment.guest_name}</dd>
+            <dt>شروع جلسه به وقت تهران</dt><dd class="font-semibold">{dateTime.format(new Date(appointment.starts_at))}</dd>
+          </dl>
+          {canCancel && <button id="cancel-appt-btn" type="button" class="btn btn-outline btn-error">لغو نوبت مشاوره</button>}
         </div>
       ) : (
-        <div>
-          <!-- Status Header -->
-          <div class="text-center mb-6">
-            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-base-200 text-2xl mb-3">
-              {badge.icon}
-            </div>
-            <h1 class="text-xl sm:text-2xl font-extrabold text-base-content mb-2">
-              وضعیت نوبت مشاوره
-            </h1>
-            <div class={`badge ${badge.badgeClass} text-xs font-bold py-2.5 px-4`}>
-              {badge.text}
-            </div>
-          </div>
+        <p role="status" class="alert alert-warning">
+          {unavailable ? 'دریافت وضعیت نوبت موقتاً ممکن نیست. دوباره تلاش کنید.' :
+            'دسترسی به اطلاعات نوبت محدود است. پیگیری از مرورگر ثبت درخواست امکان‌پذیر است.'}
+        </p>
+      )}
+      <a href="/booking" class="btn btn-ghost mt-4">بازگشت به صفحه نوبت‌دهی</a>
+    </article>
 
-          <!-- Status Specific Notice -->
-          {appointmentData.status === 'pending' && (
-            <div class="alert alert-info text-xs mb-6 leading-relaxed">
-              <strong>درخواست شما ثبت موقت شد:</strong> سانس مورد نظر تا حداکثر ۲ ساعت برای شما قفل شده است. همکاران پذیرش کلینیک به زودی جهت تأیید قطعی نوبت و هماهنگی نهایی با شما تماس خواهند گرفت.
-            </div>
-          )}
-
-          {appointmentData.status === 'confirmed' && (
-            <div class="alert alert-success text-xs mb-6 leading-relaxed">
-              <strong>نوبت شما قطعی و نهایی شده است:</strong> لطفاً ۱۰ دقیقه پیش از ساعت شروع جلسه در محل کلینیک حضور به هم رسانید.
-            </div>
-          )}
-
-          {appointmentData.status === 'cancelled' && (
-            <div class="alert alert-error text-xs mb-6 leading-relaxed">
-              این نوبت لغو شده است و زمان آن آزاد گردیده است. در صورت نیاز به تعیین وقت جدید می‌توانید از صفحه رزرو اقدام فرمایید.
-            </div>
-          )}
-
-          {appointmentData.status === 'expired' && (
-            <div class="alert alert-neutral text-xs mb-6 leading-relaxed">
-              مهلت ۲ ساعته تأیید این سانس به پایان رسیده و نوبت منقضی گردیده است.
-            </div>
-          )}
-
-          <!-- Details Table -->
-          <div class="border border-base-200 rounded-box overflow-hidden mb-6 text-xs sm:text-sm">
-            <div class="flex justify-between items-center p-3.5 border-b border-base-200 bg-base-200/40">
-              <span class="text-base-content/60">نام مراجع:</span>
-              <strong class="text-base-content">{appointmentData.guest_name}</strong>
-            </div>
-            <div class="flex justify-between items-center p-3.5 border-b border-base-200 bg-base-100">
-              <span class="text-base-content/60">تاریخ جلسه (به وقت تهران):</span>
-              <strong class="text-base-content">{formatDateTehran(appointmentData.starts_at)}</strong>
-            </div>
-            <div class="flex justify-between items-center p-3.5 border-b border-base-200 bg-base-200/40">
-              <span class="text-base-content/60">ساعت برگزاری:</span>
-              <strong class="text-primary font-bold" dir="ltr">
-                {formatTimeTehran(appointmentData.starts_at)} - {formatTimeTehran(appointmentData.ends_at)}
-              </strong>
-            </div>
-            <div class="flex justify-between items-center p-3.5 bg-base-100">
-              <span class="text-base-content/60">کد پیگیری سیستمی:</span>
-              <span class="font-mono text-xs text-base-content/70" dir="ltr">
-                {appointmentData.id.slice(0, 8)}...
-              </span>
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="flex flex-col gap-3">
-            {canCancel && (
-              <button
-                type="button"
-                id="cancel-appt-btn"
-                class="btn btn-error btn-outline w-full text-sm font-bold"
-              >
-                لغو نوبت مشاوره
-              </button>
-            )}
-
-            <a
-              href="/booking"
-              class="btn btn-ghost btn-sm w-full"
-            >
-              بازگشت به صفحه نوبت‌دهی
-            </a>
-          </div>
-
-          <!-- Cancellation Confirmation Modal -->
-          <div id="cancel-confirm-modal" class="hidden fixed inset-0 bg-black/60 z-50 items-center justify-center p-4">
-            <div class="card bg-base-100 rounded-box max-w-sm w-full p-6 shadow-xl border border-base-200">
-              <h3 class="text-base font-bold text-error mb-2">
-                آیا از لغو نوبت اطمینان دارید؟
-              </h3>
-              <p class="text-xs text-base-content/70 leading-relaxed mb-5">
-                با لغو نوبت، این سانس مجدداً برای سایر مراجعین آزاد خواهد شد و نوبت شما باطل می‌گردد.
-              </p>
-              <div id="cancel-modal-error" class="alert alert-error text-xs mb-4 hidden"></div>
-
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  id="confirm-cancel-btn"
-                  class="btn btn-error btn-sm flex-1 font-bold"
-                >
-                  بله، لغو شود
-                </button>
-                <button
-                  type="button"
-                  id="dismiss-cancel-btn"
-                  class="btn btn-ghost btn-sm"
-                >
-                  انصراف
-                </button>
-              </div>
-            </div>
+    {canCancel && (
+      <dialog id="cancel-confirm-modal" class="modal" aria-labelledby="cancel-heading">
+        <div class="modal-box space-y-4">
+          <h2 id="cancel-heading" class="text-lg font-bold">لغو نوبت مشاوره</h2>
+          <p>با تأیید، این نوبت لغو می‌شود.</p>
+          <p id="cancel-modal-error" class="text-error" role="alert"></p>
+          <div class="flex gap-2">
+            <button type="button" id="confirm-cancel-btn" class="btn btn-error">تأیید لغو</button>
+            <form method="dialog"><button type="submit" class="btn btn-ghost" autofocus>انصراف</button></form>
           </div>
         </div>
-      )}
-    </div>
+      </dialog>
+    )}
   </div>
-
-  <script define:vars={{ appointmentId: appointmentData.id, lookupHash, apiBase: clientApiBase }}>
-    const cancelBtn = document.getElementById('cancel-appt-btn');
-    const cancelModal = document.getElementById('cancel-confirm-modal');
-    const dismissBtn = document.getElementById('dismiss-cancel-btn');
-    const confirmBtn = document.getElementById('confirm-cancel-btn');
-    const errorBox = document.getElementById('cancel-modal-error');
-
-    if (cancelBtn && cancelModal) {
-      cancelBtn.addEventListener('click', () => {
-        cancelModal.classList.remove('hidden');
-        cancelModal.classList.add('flex');
-      });
-
-      dismissBtn?.addEventListener('click', () => {
-        cancelModal.classList.add('hidden');
-        cancelModal.classList.remove('flex');
-        if (errorBox) errorBox.classList.add('hidden');
-      });
-
-      confirmBtn?.addEventListener('click', async () => {
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = 'در حال لغو...';
-        if (errorBox) errorBox.classList.add('hidden');
-
-        try {
-          const host = window.location.host;
-          const res = await fetch(`${apiBase}/v1/public/appointments/${appointmentId}/cancel`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Host': host,
-              'X-Guest-Lookup-Hash': lookupHash,
-            },
-            body: JSON.stringify({ reason: 'لغو توسط مراجع از پنل پیگیری' }),
-          });
-
-          if (res.ok) {
-            window.location.reload();
-            return;
-          }
-
-          const err = await res.json().catch(() => ({}));
-          if (errorBox) {
-            errorBox.textContent = err.message || 'خطا در لغو نوبت.';
-            errorBox.classList.remove('hidden');
-          }
-        } catch {
-          if (errorBox) {
-            errorBox.textContent = 'خطای ارتباط با سرور.';
-            errorBox.classList.remove('hidden');
-          }
-        } finally {
-          confirmBtn.disabled = false;
-          confirmBtn.textContent = 'بله، لغو شود';
-        }
-      });
-    }
-  </script>
 </BaseLayout>
+
+{appointment && legacyHash && <script is:inline>history.replaceState(null, '', location.pathname);</script>}
+<script>
+  const dialog = document.querySelector<HTMLDialogElement>('#cancel-confirm-modal');
+  const open = document.getElementById('cancel-appt-btn');
+  const confirm = document.querySelector<HTMLButtonElement>('#confirm-cancel-btn');
+  const error = document.getElementById('cancel-modal-error');
+  if (dialog && open && confirm && error) {
+    open.addEventListener('click', () => dialog.showModal());
+    dialog.addEventListener('close', () => open.focus());
+    confirm.addEventListener('click', async () => {
+      confirm.disabled = true;
+      error.textContent = '';
+      try {
+        const res = await fetch(location.pathname + '/cancel', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        });
+        if (res.ok) location.reload();
+        else error.textContent = (await res.json()).message || 'لغو نوبت ممکن نیست.';
+      } catch {
+        error.textContent = 'ارتباط با سرور برقرار نشد.';
+      } finally {
+        confirm.disabled = false;
+      }
+    });
+  }
+</script>

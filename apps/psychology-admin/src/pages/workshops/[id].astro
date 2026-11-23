@@ -10,6 +10,7 @@ const fallbackWorkshop = {
   slug: 'analytic-psychotherapy-workshop',
   description: 'در این کارگاه چهار ساعته، به بررسی الگوهای دفاعی ناخودآگاه، شناسایی تله‌های هیجانی و تکنیک‌های عملی تنظیم خشم و اضطراب می‌پردازیم.',
   instructor_name: 'دکتر مریم علوی',
+  topic: '',
   starts_at: '2026-12-10T14:00:00Z',
   ends_at: '2026-12-10T18:00:00Z',
   registration_deadline: '2026-12-09T23:59:00Z',
@@ -228,13 +229,13 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
   <!-- Capacity Management Card -->
   <div class="card bg-base-100 border border-base-200 rounded-box p-6 shadow-xs mb-6 max-w-xl">
     <h3 class="text-sm font-bold text-base-content mb-1">
-      تغییر ظرفیت صندلی‌های کارگاه
+      ظرفیت و موضوع کارگاه
     </h3>
     <p class="text-xs text-base-content/70 mb-4">
       طبق قوانین سامانه، کاهش ظرفیت به کمتر از مجموع ثبت‌نام‌های قطعی و رزروهای موقت فعال ({activeReservations} صندلی) مجاز نمی‌باشد.
     </p>
 
-    <form id="capacity-form" class="flex gap-3 items-end">
+    <form id="capacity-form" class="flex flex-wrap items-end gap-3">
       <div class="flex-1">
         <label for="capacity-input" class="block text-xs font-medium text-base-content/80 mb-1">
           ظرفیت جدید (حداقل {activeReservations})
@@ -247,8 +248,12 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
           class="input input-bordered input-sm w-full"
         />
       </div>
+      <div class="flex-1">
+        <label for="topic-input" class="block text-xs font-medium text-base-content/80 mb-1">موضوع آموزش (اختیاری)</label>
+        <input id="topic-input" type="text" maxlength="80" value={workshop.topic} class="input input-bordered input-sm w-full" />
+      </div>
       <button type="submit" class="btn btn-primary btn-sm font-medium">
-        ثبت ظرفیت جدید
+        ذخیره
       </button>
     </form>
     <div id="capacity-msg" class="hidden mt-3 text-xs font-medium"></div>
@@ -377,8 +382,9 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
     const capForm = document.getElementById('capacity-form');
     const capInput = document.getElementById('capacity-input');
     const capMsg = document.getElementById('capacity-msg');
+    const topicInput = document.getElementById('topic-input');
 
-    if (capForm && capInput && capMsg) {
+    if (capForm && capInput && capMsg && topicInput) {
       capForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         capMsg.classList.add('hidden');
@@ -394,16 +400,16 @@ const remainingSeats = Math.max(0, workshop.capacity - activeReservations);
           const res = await fetch(`/v1/admin/workshops/${workshopId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ capacity: newCap }),
+            body: JSON.stringify({ capacity: newCap, topic: topicInput.value }),
           });
 
           if (res.ok) {
-            capMsg.textContent = 'ظرفیت کارگاه با موفقیت به‌روزرسانی شد.';
+            capMsg.textContent = 'تغییرات کارگاه ذخیره شد.';
             capMsg.className = 'mt-3 text-xs font-medium text-success block';
             setTimeout(() => window.location.reload(), 800);
           } else {
             const d = await res.json().catch(() => ({}));
-            capMsg.textContent = d.message || 'خطا در تغییر ظرفیت.';
+            capMsg.textContent = d.message || 'خطا در ذخیرهٔ تغییرات کارگاه.';
             capMsg.className = 'mt-3 text-xs font-medium text-error block';
           }
         } catch {

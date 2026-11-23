@@ -947,6 +947,7 @@ func TestGuard_CatalogAndVersionConsistency(t *testing.T) {
 		"ocean-trust",
 		"warm-sand",
 		"royal-plum",
+		"stitch-editorial",
 	}
 	for _, pid := range expectedPalettes {
 		if !strings.Contains(palContent, "id: '"+pid+"'") {
@@ -1005,5 +1006,19 @@ func TestGuard_CatalogAndVersionConsistency(t *testing.T) {
 	})
 	if !errors.Is(err, settings.ErrInvalidPaletteID) {
 		t.Fatalf("expected ErrInvalidPaletteID for unknown palette, got %v", err)
+	}
+}
+
+func TestUpdateAppearanceAcceptsStitchPalette(t *testing.T) {
+	svc := settings.NewService(newMockSettingsQuerier())
+	appearance, err := svc.UpdateAppearance(context.Background(), uuid.New(), settings.UpdateAppearanceParams{
+		TemplateID: "editorial",
+		PaletteID:  "stitch-editorial",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if appearance.PaletteID != "stitch-editorial" || appearance.TemplateID != "editorial" {
+		t.Fatalf("unexpected saved appearance: %+v", appearance)
 	}
 }

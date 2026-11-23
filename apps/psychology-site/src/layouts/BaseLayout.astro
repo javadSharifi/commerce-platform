@@ -46,9 +46,13 @@ const ShellComponent = activeTemplate.components.Shell;
 const safeRadius = themeRadius && isValidRadius(themeRadius) ? themeRadius : DEFAULT_RADIUS;
 const safeScale = themeScale && isValidScale(themeScale) ? themeScale : DEFAULT_SCALE;
 
-const currentPath = Astro.url?.pathname || '/';
+const isEditorial = activeTemplate.meta.id === 'editorial';
+const editorialSite = isEditorial ? Astro.locals.site : undefined;
+const clinicName = editorialSite?.name || title;
+const path = Astro.url.pathname;
+const currentPath = isEditorial && path === '/preview' ? '/' : path;
 const headerVM: SiteHeaderVM = {
-  clinicTitle: title,
+  clinicTitle: clinicName,
   navItems: [
     { label: 'صفحه اصلی', href: '/', isActive: currentPath === '/' },
     { label: 'دوره‌ها', href: '/courses', isActive: currentPath.startsWith('/courses') },
@@ -58,19 +62,21 @@ const headerVM: SiteHeaderVM = {
     { label: 'حساب کاربری', href: '/account/courses', isActive: currentPath.startsWith('/account') },
   ],
   primaryAction: {
-    label: 'دریافت نوبت',
+    label: isEditorial ? 'درخواست نوبت' : 'دریافت نوبت',
     href: '/booking',
   },
 };
 
 const footerVM: FooterVM = {
-  clinicName: title,
+  clinicName,
   copyrightYear: new Date().toLocaleDateString('fa-IR', { year: 'numeric' }),
-  description,
+  description: editorialSite ? editorialSite.description : description,
+  phone: editorialSite?.phone,
+  address: editorialSite?.address,
 };
 
 const shellVM: SiteShellVM = {
-  clinicTitle: title,
+  clinicTitle: clinicName,
   headerVM,
   footerVM,
   currentPath,

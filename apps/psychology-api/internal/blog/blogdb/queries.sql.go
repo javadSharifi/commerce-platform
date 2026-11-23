@@ -19,11 +19,15 @@ INSERT INTO blog_posts (
     seo_description,
     content_blocks,
     status,
-    published_at
+    published_at,
+    author_name,
+    category,
+    is_featured,
+    cover_media_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at
+RETURNING id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at, author_name, category, is_featured, cover_media_id
 `
 
 type CreateBlogPostParams struct {
@@ -34,6 +38,10 @@ type CreateBlogPostParams struct {
 	ContentBlocks  []byte
 	Status         string
 	PublishedAt    pgtype.Timestamptz
+	AuthorName     string
+	Category       string
+	IsFeatured     bool
+	CoverMediaID   pgtype.UUID
 }
 
 func (q *Queries) CreateBlogPost(ctx context.Context, arg CreateBlogPostParams) (BlogPost, error) {
@@ -45,6 +53,10 @@ func (q *Queries) CreateBlogPost(ctx context.Context, arg CreateBlogPostParams) 
 		arg.ContentBlocks,
 		arg.Status,
 		arg.PublishedAt,
+		arg.AuthorName,
+		arg.Category,
+		arg.IsFeatured,
+		arg.CoverMediaID,
 	)
 	var i BlogPost
 	err := row.Scan(
@@ -58,6 +70,10 @@ func (q *Queries) CreateBlogPost(ctx context.Context, arg CreateBlogPostParams) 
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorName,
+		&i.Category,
+		&i.IsFeatured,
+		&i.CoverMediaID,
 	)
 	return i, err
 }
@@ -78,7 +94,7 @@ func (q *Queries) DeleteBlogPost(ctx context.Context, arg DeleteBlogPostParams) 
 }
 
 const getBlogPostByID = `-- name: GetBlogPostByID :one
-SELECT id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at FROM blog_posts
+SELECT id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at, author_name, category, is_featured, cover_media_id FROM blog_posts
 WHERE tenant_id = $1 AND id = $2
 `
 
@@ -101,12 +117,16 @@ func (q *Queries) GetBlogPostByID(ctx context.Context, arg GetBlogPostByIDParams
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorName,
+		&i.Category,
+		&i.IsFeatured,
+		&i.CoverMediaID,
 	)
 	return i, err
 }
 
 const getPublishedBlogPostBySlug = `-- name: GetPublishedBlogPostBySlug :one
-SELECT id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at FROM blog_posts
+SELECT id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at, author_name, category, is_featured, cover_media_id FROM blog_posts
 WHERE tenant_id = $1 AND slug = $2 AND status = 'published'
 `
 
@@ -129,12 +149,16 @@ func (q *Queries) GetPublishedBlogPostBySlug(ctx context.Context, arg GetPublish
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorName,
+		&i.Category,
+		&i.IsFeatured,
+		&i.CoverMediaID,
 	)
 	return i, err
 }
 
 const listAdminBlogPosts = `-- name: ListAdminBlogPosts :many
-SELECT id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at FROM blog_posts
+SELECT id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at, author_name, category, is_featured, cover_media_id FROM blog_posts
 WHERE tenant_id = $1
   AND ($2::text IS NULL OR status = $2)
 ORDER BY updated_at DESC
@@ -165,6 +189,10 @@ func (q *Queries) ListAdminBlogPosts(ctx context.Context, arg ListAdminBlogPosts
 			&i.PublishedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AuthorName,
+			&i.Category,
+			&i.IsFeatured,
+			&i.CoverMediaID,
 		); err != nil {
 			return nil, err
 		}
@@ -177,10 +205,10 @@ func (q *Queries) ListAdminBlogPosts(ctx context.Context, arg ListAdminBlogPosts
 }
 
 const listPublishedBlogPosts = `-- name: ListPublishedBlogPosts :many
-SELECT id, tenant_id, title, slug, seo_description, published_at
+SELECT id, tenant_id, title, slug, seo_description, published_at, author_name, category, is_featured, cover_media_id
 FROM blog_posts
 WHERE tenant_id = $1 AND status = 'published'
-ORDER BY published_at DESC
+ORDER BY published_at DESC NULLS LAST, id DESC
 `
 
 type ListPublishedBlogPostsRow struct {
@@ -190,6 +218,10 @@ type ListPublishedBlogPostsRow struct {
 	Slug           string
 	SeoDescription string
 	PublishedAt    pgtype.Timestamptz
+	AuthorName     string
+	Category       string
+	IsFeatured     bool
+	CoverMediaID   pgtype.UUID
 }
 
 func (q *Queries) ListPublishedBlogPosts(ctx context.Context, tenantID pgtype.UUID) ([]ListPublishedBlogPostsRow, error) {
@@ -208,6 +240,10 @@ func (q *Queries) ListPublishedBlogPosts(ctx context.Context, tenantID pgtype.UU
 			&i.Slug,
 			&i.SeoDescription,
 			&i.PublishedAt,
+			&i.AuthorName,
+			&i.Category,
+			&i.IsFeatured,
+			&i.CoverMediaID,
 		); err != nil {
 			return nil, err
 		}
@@ -219,13 +255,78 @@ func (q *Queries) ListPublishedBlogPosts(ctx context.Context, tenantID pgtype.UU
 	return items, nil
 }
 
+const listPublishedSlugsByCategories = `-- name: ListPublishedSlugsByCategories :many
+SELECT slug FROM blog_posts
+WHERE tenant_id = $1 AND status = 'published' AND category <> ''
+  AND category = ANY($2::text[])
+ORDER BY slug
+`
+
+type ListPublishedSlugsByCategoriesParams struct {
+	TenantID   pgtype.UUID
+	Categories []string
+}
+
+func (q *Queries) ListPublishedSlugsByCategories(ctx context.Context, arg ListPublishedSlugsByCategoriesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPublishedSlugsByCategories, arg.TenantID, arg.Categories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		items = append(items, slug)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockBlogPost = `-- name: LockBlogPost :one
+SELECT id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at, author_name, category, is_featured, cover_media_id FROM blog_posts
+WHERE tenant_id = $1 AND id = $2
+FOR UPDATE
+`
+
+type LockBlogPostParams struct {
+	TenantID pgtype.UUID
+	ID       pgtype.UUID
+}
+
+func (q *Queries) LockBlogPost(ctx context.Context, arg LockBlogPostParams) (BlogPost, error) {
+	row := q.db.QueryRow(ctx, lockBlogPost, arg.TenantID, arg.ID)
+	var i BlogPost
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Title,
+		&i.Slug,
+		&i.SeoDescription,
+		&i.ContentBlocks,
+		&i.Status,
+		&i.PublishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AuthorName,
+		&i.Category,
+		&i.IsFeatured,
+		&i.CoverMediaID,
+	)
+	return i, err
+}
+
 const publishBlogPost = `-- name: PublishBlogPost :one
 UPDATE blog_posts
 SET status = 'published',
     published_at = COALESCE(published_at, now()),
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at
+RETURNING id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at, author_name, category, is_featured, cover_media_id
 `
 
 type PublishBlogPostParams struct {
@@ -247,6 +348,10 @@ func (q *Queries) PublishBlogPost(ctx context.Context, arg PublishBlogPostParams
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorName,
+		&i.Category,
+		&i.IsFeatured,
+		&i.CoverMediaID,
 	)
 	return i, err
 }
@@ -256,7 +361,7 @@ UPDATE blog_posts
 SET status = 'draft',
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at
+RETURNING id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at, author_name, category, is_featured, cover_media_id
 `
 
 type UnpublishBlogPostParams struct {
@@ -278,6 +383,10 @@ func (q *Queries) UnpublishBlogPost(ctx context.Context, arg UnpublishBlogPostPa
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorName,
+		&i.Category,
+		&i.IsFeatured,
+		&i.CoverMediaID,
 	)
 	return i, err
 }
@@ -286,11 +395,16 @@ const updateBlogPost = `-- name: UpdateBlogPost :one
 UPDATE blog_posts
 SET title = $3,
     slug = $4,
-    seo_description = $5,
-    content_blocks = $6,
+    seo_description = COALESCE($5::text, seo_description),
+    content_blocks = COALESCE($6::jsonb, content_blocks),
+    author_name = COALESCE($7::text, author_name),
+    category = COALESCE($8::text, category),
+    is_featured = COALESCE($9::boolean, is_featured),
+    cover_media_id = CASE WHEN $10::boolean
+        THEN $11::uuid ELSE cover_media_id END,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at
+RETURNING id, tenant_id, title, slug, seo_description, content_blocks, status, published_at, created_at, updated_at, author_name, category, is_featured, cover_media_id
 `
 
 type UpdateBlogPostParams struct {
@@ -298,8 +412,13 @@ type UpdateBlogPostParams struct {
 	ID             pgtype.UUID
 	Title          string
 	Slug           string
-	SeoDescription string
+	SeoDescription pgtype.Text
 	ContentBlocks  []byte
+	AuthorName     pgtype.Text
+	Category       pgtype.Text
+	IsFeatured     pgtype.Bool
+	ReplaceCover   bool
+	CoverMediaID   pgtype.UUID
 }
 
 func (q *Queries) UpdateBlogPost(ctx context.Context, arg UpdateBlogPostParams) (BlogPost, error) {
@@ -310,6 +429,11 @@ func (q *Queries) UpdateBlogPost(ctx context.Context, arg UpdateBlogPostParams) 
 		arg.Slug,
 		arg.SeoDescription,
 		arg.ContentBlocks,
+		arg.AuthorName,
+		arg.Category,
+		arg.IsFeatured,
+		arg.ReplaceCover,
+		arg.CoverMediaID,
 	)
 	var i BlogPost
 	err := row.Scan(
@@ -323,6 +447,10 @@ func (q *Queries) UpdateBlogPost(ctx context.Context, arg UpdateBlogPostParams) 
 		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorName,
+		&i.Category,
+		&i.IsFeatured,
+		&i.CoverMediaID,
 	)
 	return i, err
 }

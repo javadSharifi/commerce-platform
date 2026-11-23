@@ -1,5 +1,7 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
+import BlogMetadataFields from '../../components/BlogMetadataFields.astro';
+const tenantId = Astro.locals.activeTenant?.id || Astro.cookies.get('tenant_id')?.value || '';
 ---
 
 <AdminLayout title="نگارش مقاله جدید" currentNav="blog">
@@ -18,7 +20,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     </div>
 
     <!-- Main Editor Form -->
-    <form id="blog-form" class="card bg-base-100 border border-base-200 rounded-box p-6 sm:p-8 shadow-xs flex flex-col gap-6">
+    <form id="blog-form" data-tenant-id={tenantId} class="card bg-base-100 border border-base-200 rounded-box p-6 sm:p-8 shadow-xs flex flex-col gap-6">
       <!-- Title -->
       <div>
         <label for="post-title" class="block text-xs font-semibold text-base-content/80 mb-1">
@@ -63,6 +65,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           />
         </div>
       </div>
+
+      <BlogMetadataFields />
 
       <!-- Block Editor Container -->
       <div class="border-t border-base-200 pt-5">
@@ -120,6 +124,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   <script>
     const apiBase = import.meta.env.PUBLIC_API_URL || '';
+    const blogForm = document.getElementById('blog-form') as HTMLFormElement;
+    const activeTenantId = blogForm.dataset.tenantId ?? '';
     const blocksContainer = document.getElementById('blocks-container');
     const blockCountEl = document.getElementById('block-count');
     const titleInput = document.getElementById('post-title') as HTMLInputElement;
@@ -313,6 +319,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                 headers: {
                   'Content-Type': 'application/json',
                   'X-Requested-With': 'XMLHttpRequest',
+                  'X-Tenant-ID': activeTenantId,
                 },
                 body: JSON.stringify({
                   original_name: file.name,
@@ -342,6 +349,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                 headers: {
                   'Content-Type': 'application/json',
                   'X-Requested-With': 'XMLHttpRequest',
+                  'X-Tenant-ID': activeTenantId,
                 },
                 body: JSON.stringify({ upload_id: uploadData.upload_id }),
               });
@@ -428,17 +436,23 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         data: b.data,
       }));
 
+      const fields = new FormData(blogForm);
       try {
         const res = await fetch(`${apiBase}/v1/admin/blog`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'X-Tenant-ID': activeTenantId,
           },
           body: JSON.stringify({
             title,
             slug,
             seo_description: seo,
+            author_name: fields.get('author_name'),
+            category: fields.get('category'),
+            is_featured: fields.has('is_featured'),
+            cover_media_id: String(fields.get('cover_media_id') ?? '').trim(),
             content_blocks,
             status,
           }),

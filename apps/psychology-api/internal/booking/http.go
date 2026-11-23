@@ -5,11 +5,14 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"psychology/api/internal/auth"
+	"psychology/api/internal/booking/bookingdb"
 	"psychology/api/internal/domain"
+	"psychology/api/internal/platform/db"
 	"psychology/api/internal/platform/tenantctx"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +20,7 @@ import (
 )
 
 type Handler struct {
+	publicStore    *db.Store
 	service        *Service
 	domainResolver *domain.Resolver
 	authService    *auth.Service
@@ -126,7 +130,9 @@ func (h *Handler) handleListPublicTherapists(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	therapists, err := h.service.ListActiveTherapists(r.Context(), tenantID)
+	therapists, err := publicBooking(r.Context(), h, tenantID, func(svc *Service) ([]bookingdb.Therapist, error) {
+		return svc.ListActiveTherapists(r.Context(), tenantID)
+	})
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "خطای دریافت لیست درمانگران")
 		return
@@ -164,7 +170,9 @@ func (h *Handler) handleGetPublicTherapistDetail(w http.ResponseWriter, r *http.
 		return
 	}
 
-	th, err := h.service.GetTherapistByID(r.Context(), tenantID, therapistID)
+	th, err := publicBooking(r.Context(), h, tenantID, func(svc *Service) (*bookingdb.Therapist, error) {
+		return svc.GetTherapistByID(r.Context(), tenantID, therapistID)
+	})
 	if err != nil || !th.IsActive {
 		writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "درمانگر یافت نشد.")
 		return
@@ -186,6 +194,7 @@ func (h *Handler) handleGetPublicTherapistDetail(w http.ResponseWriter, r *http.
 }
 
 func (h *Handler) handleListPublicTherapistSlots(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
 	tenantID, err := h.domainResolver.Resolve(r.Context(), r.Host)
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "دامنه کلینیک یافت نشد.")
@@ -201,13 +210,29 @@ func (h *Handler) handleListPublicTherapistSlots(w http.ResponseWriter, r *http.
 
 	fromDate := time.Now().UTC()
 	if q := r.URL.Query().Get("from_date"); q != "" {
-		if parsed, err := time.Parse("2006-01-02", q); err == nil {
-			fromDate = parsed
+		parsed, err := time.ParseInLocation("2006-01-02", q, h.service.tehranLoc)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_DATE", "تاریخ سانس نامعتبر است.")
+			return
 		}
+		fromDate = parsed
 	}
 
-	slots, err := h.service.ListAvailableSlots(r.Context(), tenantID, therapistID, fromDate)
+	slots, err := publicBooking(r.Context(), h, tenantID, func(svc *Service) ([]bookingdb.AppointmentSlot, error) {
+		th, err := svc.GetTherapistByID(r.Context(), tenantID, therapistID)
+		if err != nil {
+			return nil, err
+		}
+		if !th.IsActive {
+			return nil, ErrTherapistNotFound
+		}
+		return svc.ListAvailableSlots(r.Context(), tenantID, therapistID, fromDate)
+	})
 	if err != nil {
+		if errors.Is(err, ErrTherapistNotFound) {
+			writeJSONError(w, http.StatusNotFound, "THERAPIST_NOT_FOUND", "درمانگر یافت نشد.")
+			return
+		}
 		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "خطای دریافت سانس‌های آزاد")
 		return
 	}
@@ -231,10 +256,10 @@ type CreateAppointmentRequest struct {
 	SlotID      string `json:"slot_id"`
 	GuestName   string `json:"guest_name"`
 	GuestPhone  string `json:"guest_phone"`
-	Notes       string `json:"notes"`
 }
 
 func (h *Handler) handleCreatePublicAppointment(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
 	tenantID, err := h.domainResolver.Resolve(r.Context(), r.Host)
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "دامنه کلینیک یافت نشد.")
@@ -261,14 +286,15 @@ func (h *Handler) handleCreatePublicAppointment(w http.ResponseWriter, r *http.R
 
 	clientIP := getClientIP(r)
 
-	res, err := h.service.CreatePublicAppointment(r.Context(), tenantID, CreatePublicAppointmentInput{
-		TherapistID: therapistID,
-		SlotID:      slotID,
-		GuestName:   req.GuestName,
-		GuestPhone:  req.GuestPhone,
-		Notes:       req.Notes,
-		ClientIP:    clientIP,
-	}, time.Now().UTC())
+	res, err := publicBooking(r.Context(), h, tenantID, func(svc *Service) (*AppointmentResult, error) {
+		return svc.CreatePublicAppointment(r.Context(), tenantID, CreatePublicAppointmentInput{
+			TherapistID: therapistID,
+			SlotID:      slotID,
+			GuestName:   req.GuestName,
+			GuestPhone:  req.GuestPhone,
+			ClientIP:    clientIP,
+		}, time.Now().UTC())
+	})
 
 	if err != nil {
 		switch {
@@ -279,18 +305,26 @@ func (h *Handler) handleCreatePublicAppointment(w http.ResponseWriter, r *http.R
 			writeJSONError(w, http.StatusConflict, "SLOT_UNAVAILABLE", "این سانس دیگر در دسترس نیست و رزرو شده است.")
 		case errors.Is(err, ErrSlotInThePast):
 			writeJSONError(w, http.StatusBadRequest, "SLOT_IN_PAST", "امکان رزرو سانس‌های گذشته وجود ندارد.")
+		case errors.Is(err, ErrInvalidGuestName):
+			writeJSONError(w, http.StatusBadRequest, "INVALID_GUEST_NAME", "نام مراجع الزامی است.")
 		case errors.Is(err, ErrInvalidPhone):
 			writeJSONError(w, http.StatusBadRequest, "INVALID_PHONE", "شماره موبایل وارد شده نامعتبر است.")
-		case errors.Is(err, ErrTherapistNotFound):
+		case errors.Is(err, ErrTherapistNotFound), errors.Is(err, ErrTherapistInactive):
 			writeJSONError(w, http.StatusNotFound, "THERAPIST_NOT_FOUND", "درمانگر یافت نشد.")
 		case errors.Is(err, ErrSlotNotFound):
 			writeJSONError(w, http.StatusNotFound, "SLOT_NOT_FOUND", "سانس نوبت‌دهی یافت نشد.")
 		default:
-			writeJSONError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "ثبت نوبت موقتاً ممکن نیست.")
 		}
 		return
 	}
 
+	http.SetCookie(w, &http.Cookie{
+		Name: "appointment_lookup", Value: res.GuestLookupHash, Path: "/appointments/" + res.ID.String(),
+		HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" ||
+			strings.EqualFold(os.Getenv("APP_ENV"), "production"),
+	})
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":                res.ID.String(),
 		"therapist_id":      res.TherapistID.String(),
@@ -305,6 +339,7 @@ func (h *Handler) handleCreatePublicAppointment(w http.ResponseWriter, r *http.R
 }
 
 func (h *Handler) handleGetPublicAppointmentStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
 	tenantID, err := h.domainResolver.Resolve(r.Context(), r.Host)
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "دامنه کلینیک یافت نشد.")
@@ -330,9 +365,9 @@ func (h *Handler) handleGetPublicAppointmentStatus(w http.ResponseWriter, r *htt
 		return
 	}
 
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
-
-	res, err := h.service.GetPublicAppointmentStatus(r.Context(), tenantID, appointmentID, lookupHash, time.Now().UTC())
+	res, err := publicBooking(r.Context(), h, tenantID, func(svc *Service) (*AppointmentResult, error) {
+		return svc.GetPublicAppointmentStatus(r.Context(), tenantID, appointmentID, lookupHash, time.Now().UTC())
+	})
 	if err != nil {
 		if errors.Is(err, ErrAppointmentNotFound) {
 			writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "نوبت یافت نشد یا توکن پیگیری نامعتبر است.")
@@ -360,6 +395,7 @@ type CancelAppointmentRequest struct {
 }
 
 func (h *Handler) handleCancelPublicAppointment(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
 	tenantID, err := h.domainResolver.Resolve(r.Context(), r.Host)
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "دامنه کلینیک یافت نشد.")
@@ -385,14 +421,14 @@ func (h *Handler) handleCancelPublicAppointment(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
-
 	var req CancelAppointmentRequest
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 	}
 
-	res, err := h.service.CancelPublicAppointment(r.Context(), tenantID, appointmentID, lookupHash, req.Reason, time.Now().UTC())
+	res, err := publicBooking(r.Context(), h, tenantID, func(svc *Service) (*AppointmentResult, error) {
+		return svc.CancelPublicAppointment(r.Context(), tenantID, appointmentID, lookupHash, req.Reason, time.Now().UTC())
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAppointmentNotFound):
@@ -402,7 +438,7 @@ func (h *Handler) handleCancelPublicAppointment(w http.ResponseWriter, r *http.R
 		case errors.Is(err, ErrCannotCancel):
 			writeJSONError(w, http.StatusBadRequest, "CANNOT_CANCEL", "وضعیت این نوبت امکان لغو ندارد.")
 		default:
-			writeJSONError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "لغو نوبت موقتاً ممکن نیست.")
 		}
 		return
 	}
@@ -1370,4 +1406,3 @@ func mapAdminDetail(d *AdminAppointmentDetail) map[string]any {
 	}
 	return res
 }
-

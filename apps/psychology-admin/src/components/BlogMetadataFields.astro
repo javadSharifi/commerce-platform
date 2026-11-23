@@ -1,0 +1,35 @@
+---
+import type { AdminBlogPostDetail } from '@psychology/api-client';
+
+interface Props {
+  post?: AdminBlogPostDetail;
+}
+
+const { post } = Astro.props;
+---
+
+<fieldset class="grid gap-4 sm:grid-cols-2">
+  <legend class="mb-3 text-sm font-bold">اطلاعات نمایش مقاله</legend>
+  <label class="grid gap-1 text-xs font-semibold">
+    نام نویسنده
+    <input type="text" name="author_name" maxlength="120" value={post?.author_name}
+      class="input input-bordered input-sm w-full" />
+  </label>
+  <label class="grid gap-1 text-xs font-semibold">
+    دسته‌بندی
+    <input type="text" name="category" maxlength="80" value={post?.category}
+      class="input input-bordered input-sm w-full" />
+  </label>
+  <div class="grid gap-1 sm:col-span-2">
+    <label for="blog-cover-media" class="text-xs font-semibold">شناسهٔ تصویر شاخص</label>
+    <input id="blog-cover-media" type="text" name="cover_media_id" maxlength="36" value={post?.cover_media_id}
+      dir="ltr" class="input input-bordered input-sm w-full" aria-describedby="blog-cover-help" />
+    <p id="blog-cover-help" class="text-xs text-base-content/70">
+      شناسهٔ تصویر عمومی تأییدشده را از <a href="/media" class="link">کتابخانهٔ رسانه</a> بردارید.
+    </p>
+  </div>
+  <label class="flex items-center gap-2 text-sm">
+    <input type="checkbox" name="is_featured" checked={post?.is_featured} class="checkbox checkbox-sm checkbox-primary" />
+    نمایش به‌عنوان مقالهٔ ویژه
+  </label>
+</fieldset>

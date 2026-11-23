@@ -41,3 +41,27 @@ func (s *Store) WithTenantTx(ctx context.Context, fn func(tx pgx.Tx, tenantID uu
 func (s *Store) Pool() *pgxpool.Pool {
 	return s.pool
 }
+
+// ReadTenant binds a production public read to its resolved tenant in one
+// transaction. A direct querier is retained for in-memory service tests.
+func ReadTenant[Q, T any](ctx context.Context, store *Store, tenantID uuid.UUID, queries Q,
+	bind func(pgx.Tx) Q, read func(Q) (T, error)) (T, error) {
+	if tenantID == uuid.Nil {
+		var empty T
+		return empty, ErrNoTenant
+	}
+	if scopedID, ok := tenantctx.ID(ctx); ok && scopedID != tenantID {
+		var empty T
+		return empty, ErrNoTenant
+	}
+	if store == nil {
+		return read(queries)
+	}
+	var result T
+	err := store.WithTenantTx(tenantctx.With(ctx, tenantID), func(tx pgx.Tx, _ uuid.UUID) error {
+		var err error
+		result, err = read(bind(tx))
+		return err
+	})
+	return result, err
+}

@@ -9,6 +9,7 @@ import (
 
 	"psychology/api/internal/auth"
 	"psychology/api/internal/domain"
+	"psychology/api/internal/education"
 	"psychology/api/internal/payments"
 	"psychology/api/internal/platform/tenantctx"
 
@@ -330,6 +331,7 @@ func (h *Handler) handleGetAdminWorkshopDetail(w http.ResponseWriter, r *http.Re
 }
 
 type createWorkshopReq struct {
+	Topic                string    `json:"topic"`
 	Title                string    `json:"title"`
 	Slug                 string    `json:"slug"`
 	Description          string    `json:"description"`
@@ -362,6 +364,7 @@ func (h *Handler) handleCreateAdminWorkshop(w http.ResponseWriter, r *http.Reque
 
 	ws, err := h.service.CreateWorkshop(r.Context(), tenantID, CreateWorkshopParams{
 		Title:                req.Title,
+		Topic:                req.Topic,
 		Slug:                 req.Slug,
 		Description:          req.Description,
 		InstructorName:       req.InstructorName,
@@ -373,6 +376,10 @@ func (h *Handler) handleCreateAdminWorkshop(w http.ResponseWriter, r *http.Reque
 		PriceRials:           req.PriceRials,
 	})
 	if err != nil {
+		if errors.Is(err, education.ErrInvalidTopic) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_TOPIC", err.Error())
+			return
+		}
 		if errors.Is(err, ErrInvalidDates) {
 			writeJSONError(w, http.StatusBadRequest, "INVALID_DATES", "تاریخ‌ها نامعتبرند: پایان باید بعد از شروع باشد و مهلت ثبت‌نام قبل از شروع.")
 			return
@@ -391,6 +398,7 @@ func (h *Handler) handleCreateAdminWorkshop(w http.ResponseWriter, r *http.Reque
 }
 
 type updateWorkshopReq struct {
+	Topic                *string    `json:"topic"`
 	Title                *string    `json:"title"`
 	Slug                 *string    `json:"slug"`
 	Description          *string    `json:"description"`
@@ -425,6 +433,7 @@ func (h *Handler) handleUpdateAdminWorkshop(w http.ResponseWriter, r *http.Reque
 
 	detail, err := h.service.UpdateWorkshop(r.Context(), tenantID, id, UpdateWorkshopParams{
 		Title:                req.Title,
+		Topic:                req.Topic,
 		Slug:                 req.Slug,
 		Description:          req.Description,
 		InstructorName:       req.InstructorName,
@@ -436,6 +445,10 @@ func (h *Handler) handleUpdateAdminWorkshop(w http.ResponseWriter, r *http.Reque
 		PriceRials:           req.PriceRials,
 	})
 	if err != nil {
+		if errors.Is(err, education.ErrInvalidTopic) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_TOPIC", err.Error())
+			return
+		}
 		if errors.Is(err, ErrWorkshopNotFound) {
 			writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "کارگاه یافت نشد.")
 			return

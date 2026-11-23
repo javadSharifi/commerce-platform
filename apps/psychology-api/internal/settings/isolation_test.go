@@ -22,12 +22,12 @@ import (
 	"psychology/api/internal/platform/tenantctx"
 	"psychology/api/internal/settings"
 	"psychology/api/internal/settings/settingsdb"
+	"psychology/api/internal/testsupport/dbfixture"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // TestSiteSettings_SchemaRLSGuard verifies that the database schema mandates
@@ -70,24 +70,10 @@ func TestSiteSettings_SchemaRLSGuard(t *testing.T) {
 }
 
 // TestSiteSettings_LiveTenantIsolation executes against real PostgreSQL when
-// DATABASE_URL or TEST_APP_DATABASE_URL is provided, asserting runtime role isolation.
+// the disposable database lane is configured, asserting runtime role isolation.
 func TestSiteSettings_LiveTenantIsolation(t *testing.T) {
-	dbURL := os.Getenv("TEST_APP_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		t.Skip("skipping live database isolation test: TEST_APP_DATABASE_URL or DATABASE_URL not set")
-		return
-	}
-
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		t.Skipf("skipping live database isolation test (failed to connect: %v)", err)
-		return
-	}
-	defer pool.Close()
+	pool := dbfixture.Connect(t, dbfixture.AppDSN, "app_user")
 
 	store := db.NewStore(pool)
 	svc := settings.NewServiceWithStore(store)
@@ -103,7 +89,7 @@ func TestSiteSettings_LiveTenantIsolation(t *testing.T) {
 	// so foreign keys are satisfied under FORCE RLS and app_user role.
 	slugA := "clinic-a-" + tenantA.String()[:8]
 	slugB := "clinic-b-" + tenantB.String()[:8]
-	_, err = pool.Exec(ctx, `
+	_, err := pool.Exec(ctx, `
 		INSERT INTO tenants (id, name, slug, status)
 		VALUES ($1, $2, $3, 'active'), ($4, $5, $6, 'active')
 	`, tenantA, "کلینیک امید", slugA, tenantB, "کلینیک آرامش", slugB)
@@ -266,36 +252,9 @@ func TestSiteSettings_LiveTenantIsolation(t *testing.T) {
 // - Worker queue processing with restricted worker_user permissions
 // - Strict cache purging for the affected host only (zero tenant leak)
 func TestOutbox_LiveTransactionalWorkflowAndPurge(t *testing.T) {
-	dbURL := os.Getenv("TEST_APP_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		t.Skip("skipping live outbox workflow test: TEST_APP_DATABASE_URL or DATABASE_URL not set")
-		return
-	}
-
 	ctx := context.Background()
-	appPool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		t.Skipf("skipping live outbox workflow test (failed to connect as app_user: %v)", err)
-		return
-	}
-	defer appPool.Close()
-
-	workerURL := os.Getenv("TEST_WORKER_DATABASE_URL")
-	if workerURL == "" {
-		workerURL = strings.Replace(dbURL, "app_user:secret_app_pass", "worker_user:secret_worker_pass", 1)
-		if workerURL == dbURL {
-			workerURL = "postgres://worker_user:secret_worker_pass@127.0.0.1:5432/psychology_prod?sslmode=disable"
-		}
-	}
-	workerPool, err := pgxpool.New(ctx, workerURL)
-	if err != nil {
-		t.Skipf("skipping live outbox workflow test (failed to connect as worker_user: %v)", err)
-		return
-	}
-	defer workerPool.Close()
+	appPool := dbfixture.Connect(t, dbfixture.AppDSN, "app_user")
+	workerPool := dbfixture.Connect(t, dbfixture.WorkerDSN, "worker_user")
 
 	store := db.NewStore(appPool)
 	svc := settings.NewServiceWithStore(store)
@@ -308,7 +267,7 @@ func TestOutbox_LiveTransactionalWorkflowAndPurge(t *testing.T) {
 	hostA := slugA + ".ir"
 	hostB := slugB + ".ir"
 
-	_, err = appPool.Exec(ctx, `
+	_, err := appPool.Exec(ctx, `
 		INSERT INTO tenants (id, name, slug, status)
 		VALUES ($1, $2, $3, 'active'), ($4, $5, $6, 'active')
 	`, tenantA, "کلینیک امید", slugA, tenantB, "کلینیک فردوس", slugB)
@@ -561,26 +520,12 @@ func TestOutbox_LiveTransactionalWorkflowAndPurge(t *testing.T) {
 // seeds mock clinics under runtime role app_user with FORCE RLS, and asserts
 // strict cross-tenant isolation and constraint enforcement.
 func TestSiteSettings_PaletteIdMigrationAndSeedIsolation(t *testing.T) {
-	dbURL := os.Getenv("TEST_APP_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		t.Skip("skipping live database isolation test: TEST_APP_DATABASE_URL or DATABASE_URL not set")
-		return
-	}
-
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		t.Skipf("skipping live database isolation test (failed to connect: %v)", err)
-		return
-	}
-	defer pool.Close()
+	pool := dbfixture.Connect(t, dbfixture.AppDSN, "app_user")
 
 	// 1. Verify FORCE RLS and column existence on site_settings
 	var relrowsecurity, relforcerowsecurity bool
-	err = pool.QueryRow(ctx, `
+	err := pool.QueryRow(ctx, `
 		SELECT c.relrowsecurity, c.relforcerowsecurity
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -631,13 +576,13 @@ func TestSiteSettings_PaletteIdMigrationAndSeedIsolation(t *testing.T) {
 	ctxA := tenantctx.With(ctx, tenantA)
 	ctxB := tenantctx.With(ctx, tenantB)
 
-	// Seed Tenant A site_settings with calm-sage under Tenant A context
+	// Seed Tenant A site_settings with the Stitch palette under Tenant A context.
 	err = store.WithTenantTx(ctxA, func(tx pgx.Tx, tid uuid.UUID) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO site_settings (tenant_id, title, palette_id)
-			VALUES ($1, 'کلینیک الف', 'calm-sage')
-			ON CONFLICT (tenant_id) DO UPDATE SET palette_id = 'calm-sage'
-		`, tid)
+			VALUES ($1, 'کلینیک الف', $2)
+			ON CONFLICT (tenant_id) DO UPDATE SET palette_id = EXCLUDED.palette_id
+		`, tid, "stitch-editorial")
 		return err
 	})
 	if err != nil {
@@ -657,14 +602,14 @@ func TestSiteSettings_PaletteIdMigrationAndSeedIsolation(t *testing.T) {
 		t.Fatalf("failed to seed Tenant B site_settings: %v", err)
 	}
 
-	// 3. Verify Tenant A reads calm-sage and cannot read Tenant B
+	// 3. Verify Tenant A reads its Stitch palette and cannot read Tenant B.
 	err = store.WithTenantTx(ctxA, func(tx pgx.Tx, tid uuid.UUID) error {
 		var palA string
 		if err := tx.QueryRow(ctx, "SELECT palette_id FROM site_settings WHERE tenant_id = $1", tid).Scan(&palA); err != nil {
 			return err
 		}
-		if palA != "calm-sage" {
-			t.Fatalf("expected Tenant A palette calm-sage, got %q", palA)
+		if palA != "stitch-editorial" {
+			t.Fatalf("expected Tenant A palette stitch-editorial, got %q", palA)
 		}
 
 		// Cross-tenant read must return 0 rows
@@ -738,8 +683,8 @@ func TestSiteSettings_PaletteIdMigrationAndSeedIsolation(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected CHECK constraint violation for invalid palette, got nil")
 	}
-	if errors.As(err, &pgErr) && pgErr.Code != "23514" {
-		t.Fatalf("expected PostgreSQL error 23514 (check_violation), got: %s", pgErr.Code)
+	if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
+		t.Fatalf("expected PostgreSQL error 23514 (check_violation), got: %v", err)
 	}
 }
 
@@ -750,22 +695,8 @@ func TestSiteSettings_PaletteIdMigrationAndSeedIsolation(t *testing.T) {
 // 4. Concurrent execution of profile and appearance updates preserves both without clobbering.
 // 5. Transactional rollback when Outbox cache invalidation insertion fails.
 func TestSiteSettings_SeparatedQueriesAndOutboxRollback(t *testing.T) {
-	dbURL := os.Getenv("TEST_APP_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		t.Skip("skipping live database test: TEST_APP_DATABASE_URL or DATABASE_URL not set")
-		return
-	}
-
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		t.Skipf("skipping live database test (failed to connect: %v)", err)
-		return
-	}
-	defer pool.Close()
+	pool := dbfixture.Connect(t, dbfixture.AppDSN, "app_user")
 
 	// Seed two test clinics (Tenant A and Tenant B)
 	tenantA := uuid.New()
@@ -775,7 +706,7 @@ func TestSiteSettings_SeparatedQueriesAndOutboxRollback(t *testing.T) {
 	hostA := slugA + ".psychology.ir"
 	hostB := slugB + ".psychology.ir"
 
-	_, err = pool.Exec(ctx, `
+	_, err := pool.Exec(ctx, `
 		INSERT INTO tenants (id, name, slug, status)
 		VALUES ($1, $2, $3, 'active'), ($4, $5, $6, 'active')
 	`, tenantA, "کلینیک الف", slugA, tenantB, "کلینیک ب", slugB)
@@ -1024,22 +955,8 @@ func TestSiteSettings_SeparatedQueriesAndOutboxRollback(t *testing.T) {
 // Connects GET and PUT /admin/site/appearance to session authentication, tenant membership guard,
 // and APPEARANCE_OWNER_USER_ID verification in Go HTTP layer over real PostgreSQL with FORCE RLS.
 func TestAdminAppearance_LiveHttpGuardAndIsolation(t *testing.T) {
-	dbURL := os.Getenv("TEST_APP_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		t.Skip("skipping live database test: TEST_APP_DATABASE_URL or DATABASE_URL not set")
-		return
-	}
-
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		t.Skipf("skipping live database test (failed to connect: %v)", err)
-		return
-	}
-	defer pool.Close()
+	pool := dbfixture.Connect(t, dbfixture.AppDSN, "app_user")
 
 	tenantA := uuid.New()
 	tenantB := uuid.New()
@@ -1052,7 +969,7 @@ func TestAdminAppearance_LiveHttpGuardAndIsolation(t *testing.T) {
 	hostB := slugB + ".psychology.ir"
 
 	// Insert tenants
-	_, err = pool.Exec(ctx, `
+	_, err := pool.Exec(ctx, `
 		INSERT INTO tenants (id, name, slug, status)
 		VALUES ($1, $2, $3, 'active'), ($4, $5, $6, 'active')
 	`, tenantA, "کلینیک الف", slugA, tenantB, "کلینیک ب", slugB)

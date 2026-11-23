@@ -67,6 +67,30 @@ RETURNING *;
 SELECT * FROM media_assets
 WHERE tenant_id = $1 AND id = $2;
 
+-- name: HasPublicMediaReference :one
+SELECT EXISTS (
+    SELECT 1 FROM blog_posts AS p
+    WHERE p.tenant_id = sqlc.arg('tenant_id') AND p.status = 'published'
+      AND (
+          p.cover_media_id = sqlc.arg('media_id')::uuid
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p.content_blocks) = 'array'
+                  THEN p.content_blocks ELSE '[]'::jsonb END) AS block(value)
+              WHERE block.value->>'type' IN ('image', 'audio', 'video')
+                AND block.value->'data'->>'media_id' = (sqlc.arg('media_id')::uuid)::text
+          )
+      )
+) OR EXISTS (
+    SELECT 1 FROM courses AS c
+    WHERE c.tenant_id = sqlc.arg('tenant_id') AND c.status = 'published' AND c.deleted_at IS NULL
+      AND c.cover_media_id = sqlc.arg('media_id')::uuid
+) OR EXISTS (
+    SELECT 1 FROM site_settings AS s
+    WHERE s.tenant_id = sqlc.arg('tenant_id')
+      AND (s.portrait_media_id = sqlc.arg('media_id')::uuid OR s.logo_media_id = sqlc.arg('media_id')::uuid)
+);
+
 -- name: GetMediaAssetByStorageKey :one
 SELECT * FROM media_assets
 WHERE tenant_id = $1 AND storage_key = $2;

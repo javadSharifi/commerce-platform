@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -18,11 +17,11 @@ import (
 	"psychology/api/internal/platform/tenantctx"
 	"psychology/api/internal/settings"
 	"psychology/api/internal/settings/settingsdb"
+	"psychology/api/internal/testsupport/dbfixture"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func toPgUUID(u uuid.UUID) pgtype.UUID {
@@ -545,37 +544,19 @@ func TestServer_SettingsEndToEnd_TwoHostsAndAuth(t *testing.T) {
 }
 
 func TestServer_LiveSettingsWithRealPool(t *testing.T) {
-	dbURL := os.Getenv("TEST_APP_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		t.Skip("skipping live server database test: TEST_APP_DATABASE_URL or DATABASE_URL not set")
-		return
-	}
-
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		t.Skipf("skipping live server test (failed to connect: %v)", err)
-		return
-	}
-	defer pool.Close()
+	pool := dbfixture.Connect(t, dbfixture.AppDSN, "app_user")
 
 	store := db.NewStore(pool)
-	domainResolver := domain.NewResolver(domaindb.New(pool))
-	authService := auth.NewServiceWithStore(authdb.New(pool), store)
-	authHandler := auth.NewHandler(authService)
-
 	settingsService := settings.NewServiceWithStore(store)
-	settingsHandler := settings.NewHandler(settingsService, domainResolver, authService)
-
-	router := setupRouter(authHandler, nil, nil, nil, settingsHandler, nil, nil, nil, nil)
+	dbfixture.Connect(t, dbfixture.WorkerDSN, "worker_user")
+	userA := uuid.New()
+	address, serve := startFixtureServer(t, userA.String())
 
 	// 1. Verify health check works with full setup
 	req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
 	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
+	serve(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 for /v1/health with live pool, got %d", rr.Code)
 	}
@@ -584,7 +565,7 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 	reqUnknown := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
 	reqUnknown.Host = "unknown-" + uuid.NewString() + ".ir"
 	rrUnknown := httptest.NewRecorder()
-	router.ServeHTTP(rrUnknown, reqUnknown)
+	serve(rrUnknown, reqUnknown)
 	if rrUnknown.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown host with live pool, got %d", rrUnknown.Code)
 	}
@@ -594,10 +575,10 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 	tenantB := uuid.New()
 	slugA := "live-a-" + tenantA.String()[:8]
 	slugB := "live-b-" + tenantB.String()[:8]
-	hostA := slugA + ".ir"
-	hostB := slugB + ".ir"
+	hostA := slugA + ".test"
+	hostB := slugB + ".test"
 
-	_, err = pool.Exec(ctx, `
+	_, err := pool.Exec(ctx, `
 		INSERT INTO tenants (id, name, slug, status)
 		VALUES ($1, $2, $3, 'active'), ($4, $5, $6, 'active')
 	`, tenantA, "کلینیک دکتر شمس", slugA, tenantB, "کلینیک دکتر فردوس", slugB)
@@ -608,7 +589,6 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM tenants WHERE id IN ($1, $2)", tenantA, tenantB)
 	}()
 
-	userA := uuid.New()
 	userB := uuid.New()
 	_, err = pool.Exec(ctx, `
 		INSERT INTO panel_identities (id, email, password_hash, full_name, status)
@@ -689,11 +669,35 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 		t.Fatalf("failed to seed panel session for user A: %v", err)
 	}
 
+	for _, fixture := range []struct {
+		ctx      context.Context
+		id       uuid.UUID
+		template string
+		palette  string
+	}{
+		{ctxA, tenantA, "clinical", "ocean-trust"},
+		{ctxB, tenantB, "minimal", "warm-sand"},
+	} {
+		if _, err := settingsService.UpdateAppearance(fixture.ctx, fixture.id, settings.UpdateAppearanceParams{
+			TemplateID: fixture.template, PaletteID: fixture.palette,
+		}); err != nil {
+			t.Fatalf("seed fixture appearance: %v", err)
+		}
+	}
+	unverifiedHost := "unverified-" + slugA + ".ir"
+	if err := store.WithTenantTx(ctxA, func(tx pgx.Tx, tid uuid.UUID) error {
+		_, err := tx.Exec(ctx, "INSERT INTO domains (tenant_id, host) VALUES ($1, $2)", tid, unverifiedHost)
+		return err
+	}); err != nil {
+		t.Fatalf("seed unverified Host: %v", err)
+	}
+	assertUnknownPublicHost(t, serve, unverifiedHost)
+
 	// 4. Verify Host A gets its public profile (200 OK)
 	reqA := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
 	reqA.Host = hostA
 	rrA := httptest.NewRecorder()
-	router.ServeHTTP(rrA, reqA)
+	serve(rrA, reqA)
 	if rrA.Code != http.StatusOK {
 		t.Fatalf("expected 200 for Host A public site, got %d: %s", rrA.Code, rrA.Body.String())
 	}
@@ -709,7 +713,7 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 	reqB := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
 	reqB.Host = hostB
 	rrB := httptest.NewRecorder()
-	router.ServeHTTP(rrB, reqB)
+	serve(rrB, reqB)
 	if rrB.Code != http.StatusOK {
 		t.Fatalf("expected 200 for Host B public site, got %d: %s", rrB.Code, rrB.Body.String())
 	}
@@ -726,7 +730,7 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 	reqAdminGet.Header.Set("Authorization", "Bearer "+tokenA)
 	reqAdminGet.Header.Set("X-Tenant-ID", tenantA.String())
 	rrAdminGet := httptest.NewRecorder()
-	router.ServeHTTP(rrAdminGet, reqAdminGet)
+	serve(rrAdminGet, reqAdminGet)
 	if rrAdminGet.Code != http.StatusOK {
 		t.Fatalf("expected 200 for authorized admin get, got %d: %s", rrAdminGet.Code, rrAdminGet.Body.String())
 	}
@@ -748,7 +752,7 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 	reqAdminPut.Header.Set("X-Tenant-ID", tenantA.String())
 	reqAdminPut.Header.Set("Content-Type", "application/json")
 	rrAdminPut := httptest.NewRecorder()
-	router.ServeHTTP(rrAdminPut, reqAdminPut)
+	serve(rrAdminPut, reqAdminPut)
 	if rrAdminPut.Code != http.StatusOK {
 		t.Fatalf("expected 200 for authorized admin put, got %d: %s", rrAdminPut.Code, rrAdminPut.Body.String())
 	}
@@ -757,13 +761,16 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 	reqAUpdated := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
 	reqAUpdated.Host = hostA
 	rrAUpdated := httptest.NewRecorder()
-	router.ServeHTTP(rrAUpdated, reqAUpdated)
+	serve(rrAUpdated, reqAUpdated)
 	if rrAUpdated.Code != http.StatusOK {
 		t.Fatalf("expected 200 for Host A updated, got %d", rrAUpdated.Code)
 	}
 	var resAUpdated settings.PublicSiteProfile
-	_ = json.Unmarshal(rrAUpdated.Body.Bytes(), &resAUpdated)
-	if resAUpdated.Title != "کلینیک تخصصی دکتر شمس (به‌روزشده)" || resAUpdated.PrimaryColor != "#0ea5e9" {
+	if err := json.Unmarshal(rrAUpdated.Body.Bytes(), &resAUpdated); err != nil {
+		t.Fatal(err)
+	}
+	if resAUpdated.Title != "کلینیک تخصصی دکتر شمس (به‌روزشده)" || resAUpdated.Phone != "02177778888" ||
+		resAUpdated.TemplateID != "clinical" || resAUpdated.PaletteID != "ocean-trust" {
 		t.Fatalf("Host A profile was not updated: %+v", resAUpdated)
 	}
 
@@ -771,10 +778,13 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 	reqBCheck := httptest.NewRequest(http.MethodGet, "/v1/public/site", nil)
 	reqBCheck.Host = hostB
 	rrBCheck := httptest.NewRecorder()
-	router.ServeHTTP(rrBCheck, reqBCheck)
+	serve(rrBCheck, reqBCheck)
 	var resBCheck settings.PublicSiteProfile
-	_ = json.Unmarshal(rrBCheck.Body.Bytes(), &resBCheck)
-	if resBCheck.Title != "کلینیک دکتر فردوس" || resBCheck.PrimaryColor != "#10b981" {
+	if err := json.Unmarshal(rrBCheck.Body.Bytes(), &resBCheck); err != nil {
+		t.Fatal(err)
+	}
+	if rrBCheck.Code != http.StatusOK || resBCheck.Title != "کلینیک دکتر فردوس" ||
+		resBCheck.PrimaryColor != "#10b981" || resBCheck.TemplateID != "minimal" || resBCheck.PaletteID != "warm-sand" {
 		t.Fatalf("Host B profile was polluted by Host A update! Got: %+v", resBCheck)
 	}
 
@@ -783,21 +793,67 @@ func TestServer_LiveSettingsWithRealPool(t *testing.T) {
 	reqTamperGet.Header.Set("Authorization", "Bearer "+tokenA)
 	reqTamperGet.Header.Set("X-Tenant-ID", tenantB.String())
 	rrTamperGet := httptest.NewRecorder()
-	router.ServeHTTP(rrTamperGet, reqTamperGet)
+	serve(rrTamperGet, reqTamperGet)
 	if rrTamperGet.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 Forbidden for cross-tenant read attempt, got %d: %s", rrTamperGet.Code, rrTamperGet.Body.String())
 	}
 
 	// 11. Tampering attempt: Owner A attempts to update Tenant B settings -> 403 Forbidden
-	reqTamperPut := httptest.NewRequest(http.MethodPut, "/v1/admin/site", bytes.NewBuffer(updateBody))
-	reqTamperPut.Header.Set("Authorization", "Bearer "+tokenA)
-	reqTamperPut.Header.Set("X-Tenant-ID", tenantB.String())
-	reqTamperPut.Header.Set("Content-Type", "application/json")
-	rrTamperPut := httptest.NewRecorder()
-	router.ServeHTTP(rrTamperPut, reqTamperPut)
-	if rrTamperPut.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 Forbidden for cross-tenant update attempt, got %d: %s", rrTamperPut.Code, rrTamperPut.Body.String())
-	}
+	t.Run("denied_settings_write_has_no_side_effects", func(t *testing.T) {
+		type clinicState struct {
+			settings settingsdb.GetSiteSettingsRow
+			outbox   string
+			pending  bool
+		}
+		snapshotClinicB := func(ctx context.Context) clinicState {
+			t.Helper()
+			var state clinicState
+			err := store.WithTenantTx(tenantctx.With(ctx, tenantB), func(tx pgx.Tx, tid uuid.UUID) error {
+				var err error
+				state.settings, err = settingsdb.New(tx).GetSiteSettings(ctx, toPgUUID(tid))
+				if err != nil {
+					return err
+				}
+				return tx.QueryRow(ctx, `SELECT coalesce(jsonb_agg(to_jsonb(event) ORDER BY event.id), '[]')::text,
+				coalesce(bool_or(event.status IN ('pending', 'processing')), false)
+				FROM outbox_events AS event WHERE event.tenant_id = $1`, tid).Scan(&state.outbox, &state.pending)
+			})
+			if err != nil {
+				t.Fatalf("read persisted Clinic B settings and outbox: %v", err)
+			}
+			return state
+		}
+		// Let the real worker finish events emitted during setup before comparing every outbox field.
+		snapshotCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		beforeDeniedWrite := snapshotClinicB(snapshotCtx)
+		for beforeDeniedWrite.pending {
+			time.Sleep(50 * time.Millisecond)
+			beforeDeniedWrite = snapshotClinicB(snapshotCtx)
+		}
+		if beforeDeniedWrite.outbox == "[]" {
+			t.Fatal("expected Clinic B fixture to include at least one settled outbox event")
+		}
+		reqTamperPut := httptest.NewRequest(http.MethodPut, "/v1/admin/site", bytes.NewBuffer(updateBody))
+		reqTamperPut.Header.Set("Authorization", "Bearer "+tokenA)
+		reqTamperPut.Header.Set("X-Tenant-ID", tenantB.String())
+		reqTamperPut.Header.Set("Content-Type", "application/json")
+		rrTamperPut := httptest.NewRecorder()
+		serve(rrTamperPut, reqTamperPut)
+		if rrTamperPut.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 Forbidden for cross-tenant update attempt, got %d: %s", rrTamperPut.Code, rrTamperPut.Body.String())
+		}
+		afterDeniedWrite := snapshotClinicB(snapshotCtx)
+		if afterDeniedWrite.settings != beforeDeniedWrite.settings {
+			t.Fatal("denied write changed Clinic B's persisted settings")
+		}
+		if afterDeniedWrite.outbox != beforeDeniedWrite.outbox {
+			t.Fatal("denied write changed Clinic B's persisted outbox records")
+		}
+	})
+	checkPublicHome(t, store, serve, tenantA, tenantB, userA, userB, hostA, hostB, tokenA)
+	checkPublicBooking(t, store, tenantA, tenantB, hostA, hostB, serve)
+	runFixtureBrowser(t, address, hostA, resAUpdated.Title, hostB, resBCheck.Title, tokenA, tenantA.String())
 }
 
 func TestServer_GracefulShutdownAndTimeouts(t *testing.T) {

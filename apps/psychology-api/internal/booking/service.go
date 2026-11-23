@@ -16,6 +16,7 @@ import (
 	"psychology/api/internal/booking/bookingdb"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -30,6 +31,7 @@ var (
 	ErrTherapistInactive     = errors.New("booking: therapist is inactive")
 	ErrUnauthorizedTherapist = errors.New("booking: unauthorized to manage this therapist calendar")
 	ErrAppointmentNotFound   = errors.New("booking: appointment not found")
+	ErrInvalidGuestName      = errors.New("booking: guest name cannot be empty")
 	ErrInvalidPhone          = errors.New("booking: invalid iranian mobile phone number")
 	ErrCannotCancel          = errors.New("booking: appointment cannot be cancelled in its current state")
 	ErrCannotCancelPastSlot  = errors.New("booking: cannot cancel appointment after session start time")
@@ -119,6 +121,7 @@ type Querier interface {
 }
 
 type Service struct {
+	scoped      bool
 	queries     Querier
 	tehranLoc   *time.Location
 	rateLimiter *RateLimiter
@@ -737,7 +740,7 @@ func (s *Service) CreatePublicAppointment(ctx context.Context, tenantID uuid.UUI
 
 	name := strings.TrimSpace(in.GuestName)
 	if name == "" {
-		return nil, errors.New("booking: guest name cannot be empty")
+		return nil, ErrInvalidGuestName
 	}
 
 	phone, err := NormalizePhone(in.GuestPhone)
@@ -812,21 +815,23 @@ func (s *Service) CreatePublicAppointment(ctx context.Context, tenantID uuid.UUI
 		GuestName:       name,
 		GuestPhone:      phone,
 		GuestLookupHash: lookupHash,
-		Notes:           in.Notes,
+		Notes:           "",
 		ExpiresAt:       toPgTimestamptz(expiresAt),
 	})
 	if err != nil {
-		// Rollback slot status on failure
-		_, _ = s.queries.UpdateSlotStatus(ctx, bookingdb.UpdateSlotStatusParams{
+		if s.scoped {
+			return nil, fmt.Errorf("create appointment: %w", err)
+		}
+		_, releaseErr := s.queries.UpdateSlotStatus(ctx, bookingdb.UpdateSlotStatusParams{
 			TenantID: toPgUUID(tenantID),
 			ID:       toPgUUID(in.SlotID),
 			Status:   "available",
 		})
-		return nil, fmt.Errorf("create appointment: %w", err)
+		return nil, fmt.Errorf("create appointment: %w", errors.Join(err, releaseErr))
 	}
 
 	// 8. Record audit status history
-	_, _ = s.queries.CreateAppointmentStatusHistory(ctx, bookingdb.CreateAppointmentStatusHistoryParams{
+	_, err = s.queries.CreateAppointmentStatusHistory(ctx, bookingdb.CreateAppointmentStatusHistoryParams{
 		TenantID:      toPgUUID(tenantID),
 		AppointmentID: app.ID,
 		FromStatus:    pgtype.Text{Valid: false},
@@ -838,6 +843,9 @@ func (s *Service) CreatePublicAppointment(ctx context.Context, tenantID uuid.UUI
 		Metadata:      []byte("{}"),
 	})
 
+	if err != nil {
+		return nil, fmt.Errorf("record appointment creation: %w", err)
+	}
 	return &AppointmentResult{
 		ID:              fromPgUUID(app.ID),
 		TherapistID:     in.TherapistID,
@@ -851,13 +859,25 @@ func (s *Service) CreatePublicAppointment(ctx context.Context, tenantID uuid.UUI
 	}, nil
 }
 
+func (s *Service) publicAppointment(ctx context.Context, tenantID, appointmentID uuid.UUID) (bookingdb.Appointment, error) {
+	params := bookingdb.GetAppointmentByIDParams{TenantID: toPgUUID(tenantID), ID: toPgUUID(appointmentID)}
+	var app bookingdb.Appointment
+	var err error
+	if s.scoped {
+		app, err = s.queries.GetAppointmentByIDForUpdate(ctx, bookingdb.GetAppointmentByIDForUpdateParams(params))
+	} else {
+		app, err = s.queries.GetAppointmentByID(ctx, params)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return app, ErrAppointmentNotFound
+	}
+	return app, err
+}
+
 func (s *Service) GetPublicAppointmentStatus(ctx context.Context, tenantID, appointmentID uuid.UUID, lookupHash string, now time.Time) (*AppointmentResult, error) {
-	app, err := s.queries.GetAppointmentByID(ctx, bookingdb.GetAppointmentByIDParams{
-		TenantID: toPgUUID(tenantID),
-		ID:       toPgUUID(appointmentID),
-	})
+	app, err := s.publicAppointment(ctx, tenantID, appointmentID)
 	if err != nil {
-		return nil, ErrAppointmentNotFound
+		return nil, err
 	}
 
 	if app.GuestLookupHash != lookupHash {
@@ -870,23 +890,28 @@ func (s *Service) GetPublicAppointmentStatus(ctx context.Context, tenantID, appo
 	if app.Status == "pending" && (now.After(app.ExpiresAt.Time) || now.Equal(app.ExpiresAt.Time)) {
 		slotMu := s.getSlotLock(slotID)
 		slotMu.Lock()
+		defer slotMu.Unlock()
 
 		updatedApp, err := s.queries.UpdateAppointmentStatus(ctx, bookingdb.UpdateAppointmentStatusParams{
 			TenantID: toPgUUID(tenantID),
 			ID:       app.ID,
 			Status:   "expired",
 		})
-		if err == nil {
-			app = updatedApp
+		if err != nil {
+			return nil, fmt.Errorf("expire appointment: %w", err)
 		}
+		app = updatedApp
 
-		_, _ = s.queries.UpdateSlotStatus(ctx, bookingdb.UpdateSlotStatusParams{
+		_, err = s.queries.UpdateSlotStatus(ctx, bookingdb.UpdateSlotStatusParams{
 			TenantID: toPgUUID(tenantID),
 			ID:       app.SlotID,
 			Status:   "available",
 		})
 
-		_, _ = s.queries.CreateAppointmentStatusHistory(ctx, bookingdb.CreateAppointmentStatusHistoryParams{
+		if err != nil {
+			return nil, fmt.Errorf("release expired slot: %w", err)
+		}
+		_, err = s.queries.CreateAppointmentStatusHistory(ctx, bookingdb.CreateAppointmentStatusHistoryParams{
 			TenantID:      toPgUUID(tenantID),
 			AppointmentID: app.ID,
 			FromStatus:    pgtype.Text{String: "pending", Valid: true},
@@ -898,7 +923,9 @@ func (s *Service) GetPublicAppointmentStatus(ctx context.Context, tenantID, appo
 			Metadata:      []byte("{}"),
 		})
 
-		slotMu.Unlock()
+		if err != nil {
+			return nil, fmt.Errorf("record appointment expiration: %w", err)
+		}
 	}
 
 	slot, err := s.queries.GetAppointmentSlotByID(ctx, bookingdb.GetAppointmentSlotByIDParams{
@@ -923,12 +950,9 @@ func (s *Service) GetPublicAppointmentStatus(ctx context.Context, tenantID, appo
 }
 
 func (s *Service) CancelPublicAppointment(ctx context.Context, tenantID, appointmentID uuid.UUID, lookupHash, reason string, now time.Time) (*AppointmentResult, error) {
-	app, err := s.queries.GetAppointmentByID(ctx, bookingdb.GetAppointmentByIDParams{
-		TenantID: toPgUUID(tenantID),
-		ID:       toPgUUID(appointmentID),
-	})
+	app, err := s.publicAppointment(ctx, tenantID, appointmentID)
 	if err != nil {
-		return nil, ErrAppointmentNotFound
+		return nil, err
 	}
 
 	if app.GuestLookupHash != lookupHash {
@@ -962,9 +986,9 @@ func (s *Service) CancelPublicAppointment(ctx context.Context, tenantID, appoint
 	}
 
 	updatedApp, err := s.queries.UpdateAppointmentStatus(ctx, bookingdb.UpdateAppointmentStatusParams{
-		TenantID:            toPgUUID(tenantID),
-		ID:                  app.ID,
-		Status:              "cancelled",
+		TenantID:           toPgUUID(tenantID),
+		ID:                 app.ID,
+		Status:             "cancelled",
 		CancellationReason: reason,
 	})
 	if err != nil {
@@ -982,7 +1006,7 @@ func (s *Service) CancelPublicAppointment(ctx context.Context, tenantID, appoint
 	}
 
 	// Record audit history
-	_, _ = s.queries.CreateAppointmentStatusHistory(ctx, bookingdb.CreateAppointmentStatusHistoryParams{
+	_, err = s.queries.CreateAppointmentStatusHistory(ctx, bookingdb.CreateAppointmentStatusHistoryParams{
 		TenantID:      toPgUUID(tenantID),
 		AppointmentID: app.ID,
 		FromStatus:    pgtype.Text{String: app.Status, Valid: true},
@@ -993,6 +1017,10 @@ func (s *Service) CancelPublicAppointment(ctx context.Context, tenantID, appoint
 		Reason:        reason,
 		Metadata:      []byte("{}"),
 	})
+
+	if err != nil {
+		return nil, fmt.Errorf("record appointment cancellation: %w", err)
+	}
 
 	return &AppointmentResult{
 		ID:              fromPgUUID(updatedApp.ID),
@@ -1034,7 +1062,7 @@ func (s *Service) ExpirePendingAppointments(ctx context.Context, tenantID uuid.U
 				Status:   "available",
 			})
 
-			_, _ = s.queries.CreateAppointmentStatusHistory(ctx, bookingdb.CreateAppointmentStatusHistoryParams{
+			_, err = s.queries.CreateAppointmentStatusHistory(ctx, bookingdb.CreateAppointmentStatusHistoryParams{
 				TenantID:      toPgUUID(tenantID),
 				AppointmentID: app.ID,
 				FromStatus:    pgtype.Text{String: "pending", Valid: true},
@@ -1305,9 +1333,9 @@ func (s *Service) CancelAdminAppointment(ctx context.Context, tenantID, appointm
 
 	// Update appointment status to cancelled
 	_, err = s.queries.UpdateAppointmentStatus(ctx, bookingdb.UpdateAppointmentStatusParams{
-		TenantID:            toPgUUID(tenantID),
-		ID:                  toPgUUID(appointmentID),
-		Status:              "cancelled",
+		TenantID:           toPgUUID(tenantID),
+		ID:                 toPgUUID(appointmentID),
+		Status:             "cancelled",
 		CancellationReason: reason,
 	})
 	if err != nil {
@@ -1483,5 +1511,3 @@ func (s *Service) GetAdminAppointmentHistory(ctx context.Context, tenantID, appo
 		AppointmentID: toPgUUID(appointmentID),
 	})
 }
-
-

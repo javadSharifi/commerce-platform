@@ -11,9 +11,10 @@ INSERT INTO workshops (
     registration_deadline,
     capacity,
     price_rials,
-    status
+    status,
+    topic
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 RETURNING *;
 
@@ -55,6 +56,7 @@ SET title = $3,
     registration_deadline = $10,
     capacity = $11,
     price_rials = $12,
+    topic = COALESCE(sqlc.narg('topic')::text, topic),
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
 RETURNING *;

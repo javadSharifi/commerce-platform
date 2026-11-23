@@ -192,11 +192,12 @@ INSERT INTO courses (
     price_rials,
     cover_media_id,
     status,
-    published_at
+    published_at,
+    topic
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at
+RETURNING id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at, topic
 `
 
 type CreateCourseParams struct {
@@ -209,6 +210,7 @@ type CreateCourseParams struct {
 	CoverMediaID   pgtype.UUID
 	Status         string
 	PublishedAt    pgtype.Timestamptz
+	Topic          string
 }
 
 // Courses queries
@@ -223,6 +225,7 @@ func (q *Queries) CreateCourse(ctx context.Context, arg CreateCourseParams) (Cou
 		arg.CoverMediaID,
 		arg.Status,
 		arg.PublishedAt,
+		arg.Topic,
 	)
 	var i Course
 	err := row.Scan(
@@ -239,6 +242,7 @@ func (q *Queries) CreateCourse(ctx context.Context, arg CreateCourseParams) (Cou
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Topic,
 	)
 	return i, err
 }
@@ -514,7 +518,7 @@ func (q *Queries) GetBuyerSessionByTokenHash(ctx context.Context, arg GetBuyerSe
 }
 
 const getCourseByID = `-- name: GetCourseByID :one
-SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at FROM courses
+SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at, topic FROM courses
 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
 `
 
@@ -540,12 +544,13 @@ func (q *Queries) GetCourseByID(ctx context.Context, arg GetCourseByIDParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Topic,
 	)
 	return i, err
 }
 
 const getCourseByIDForUpdate = `-- name: GetCourseByIDForUpdate :one
-SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at FROM courses
+SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at, topic FROM courses
 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
 FOR UPDATE
 `
@@ -572,12 +577,13 @@ func (q *Queries) GetCourseByIDForUpdate(ctx context.Context, arg GetCourseByIDF
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Topic,
 	)
 	return i, err
 }
 
 const getCourseBySlug = `-- name: GetCourseBySlug :one
-SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at FROM courses
+SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at, topic FROM courses
 WHERE tenant_id = $1 AND slug = $2 AND deleted_at IS NULL
 `
 
@@ -603,6 +609,7 @@ func (q *Queries) GetCourseBySlug(ctx context.Context, arg GetCourseBySlugParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Topic,
 	)
 	return i, err
 }
@@ -761,7 +768,7 @@ func (q *Queries) InvalidateExistingBuyerOTPs(ctx context.Context, arg Invalidat
 }
 
 const listAdminCourses = `-- name: ListAdminCourses :many
-SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at FROM courses
+SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at, topic FROM courses
 WHERE tenant_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 `
@@ -789,6 +796,7 @@ func (q *Queries) ListAdminCourses(ctx context.Context, tenantID pgtype.UUID) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Topic,
 		); err != nil {
 			return nil, err
 		}
@@ -983,7 +991,7 @@ func (q *Queries) ListCourseLessons(ctx context.Context, arg ListCourseLessonsPa
 }
 
 const listPublishedCourses = `-- name: ListPublishedCourses :many
-SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at FROM courses
+SELECT id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at, topic FROM courses
 WHERE tenant_id = $1 AND status = 'published' AND deleted_at IS NULL
 ORDER BY published_at DESC
 `
@@ -1011,6 +1019,7 @@ func (q *Queries) ListPublishedCourses(ctx context.Context, tenantID pgtype.UUID
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.Topic,
 		); err != nil {
 			return nil, err
 		}
@@ -1190,9 +1199,10 @@ SET title = $3,
     cover_media_id = $8,
     status = $9,
     published_at = $10,
+    topic = COALESCE($11::text, topic),
     updated_at = NOW()
 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-RETURNING id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at
+RETURNING id, tenant_id, title, slug, description, instructor_name, price_rials, cover_media_id, status, published_at, created_at, updated_at, deleted_at, topic
 `
 
 type UpdateCourseParams struct {
@@ -1206,6 +1216,7 @@ type UpdateCourseParams struct {
 	CoverMediaID   pgtype.UUID
 	Status         string
 	PublishedAt    pgtype.Timestamptz
+	Topic          pgtype.Text
 }
 
 func (q *Queries) UpdateCourse(ctx context.Context, arg UpdateCourseParams) (Course, error) {
@@ -1220,6 +1231,7 @@ func (q *Queries) UpdateCourse(ctx context.Context, arg UpdateCourseParams) (Cou
 		arg.CoverMediaID,
 		arg.Status,
 		arg.PublishedAt,
+		arg.Topic,
 	)
 	var i Course
 	err := row.Scan(
@@ -1236,6 +1248,7 @@ func (q *Queries) UpdateCourse(ctx context.Context, arg UpdateCourseParams) (Cou
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.Topic,
 	)
 	return i, err
 }

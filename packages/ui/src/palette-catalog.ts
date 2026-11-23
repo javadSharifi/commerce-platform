@@ -2,7 +2,7 @@
  * Palette Catalog - Central Metadata and Semantic Tokens for Platform Palettes
  *
  * Complies with AGENTS.md rule 12 and DECISIONS.md (PSY-D10):
- * - 4 predefined palettes: calm-sage (default), ocean-trust, warm-sand, royal-plum
+ * - calm-sage is the default
  * - No user arbitrary code or arbitrary color injection
  * - Maps to semantic DaisyUI tokens
  */
@@ -11,6 +11,7 @@ export interface PaletteTokens {
   colorBase100: string;
   colorBase200: string;
   colorBase300: string;
+  colorSurfaceCard?: string;
   colorBaseContent: string;
   colorPrimary: string;
   colorPrimaryContent: string;
@@ -113,10 +114,31 @@ export const PALETTE_CATALOG: readonly PaletteMeta[] = [
       colorNeutralContent: '#faf5ff',
     },
   },
+  {
+    id: 'stitch-editorial',
+    labelFa: 'استیچ',
+    descriptionFa: 'زمینهٔ گرم روشن، کارت سفید، سبز تیره و تأکید سفالی',
+    primaryColor: '#2d4f43',
+    tokens: {
+      colorBase100: '#faf9f6',
+      colorBase200: '#f3efe9',
+      colorBase300: '#eae6df',
+      colorSurfaceCard: '#ffffff',
+      colorBaseContent: '#1e2422',
+      colorPrimary: '#2d4f43',
+      colorPrimaryContent: '#ffffff',
+      colorSecondary: '#e8dfd5',
+      colorSecondaryContent: '#1e2422',
+      colorAccent: '#c9825b',
+      colorAccentContent: '#2c2c2c',
+      colorNeutral: '#1e2422',
+      colorNeutralContent: '#faf9f6',
+    },
+  },
 ] as const;
 
 export const VALID_PALETTE_IDS = PALETTE_CATALOG.map((p) => p.id) as readonly string[];
-export type SupportedPaletteId = 'calm-sage' | 'ocean-trust' | 'warm-sand' | 'royal-plum';
+export type SupportedPaletteId = 'calm-sage' | 'ocean-trust' | 'warm-sand' | 'royal-plum' | 'stitch-editorial';
 
 const PALETTE_MAP: Record<string, PaletteMeta> = Object.freeze(
   Object.fromEntries(PALETTE_CATALOG.map((p) => [p.id, p]))

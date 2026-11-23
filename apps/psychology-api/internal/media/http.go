@@ -46,6 +46,7 @@ func (h *Handler) MountRoutes(r chi.Router) {
 	// Public streaming endpoints (Host-resolved)
 	r.Get("/public/media/{id}/stream-url", h.handleGetPublicStreamURL)
 	r.Get("/public/media/{id}/stream", h.handleGetPublicStreamURL)
+	r.Get("/public/media/{id}/image", h.handleGetPublicImage)
 
 	// Admin media management (Owner and Content Manager)
 	if h.authService != nil {
@@ -97,7 +98,29 @@ func (h *Handler) handleGetPublicStreamURL(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	w.Header().Set("Cache-Control", "private, no-store")
 	writeJSON(w, http.StatusOK, res)
+}
+
+func (h *Handler) handleGetPublicImage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	tenantID, err := h.domainResolver.Resolve(r.Context(), r.Host)
+	assetID, idErr := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil || idErr != nil {
+		http.NotFound(w, r)
+		return
+	}
+	location, err := h.service.GetPublicImageURL(r.Context(), tenantID, assetID)
+	switch {
+	case err == nil:
+		http.Redirect(w, r, location, http.StatusFound)
+	case errors.Is(err, ErrMediaNotFound), errors.Is(err, ErrMediaNotVerified),
+		errors.Is(err, ErrMediaNotPublic), errors.Is(err, ErrInvalidMimeType),
+		errors.Is(err, ErrFileSizeExceeded), errors.Is(err, ErrInvalidFileSize):
+		http.NotFound(w, r)
+	default:
+		writeJSONError(w, http.StatusBadGateway, "IMAGE_UNAVAILABLE", "تصویر موقتاً در دسترس نیست.")
+	}
 }
 
 // ---------------- Admin Handlers ----------------

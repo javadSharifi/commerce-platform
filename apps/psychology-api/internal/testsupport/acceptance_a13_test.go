@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -19,12 +18,12 @@ import (
 	"psychology/api/internal/platform/tenantctx"
 	"psychology/api/internal/settings"
 	"psychology/api/internal/settings/settingsdb"
+	"psychology/api/internal/testsupport/dbfixture"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // TestAcceptance_PSY_A13_Mock_TwoHosts verifies acceptance scenario PSY-A13:
@@ -385,27 +384,8 @@ func TestAcceptance_PSY_A13_Mock_TwoHosts(t *testing.T) {
 // TestAcceptance_PSY_A13_LivePostgreSQL_TwoHosts runs the full PSY-A13 acceptance scenario
 // against real PostgreSQL using the runtime role app_user under FORCE RLS.
 func TestAcceptance_PSY_A13_LivePostgreSQL_TwoHosts(t *testing.T) {
-	dbURL := os.Getenv("TEST_APP_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		// Try default runtime app_user connection if active docker container is running
-		dbURL = "postgres://app_user:secret_app_pass@127.0.0.1:5432/psychology_prod?sslmode=disable"
-	}
-
 	ctx := context.Background()
-	appPool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		t.Skipf("skipping live database test: failed to connect as app_user: %v", err)
-		return
-	}
-	defer appPool.Close()
-
-	if err := appPool.Ping(ctx); err != nil {
-		t.Skipf("skipping live database test: postgres ping failed: %v", err)
-		return
-	}
+	appPool := dbfixture.Connect(t, dbfixture.AppDSN, "app_user")
 
 	store := db.NewStore(appPool)
 	settingsService := settings.NewServiceWithStore(store)
@@ -428,7 +408,7 @@ func TestAcceptance_PSY_A13_LivePostgreSQL_TwoHosts(t *testing.T) {
 	hostA := slugA + ".ir"
 	hostB := slugB + ".ir"
 
-	_, err = appPool.Exec(ctx, `
+	_, err := appPool.Exec(ctx, `
 		INSERT INTO tenants (id, name, slug, status)
 		VALUES ($1, $2, $3, 'active'), ($4, $5, $6, 'active')
 	`, tenantA, "کلینیک دکتر احمدی", slugA, tenantB, "کلینیک دکتر حسینی", slugB)

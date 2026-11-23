@@ -1,0 +1,93 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import type { getEducation } from '../lib/education.js';
+import { formatDate, formatPrice, publicImagePath } from '../lib/home.js';
+import { resolveTemplate } from '../templates/registry.js';
+
+interface Props {
+  workshopsOnly?: boolean;
+  catalog: Awaited<ReturnType<typeof getEducation>>;
+}
+
+const { workshopsOnly = false, catalog } = Astro.props;
+const site = Astro.locals.site!;
+const { CourseCard, WorkshopCard } = resolveTemplate(site.template_id).components;
+const title = workshopsOnly ? 'کارگاه‌های تخصصی و آموزشی' : 'دوره‌ها و کارگاه‌های آموزشی';
+const path = workshopsOnly ? '/workshops' : '/courses';
+const selectedTopic = Astro.url.searchParams.get('topic')?.trim() ?? '';
+const { courses, workshops, unavailable } = catalog;
+
+const byTopic = (item: { topic?: string }) => !selectedTopic || item.topic === selectedTopic;
+const visibleCourses = courses.filter(byTopic);
+const visibleWorkshops = workshops.filter(byTopic);
+const topics = [...new Set([...courses, ...workshops].flatMap(item => item.topic ? [item.topic] : []))]
+  .sort((a, b) => a.localeCompare(b, 'fa-IR'));
+---
+
+<BaseLayout title={`${title} | ${site.title}`} description={site.description}
+  paletteId={site.palette_id} templateId={site.template_id} themeRadius={site.theme_radius} themeScale={site.theme_scale}>
+  <header class="bg-base-200/55 px-4 py-12 text-center sm:py-16">
+    <div class="mx-auto max-w-3xl space-y-5">
+      <h1 class="text-3xl font-extrabold leading-tight text-base-content sm:text-5xl">{title}</h1>
+      <nav aria-label="نوع آموزش" class="flex flex-wrap justify-center gap-2">
+        <a href="/courses" aria-current={!workshopsOnly ? 'page' : undefined}
+          class:list={['btn btn-sm rounded-full', !workshopsOnly ? 'btn-primary' : 'btn-outline']}>همه آموزش‌ها</a>
+        {!workshopsOnly && visibleCourses.length > 0 && (
+          <a href="#video-courses" class="btn btn-outline btn-sm rounded-full">دوره‌های ویدیویی</a>
+        )}
+        <a href="/workshops" aria-current={workshopsOnly ? 'page' : undefined}
+          class:list={['btn btn-sm rounded-full', workshopsOnly ? 'btn-primary' : 'btn-outline']}>کارگاه‌های زنده</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="mx-auto max-w-7xl space-y-12 px-4 py-10 sm:px-6 lg:px-8">
+    {(topics.length > 0 || selectedTopic) && (
+      <nav aria-label="فیلتر موضوع آموزش" class="flex flex-wrap items-center gap-2">
+        <a href={path} class:list={['btn btn-sm rounded-full', selectedTopic ? 'btn-outline' : 'btn-primary']}
+          aria-current={!selectedTopic ? 'true' : undefined}>همه موضوع‌ها</a>
+        {topics.map(topic => (
+          <a href={`${path}?topic=${encodeURIComponent(topic)}`}
+            class:list={['btn btn-sm rounded-full', topic === selectedTopic ? 'btn-primary' : 'btn-outline']}
+            aria-current={topic === selectedTopic ? 'true' : undefined}>{topic}</a>
+        ))}
+      </nav>
+    )}
+    {unavailable && <p class="alert alert-warning" role="status">نمایش آموزش‌ها موقتاً در دسترس نیست.</p>}
+    {!unavailable && visibleCourses.length === 0 && visibleWorkshops.length === 0 && (
+      <p class="rounded-2xl bg-base-200 p-8 text-center">
+        {selectedTopic ? 'آموزشی برای این موضوع پیدا نشد.' : 'هنوز آموزشی منتشر نشده است.'}
+      </p>
+    )}
+    {visibleCourses.length > 0 && (
+      <section id="video-courses" aria-labelledby="video-courses-heading" class="scroll-mt-24">
+        <h2 id="video-courses-heading" class="mb-5 text-2xl font-bold">دوره‌های ویدیویی</h2>
+        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {visibleCourses.map(course => {
+            const count = course.lessons_count ?? course.total_lessons_count;
+            return (
+              <CourseCard id={course.id} slug={encodeURIComponent(course.slug)} title={course.title}
+                instructorName={course.instructor_name} priceLabel={formatPrice(course.price_rials)}
+                lessonsCountLabel={count ? count.toLocaleString('fa-IR') + ' جلسه' : undefined}
+                coverUrl={publicImagePath(course.cover_media_id)} />
+            );
+          })}
+        </div>
+      </section>
+    )}
+    {visibleWorkshops.length > 0 && (
+      <section aria-labelledby="workshops-heading" class="rounded-3xl bg-base-200/55 p-5 sm:p-8">
+        <h2 id="workshops-heading" class="mb-5 text-2xl font-bold">کارگاه‌های زنده</h2>
+        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {visibleWorkshops.map(workshop => (
+            <WorkshopCard id={encodeURIComponent(workshop.id)} title={workshop.title} instructorName={workshop.instructor_name}
+              priceLabel={formatPrice(workshop.price_rials)} dateLabel={formatDate(workshop.starts_at)}
+              registrationOpen={workshop.is_registration_open}
+              capacityLabel={workshop.remaining_capacity === 0 ? 'ظرفیت تکمیل است' : workshop.is_registration_open
+                ? workshop.remaining_capacity.toLocaleString('fa-IR') + ' جای خالی' : 'ثبت‌نام بسته است'} />
+          ))}
+        </div>
+      </section>
+    )}
+  </div>
+</BaseLayout>

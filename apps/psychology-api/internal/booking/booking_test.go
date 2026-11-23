@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -467,7 +468,7 @@ func (m *mockBookingQuerier) GetAppointmentByID(ctx context.Context, arg booking
 
 	app, ok := m.appointments[id]
 	if !ok || fromPgUUID(app.TenantID) != tID {
-		return bookingdb.Appointment{}, fmt.Errorf("appointment not found")
+		return bookingdb.Appointment{}, pgx.ErrNoRows
 	}
 	return app, nil
 }
@@ -605,7 +606,7 @@ func (m *mockBookingQuerier) GetAppointmentDetail(ctx context.Context, arg booki
 		Status:             app.Status,
 		GuestName:          app.GuestName,
 		GuestPhone:         app.GuestPhone,
-		GuestLookupHash:   app.GuestLookupHash,
+		GuestLookupHash:    app.GuestLookupHash,
 		Notes:              app.Notes,
 		ExpiresAt:          app.ExpiresAt,
 		ConfirmedAt:        app.ConfirmedAt,
@@ -648,7 +649,7 @@ func (m *mockBookingQuerier) ListAdminAppointments(ctx context.Context, arg book
 			Status:             app.Status,
 			GuestName:          app.GuestName,
 			GuestPhone:         app.GuestPhone,
-			GuestLookupHash:   app.GuestLookupHash,
+			GuestLookupHash:    app.GuestLookupHash,
 			Notes:              app.Notes,
 			ExpiresAt:          app.ExpiresAt,
 			ConfirmedAt:        app.ConfirmedAt,
@@ -2449,5 +2450,3 @@ func TestAdminAppointment_HTTPEndpoints(t *testing.T) {
 		t.Errorf("expected cancelled status, got %s", detailResp["status"])
 	}
 }
-
-

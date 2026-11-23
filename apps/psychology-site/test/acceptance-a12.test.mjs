@@ -1,3 +1,7 @@
+import { bookingFixture } from './booking-fixture.mjs';
+import { blogFixture } from './blog-fixture.mjs';
+import { educationFixture } from './education-fixture.mjs';
+import { fetchOnHost } from './http-host.mjs';
 import test from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
@@ -42,6 +46,14 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     const rawHost = req.headers['x-forwarded-host'] || req.headers['host'] || '';
     const cleanHost = String(rawHost).split(':')[0].trim();
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (bookingFixture(req, res, cleanHost !== hostA)) return;
+
+    if (cleanHost === hostA || cleanHost === hostB) {
+      const education = educationFixture(req.url, { empty: cleanHost === hostB });
+      if (education !== undefined) return res.end(JSON.stringify(education));
+      const blog = blogFixture(req.url, { empty: cleanHost === hostB, withMedia: false });
+      if (blog !== undefined) return res.end(JSON.stringify(blog));
+    }
 
     if (cleanHost === hostA) {
       res.writeHead(200);
@@ -86,7 +98,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     }
 
     try {
-      const upstreamRes = await fetch(`http://127.0.0.1:${sitePort}${url}`, {
+      const upstreamRes = await fetchOnHost(`http://127.0.0.1:${sitePort}${url}`, {
         method: req.method,
         headers: {
           ...req.headers,
@@ -171,7 +183,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     // Step 1: Initial Cache Warmup for both hosts on Edge Cache Proxy
     // =========================================================================
     // Host A first request: MISS -> cached as minimal
-    const resHomeA1 = await fetch(`http://127.0.0.1:${cacheProxyPort}/`, {
+    const resHomeA1 = await fetchOnHost(`http://127.0.0.1:${cacheProxyPort}/`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resHomeA1.status, 200);
@@ -181,7 +193,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     assert.match(htmlHomeA1, /dir="rtl"/);
 
     // Host A second request: HIT
-    const resHomeA2 = await fetch(`http://127.0.0.1:${cacheProxyPort}/`, {
+    const resHomeA2 = await fetchOnHost(`http://127.0.0.1:${cacheProxyPort}/`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resHomeA2.status, 200);
@@ -190,7 +202,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     assert.match(htmlHomeA2, /data-theme="minimal"/);
 
     // Host B first request: MISS -> cached as minimal
-    const resHomeB1 = await fetch(`http://127.0.0.1:${cacheProxyPort}/`, {
+    const resHomeB1 = await fetchOnHost(`http://127.0.0.1:${cacheProxyPort}/`, {
       headers: { Host: hostB, 'X-Forwarded-Host': hostB },
     });
     assert.strictEqual(resHomeB1.status, 200);
@@ -199,7 +211,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     assert.match(htmlHomeB1, /data-theme="minimal"/);
 
     // Host B second request: HIT
-    const resHomeB2 = await fetch(`http://127.0.0.1:${cacheProxyPort}/`, {
+    const resHomeB2 = await fetchOnHost(`http://127.0.0.1:${cacheProxyPort}/`, {
       headers: { Host: hostB, 'X-Forwarded-Host': hostB },
     });
     assert.strictEqual(resHomeB2.status, 200);
@@ -213,7 +225,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     const previewUrl = `http://127.0.0.1:${cacheProxyPort}/preview?template=clinical&palette=ocean-trust&radius=lg&scale=sm`;
 
     // Consecutive request 1:
-    const resPrev1 = await fetch(previewUrl, {
+    const resPrev1 = await fetchOnHost(previewUrl, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resPrev1.status, 200);
@@ -229,7 +241,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     assert.match(htmlPrev1, /dir="rtl"/);
 
     // Consecutive request 2 (must also strictly BYPASS shared cache and carry private, no-store):
-    const resPrev2 = await fetch(previewUrl, {
+    const resPrev2 = await fetchOnHost(previewUrl, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resPrev2.status, 200);
@@ -240,7 +252,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     assert.match(htmlPrev2, /data-radius="lg"/);
 
     // Verify preview did NOT pollute or overwrite cached Home page /
-    const resHomeCheck = await fetch(`http://127.0.0.1:${cacheProxyPort}/`, {
+    const resHomeCheck = await fetchOnHost(`http://127.0.0.1:${cacheProxyPort}/`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resHomeCheck.headers.get('x-cache'), 'HIT');
@@ -251,7 +263,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     // Step 3: Fallback & Security on Preview
     // =========================================================================
     // Fallback to minimal when unknown template ID is requested
-    const resPrevFallback = await fetch(`http://127.0.0.1:${sitePort}/preview?template=unregistered_template_999`, {
+    const resPrevFallback = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?template=unregistered_template_999`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resPrevFallback.status, 200);
@@ -260,7 +272,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     assert.match(htmlPrevFallback, /قالب اختصاصی مینیمال/);
 
     // Fallback to calm-sage when invalid palette ID is requested
-    const resPrevInvalidPal = await fetch(`http://127.0.0.1:${sitePort}/preview?palette=unregistered_palette_xyz`, {
+    const resPrevInvalidPal = await fetchOnHost(`http://127.0.0.1:${sitePort}/preview?palette=unregistered_palette_xyz`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resPrevInvalidPal.status, 200);
@@ -286,7 +298,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     // Step 5: Post-Outbox Verification (Host A renders fresh appearance, Host B remains HIT)
     // =========================================================================
     // Host A: First request after outbox is MISS, rendering fresh clinical appearance immediately
-    const resHomeAPostPurge1 = await fetch(`http://127.0.0.1:${cacheProxyPort}/`, {
+    const resHomeAPostPurge1 = await fetchOnHost(`http://127.0.0.1:${cacheProxyPort}/`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resHomeAPostPurge1.status, 200);
@@ -298,7 +310,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     assert.match(htmlHomeAPostPurge1, /data-scale="sm"/);
 
     // Host A: Second request is re-cached as HIT
-    const resHomeAPostPurge2 = await fetch(`http://127.0.0.1:${cacheProxyPort}/`, {
+    const resHomeAPostPurge2 = await fetchOnHost(`http://127.0.0.1:${cacheProxyPort}/`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resHomeAPostPurge2.status, 200);
@@ -307,7 +319,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     assert.match(htmlHomeAPostPurge2, /data-theme="clinical"/);
 
     // Host B: Cache MUST remain strictly HIT with previous minimal appearance and warm-sand palette (zero invalidation leak)
-    const resHomeBPostPurge = await fetch(`http://127.0.0.1:${cacheProxyPort}/`, {
+    const resHomeBPostPurge = await fetchOnHost(`http://127.0.0.1:${cacheProxyPort}/`, {
       headers: { Host: hostB, 'X-Forwarded-Host': hostB },
     });
     assert.strictEqual(resHomeBPostPurge.status, 200);
@@ -320,7 +332,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     // Step 6: Content Pages Regression: Courses, Workshops, Blog (RTL, Viewport, 0 KB client JS)
     // =========================================================================
     const contentPages = [
-      { path: '/courses', title: 'دوره‌های آموزشی تخصصی', zeroClientJs: true },
+      { path: '/courses', title: 'دوره‌ها و کارگاه‌های آموزشی', zeroClientJs: true },
       { path: '/courses/anxiety-management', title: 'دوره جامع مدیریت استرس و اضطراب فراگیر', zeroClientJs: false },
       { path: '/workshops', title: 'کارگاه‌های تخصصی و آموزشی', zeroClientJs: true },
       { path: '/workshops/f47ac10b-58cc-4372-a567-0e02b2c3d479', title: 'کارگاه روان‌درمانی تحلیلی و تنظیم هیجان', zeroClientJs: false },
@@ -329,7 +341,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     ];
 
     for (const page of contentPages) {
-      const res = await fetch(`http://127.0.0.1:${sitePort}${page.path}`, {
+      const res = await fetchOnHost(`http://127.0.0.1:${sitePort}${page.path}`, {
         headers: { Host: hostA, 'X-Forwarded-Host': hostA },
       });
       assert.strictEqual(res.status, 200, `Page ${page.path} should return 200`);
@@ -360,7 +372,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     // =========================================================================
     // Step 7: Interactive Pages & Booking Flow (PersianDatePicker Island & Jalali Calendar)
     // =========================================================================
-    const resBooking = await fetch(`http://127.0.0.1:${sitePort}/booking`, {
+    const resBooking = await fetchOnHost(`http://127.0.0.1:${sitePort}/booking`, {
       headers: { Host: hostA, 'X-Forwarded-Host': hostA },
     });
     assert.strictEqual(resBooking.status, 200);
@@ -389,7 +401,7 @@ test('PSY-A12 Acceptance Test: Comprehensive Regression, RTL, Mobile, Zero Clien
     ];
 
     for (const priv of privatePages) {
-      const res = await fetch(`http://127.0.0.1:${sitePort}${priv.path}`, {
+      const res = await fetchOnHost(`http://127.0.0.1:${sitePort}${priv.path}`, {
         headers: { Host: hostA, 'X-Forwarded-Host': hostA },
       });
       assert.strictEqual(res.status, 200, `Private page ${priv.path} should return 200`);

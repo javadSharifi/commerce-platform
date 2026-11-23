@@ -1,29 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PersianDatePicker, formatPersianDate, Modal } from '@psychology/ui';
 
-export interface TherapistItem {
-  id: string;
-  name: string;
-  slug?: string;
-  title: string;
-  bio: string;
-  session_duration_minutes: number;
-}
+import type { PublicTherapistItem, PublicAppointmentSlot, PublicAppointmentResponse } from '@psychology/api-client';
+import { tehranDay } from '../lib/booking-date';
 
-export interface SlotItem {
-  id: string;
-  therapist_id: string;
-  starts_at: string;
-  ends_at: string;
-  status: string;
-}
+type SlotItem = PublicAppointmentSlot;
 
 export interface BookingFlowProps {
-  therapists: TherapistItem[];
-  initialSlots?: SlotItem[];
-  initialTherapistId?: string;
-  initialDate?: string;
-  apiBase?: string;
+  therapists: PublicTherapistItem[];
+  initialSlots: SlotItem[];
+  initialDate: string;
+  today: string;
+  initialSlotsUnavailable?: boolean;
+  clinicAddress?: string;
+  clinicPhone?: string;
+  officeHours?: string;
 }
 
 function formatTehranDateStr(dateStr: string): string {
@@ -51,53 +42,18 @@ function formatTehranTimeStr(dateStr: string): string {
   }
 }
 
-function getTehranDateKey(dateStr: string): string {
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Tehran',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(new Date(dateStr));
-    const year = parts.find((p) => p.type === 'year')?.value;
-    const month = parts.find((p) => p.type === 'month')?.value;
-    const day = parts.find((p) => p.type === 'day')?.value;
-    return `${year}-${month}-${day}`;
-  } catch {
-    return dateStr.slice(0, 10);
-  }
-}
-
-function getTodayIsoTehran(): string {
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Tehran',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(new Date());
-    const year = parts.find((p) => p.type === 'year')?.value;
-    const month = parts.find((p) => p.type === 'month')?.value;
-    const day = parts.find((p) => p.type === 'day')?.value;
-    return `${year}-${month}-${day}`;
-  } catch {
-    return new Date().toISOString().slice(0, 10);
-  }
-}
-
 export const BookingFlow: React.FC<BookingFlowProps> = ({
-  therapists = [],
-  initialSlots = [],
-  initialTherapistId,
+  therapists,
+  initialSlots,
   initialDate,
-  apiBase = '',
+  today,
+  initialSlotsUnavailable,
+  clinicAddress,
+  clinicPhone,
+  officeHours,
 }) => {
-  const [selectedTherapistId, setSelectedTherapistId] = useState<string>(
-    initialTherapistId || therapists[0]?.id || ''
-  );
-  const [selectedDate, setSelectedDate] = useState<string>(
-    initialDate || getTodayIsoTehran()
-  );
+  const [selectedTherapistId, setSelectedTherapistId] = useState(therapists[0]?.id ?? '');
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [slots, setSlots] = useState<SlotItem[]>(initialSlots);
   const [loading, setLoading] = useState<boolean>(false);
   const [filterByDate, setFilterByDate] = useState<boolean>(true);
@@ -107,127 +63,127 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [guestName, setGuestName] = useState<string>('');
   const [guestPhone, setGuestPhone] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [modalAlert, setModalAlert] = useState<string | null>(null);
+  const [slotsUnavailable, setSlotsUnavailable] = useState(Boolean(initialSlotsUnavailable));
+  const [rejected, setRejected] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const inFlight = useRef(false);
+  const continueButton = useRef<HTMLButtonElement>(null);
 
-  // Track if component has hydrated
-  const isHydrated = useRef(false);
-
-  const selectedTherapist =
-    therapists.find((th) => th.id === selectedTherapistId) || therapists[0];
-
-  // Fetch live slots whenever therapist or date changes
-  const fetchSlots = async (thId: string, dateStr: string) => {
-    if (!thId) return;
-    setLoading(true);
-    try {
-      const query = dateStr ? `?from_date=${encodeURIComponent(dateStr)}` : '';
-      const host = typeof window !== 'undefined' ? window.location.host : '';
-      const endpoint = `${apiBase}/v1/public/therapists/${thId}/slots${query}`;
-      const res = await fetch(endpoint, {
-        headers: host ? { Host: host } : {},
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSlots(Array.isArray(data) ? data : []);
-      } else {
-        setSlots([]);
-      }
-    } catch (err) {
-      console.error('Error fetching therapist slots:', err);
-      setSlots([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const selectedTherapist = therapists.find(th => th.id === selectedTherapistId);
 
   useEffect(() => {
-    if (!isHydrated.current) {
-      isHydrated.current = true;
-      // Fetch fresh slots on mount if on client to bypass any stale SSR data
-      if (selectedTherapistId) {
-        fetchSlots(selectedTherapistId, selectedDate);
-      }
-      return;
-    }
-    if (selectedTherapistId) {
-      fetchSlots(selectedTherapistId, selectedDate);
-    }
-  }, [selectedTherapistId, selectedDate]);
+    if (!selectedTherapistId || !selectedDate) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setSlotsUnavailable(false);
+    const query = new URLSearchParams({ from_date: selectedDate });
+    fetch(`/v1/public/therapists/${encodeURIComponent(selectedTherapistId)}/slots?${query}`, {
+      signal: controller.signal, cache: 'no-store',
+    }).then(async res => {
+      const data = res.ok ? await res.json() : undefined;
+      if (!Array.isArray(data)) throw new Error('Slot request unsuccessful');
+      if (!controller.signal.aborted) setSlots(data);
+    }).catch(err => {
+      if (controller.signal.aborted) return;
+      console.error('Public slots unavailable', err);
+      setSlots([]);
+      setSlotsUnavailable(true);
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [selectedTherapistId, selectedDate, refresh]);
 
-  const handleTherapistSelect = (thId: string) => {
-    setSelectedTherapistId(thId);
+  const currentSlots = slots.filter(slot => slot.therapist_id === selectedTherapistId &&
+    Number.isFinite(Date.parse(slot.starts_at)) && Date.parse(slot.starts_at) > Date.now());
+  const dateFilteredSlots = currentSlots.filter(slot => tehranDay(new Date(slot.starts_at)) === selectedDate);
+  const displayedSlots = filterByDate ? dateFilteredSlots : currentSlots;
+
+  const clearSelection = () => {
+    setSlots([]);
+    setSelectedSlot(null);
+    setLoading(true);
+  };
+  const selectTherapist = (id: string) => {
+    if (id === selectedTherapistId) return;
+    clearSelection();
+    setSelectedTherapistId(id);
   };
 
-  const handleDateChange = (isoDate: string) => {
-    if (isoDate) {
-      setSelectedDate(isoDate);
-      setFilterByDate(true);
-    }
+  const handleDateChange = (date: string) => {
+    if (date === selectedDate) return;
+    clearSelection();
+    setSelectedDate(date);
+    setFilterByDate(true);
+    if (!date) setLoading(false);
   };
-
-  // Filter slots for chosen date
-  const dateFilteredSlots = slots.filter(
-    (s) => getTehranDateKey(s.starts_at) === selectedDate
-  );
-
-  const displayedSlots =
-    filterByDate && dateFilteredSlots.length > 0 ? dateFilteredSlots : slots;
 
   const handleSlotClick = (slot: SlotItem) => {
     setSelectedSlot(slot);
     setModalAlert(null);
-    setIsModalOpen(true);
+    setRejected(false);
   };
 
   const handleCloseModal = () => {
+    if (inFlight.current) return;
     setIsModalOpen(false);
-    setSelectedSlot(null);
+    if (rejected) setSelectedSlot(null);
+    setGuestName('');
+    setGuestPhone('');
     setModalAlert(null);
+    requestAnimationFrame(() => {
+      if (!continueButton.current?.disabled) continueButton.current?.focus();
+      else document.querySelector<HTMLElement>('.therapist-card[aria-pressed="true"]')?.focus();
+    });
   };
 
   const handleSubmitBooking = async (e: React.SyntheticEvent) => {
     e.preventDefault();
-    if (!selectedSlot || !selectedTherapistId) return;
+    if (!selectedSlot || inFlight.current || rejected ||
+        !displayedSlots.some(slot => slot.id === selectedSlot.id && slot.status === 'available')) return;
+    if (!guestName.trim()) {
+      setModalAlert('نام و نام خانوادگی را وارد کنید.');
+      return;
+    }
+    inFlight.current = true;
 
     setSubmitting(true);
     setModalAlert(null);
 
     try {
-      const host = typeof window !== 'undefined' ? window.location.host : '';
-      const res = await fetch(`${apiBase}/v1/public/appointments`, {
+      const res = await fetch('/v1/public/appointments', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(host ? { Host: host } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           therapist_id: selectedTherapistId,
           slot_id: selectedSlot.id,
           guest_name: guestName.trim(),
           guest_phone: guestPhone.trim(),
-          notes: notes.trim(),
         }),
       });
 
       if (res.status === 201) {
-        const data = await res.json();
-        try {
-          sessionStorage.setItem(`appt_${data.id}_hash`, data.guest_lookup_hash);
-        } catch (e) {
-          console.error('sessionStorage error:', e);
+        const data: PublicAppointmentResponse = await res.json();
+        if (data.status !== 'pending' || !data.id || data.slot_id !== selectedSlot.id ||
+            data.therapist_id !== selectedTherapistId) {
+          setModalAlert('نتیجهٔ ثبت نوبت قابل تأیید نیست.');
+          setRejected(true);
+          return;
         }
-        window.location.href = `/appointments/${data.id}?hash=${encodeURIComponent(data.guest_lookup_hash)}`;
+        window.location.assign(`/appointments/${encodeURIComponent(data.id)}`);
         return;
       }
 
       const errData = await res.json().catch(() => ({}));
-      if (res.status === 409) {
+      if (res.status === 409 || errData.code === 'SLOT_IN_PAST' || errData.code === 'SLOT_NOT_FOUND') {
+        setRejected(true);
+        setSlots([]);
+        setRefresh(value => value + 1);
         setModalAlert(
           'متأسفانه این سانس هم‌اکنون رزرو شده یا در دست هماهنگی با متقاضی دیگری است. لطفاً سانس آزاد دیگری را انتخاب فرمایید.'
         );
-        fetchSlots(selectedTherapistId, selectedDate);
       } else if (res.status === 429) {
         setModalAlert(
           'تعداد درخواست‌های شما بیش از حد مجاز است. لطفاً چند دقیقه بعد مجدداً تلاش کنید.'
@@ -243,12 +199,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
       console.error('Failed to submit appointment:', err);
       setModalAlert('خطای ارتباط با سرور. لطفاً اتصال اینترنت خود را بررسی کنید.');
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="w-full max-w-full overflow-x-hidden">
+    <div className="grid w-full min-w-0 items-start gap-8 lg:grid-cols-12">
+      <div className="min-w-0 lg:col-span-8">
       {/* 1. Therapist Selector */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
@@ -268,11 +226,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
                 role="button"
                 tabIndex={0}
                 aria-pressed={isSelected}
-                onClick={() => handleTherapistSelect(th.id)}
+                onClick={() => selectTherapist(th.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    handleTherapistSelect(th.id);
+                    selectTherapist(th.id);
                   }
                 }}
                 className={`therapist-card card bg-base-100 border-2 rounded-2xl p-5 cursor-pointer transition-all duration-200 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
@@ -297,9 +255,6 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
                 <div className="text-xs font-semibold text-primary mb-2">
                   {th.title}
                 </div>
-                <p className="text-xs text-base-content/70 mb-3 leading-relaxed">
-                  {th.bio}
-                </p>
                 <div className="text-[11px] text-base-content/80 bg-base-200/60 px-2.5 py-1 rounded-box inline-block">
                   مدت هر جلسه: <strong>{th.session_duration_minutes} دقیقه</strong>
                 </div>
@@ -323,7 +278,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
           <div className="w-full sm:w-72">
             <PersianDatePicker
               value={selectedDate}
-              defaultValue={initialDate || selectedDate}
+              minValue={today}
               onChange={handleDateChange}
               aria-label="تاریخ مشاوره"
               name="booking_preferred_date"
@@ -346,20 +301,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
             )}
           </div>
           <div className="flex items-center gap-3">
-            {slots.length > 0 && (
+            {currentSlots.length > 0 && (
               <button
                 type="button"
-                onClick={() => setFilterByDate(!filterByDate)}
+                onClick={() => { setSelectedSlot(null); setFilterByDate(!filterByDate); }}
                 className="btn btn-ghost btn-xs text-primary"
               >
                 {filterByDate ? 'نمایش همه سانس‌ها' : 'فقط روز انتخابی'}
               </button>
-            )}
-            {loading && (
-              <span className="text-xs text-primary inline-flex items-center gap-1">
-                <span className="loading loading-spinner loading-xs"></span>
-                در حال دریافت سانس‌ها...
-              </span>
             )}
           </div>
         </div>
@@ -368,9 +317,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
           id="slots-container"
           className="card bg-base-100 border border-base-200 rounded-2xl p-6 min-h-[160px]"
         >
-          {displayedSlots.length === 0 ? (
+          {loading ? <p role="status">در حال دریافت سانس‌ها…</p> : slotsUnavailable ? (
+            <div role="status">
+              <p>دریافت سانس‌ها موقتاً ممکن نیست.</p>
+              <button type="button" className="btn btn-outline btn-sm mt-3" onClick={() => setRefresh(value => value + 1)}>تلاش دوباره</button>
+            </div>
+          ) : displayedSlots.length === 0 ? (
             <div id="no-slots-msg" className="text-center text-base-content/60 py-8 text-sm">
-              {filterByDate && slots.length > 0 ? (
+              {filterByDate && currentSlots.length > 0 ? (
                 <div>
                   <p className="mb-2">
                     در تاریخ انتخابی ({formatPersianDate(selectedDate)}) سانس آزادی ثبت نشده است.
@@ -380,7 +334,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
                     onClick={() => setFilterByDate(false)}
                     className="btn btn-outline btn-primary btn-xs"
                   >
-                    مشاهده سانس‌های موجود در روزهای دیگر ({slots.length} سانس آزاد)
+                    مشاهده سانس‌های موجود در روزهای دیگر ({currentSlots.length} سانس)
                   </button>
                 </div>
               ) : (
@@ -418,6 +372,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
                     key={s.id}
                     type="button"
                     onClick={() => handleSlotClick(s)}
+                    aria-pressed={selectedSlot?.id === s.id}
                     className="slot-btn border border-success/30 bg-success/10 hover:bg-success hover:text-success-content rounded-xl p-3 text-center cursor-pointer transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                     data-slot-id={s.id}
                     data-starts={s.starts_at}
@@ -438,6 +393,33 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
         </div>
       </div>
 
+      </div>
+
+      <aside className="min-w-0 space-y-5 lg:col-span-4 lg:sticky lg:top-28">
+        <section id="booking-summary" aria-labelledby="booking-summary-title"
+          className="card bg-base-100 rounded-2xl border border-base-200 p-5 shadow-xs sm:p-6">
+          <h2 id="booking-summary-title" className="text-xl font-bold">خلاصه نوبت انتخابی</h2>
+          <dl className="my-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
+            <dt>شیوهٔ جلسه</dt><dd className="font-semibold">حضوری</dd>
+            <dt>درمانگر</dt><dd className="font-semibold">{selectedTherapist?.name}</dd>
+            <dt>تاریخ</dt><dd className="font-semibold">{selectedDate ? formatPersianDate(selectedSlot ? tehranDay(new Date(selectedSlot.starts_at)) : selectedDate) : 'انتخاب نشده'}</dd>
+            <dt>سانس</dt><dd className="font-semibold">{selectedSlot && !rejected
+              ? `${formatTehranTimeStr(selectedSlot.starts_at)} تا ${formatTehranTimeStr(selectedSlot.ends_at)}` : 'انتخاب نشده'}</dd>
+          </dl>
+          <button type="button" id="booking-continue" ref={continueButton} className="btn btn-primary rounded-full"
+            disabled={!selectedSlot || rejected || loading} onClick={() => setIsModalOpen(true)}>
+            ادامه و ثبت درخواست
+          </button>
+        </section>
+        <section className="rounded-2xl bg-base-200 p-5 text-sm leading-relaxed">
+          <h2 className="mb-2 font-bold">اصول رازداری و هماهنگی</h2>
+          <p>پذیرش از شمارهٔ تماس برای هماهنگی و تأیید درخواست استفاده می‌کند.</p>
+          {clinicAddress && <p className="mt-3">{clinicAddress}</p>}
+          {clinicPhone && <p>{clinicPhone}</p>}
+          {officeHours && <p>{officeHours}</p>}
+        </section>
+      </aside>
+
       {/* 4. Booking Modal using shared Modal from @psychology/ui */}
       <Modal
         isOpen={isModalOpen && selectedSlot !== null}
@@ -448,13 +430,14 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
         }}
         title="تکمیل درخواست نوبت مشاوره"
         size="md"
-        isDismissable={true}
+        isDismissable={!submitting}
       >
         {selectedSlot && (
           <div id="booking-modal-content">
             {modalAlert && (
               <div
                 id="modal-alert"
+                role="alert"
                 className="alert alert-error text-xs mb-4 leading-relaxed"
               >
                 {modalAlert}
@@ -492,6 +475,8 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
                 <input
                   type="text"
                   id="guest_name"
+                  autoFocus
+                  autoComplete="name"
                   required
                   value={guestName}
                   onChange={(e) => setGuestName(e.target.value)}
@@ -510,6 +495,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
                 <input
                   type="tel"
                   id="guest_phone"
+                  autoComplete="tel-national"
                   required
                   dir="ltr"
                   value={guestPhone}
@@ -522,28 +508,11 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
                 </small>
               </div>
 
-              <div>
-                <label
-                  htmlFor="notes"
-                  className="label-text text-xs font-semibold text-base-content block mb-1"
-                >
-                  توضیحات یا علت مراجعه (اختیاری)
-                </label>
-                <textarea
-                  id="notes"
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="توضیح کوتاه درباره موضوع جلسه..."
-                  className="textarea textarea-bordered w-full text-base-content bg-base-100 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
-                />
-              </div>
-
               <div className="flex gap-2 mt-2">
                 <button
                   type="submit"
                   id="submit-booking-btn"
-                  disabled={submitting}
+                  disabled={submitting || rejected || loading}
                   className="btn btn-primary btn-sm flex-1 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   {submitting ? 'در حال ثبت...' : 'تأیید و ارسال درخواست نوبت'}
@@ -551,6 +520,7 @@ export const BookingFlow: React.FC<BookingFlowProps> = ({
                 <button
                   type="button"
                   id="cancel-modal-btn"
+                  disabled={submitting}
                   onClick={handleCloseModal}
                   className="btn btn-ghost btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >

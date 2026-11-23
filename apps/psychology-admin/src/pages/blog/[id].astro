@@ -1,66 +1,39 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
+import BlogMetadataFields from '../../components/BlogMetadataFields.astro';
 import type { AdminBlogPostDetail } from '@psychology/api-client';
 
 const { id } = Astro.params;
-const internalApiBase = import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const internalApiBase = process.env.INTERNAL_API_URL || import.meta.env.INTERNAL_API_URL ||
+  process.env.PUBLIC_API_URL || import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 const clientApiBase = import.meta.env.PUBLIC_API_URL || '';
-const tenantId = Astro.cookies.get('tenant_id')?.value || '4f3b7b51-7890-4e12-b345-67890abcdef1';
+const tenantId = Astro.locals.activeTenant?.id || Astro.cookies.get('tenant_id')?.value || '';
 const sessionToken = Astro.cookies.get('session_token')?.value || '';
-const host = Astro.request.headers.get('host') || 'localhost:3001';
 
-// Fallback demo post for dev/preview
-const fallbackPost: AdminBlogPostDetail = {
-  id: id || 'b1111111-1111-1111-1111-111111111111',
-  title: 'نقش خودآگاهی و تنظیم هیجان در روابط بین‌فردی',
-  slug: 'self-awareness-and-emotional-regulation',
-  seo_description: 'بررسی راهکارهای علمی و روان‌شناختی جهت تقویت خودآگاهی و بهبود مهارت‌های ارتباطی در زندگی روزمره.',
-  status: 'published',
-  published_at: '2026-11-15T10:00:00Z',
-  created_at: '2026-11-14T08:00:00Z',
-  updated_at: '2026-11-15T10:00:00Z',
-  content_blocks: [
-    {
-      type: 'heading',
-      data: { level: 2, text: 'مقدمه‌ای بر هوش هیجانی و ارتباط سالم' },
-    },
-    {
-      type: 'paragraph',
-      data: {
-        text: 'روابط بین‌فردی ستون فقرات کیفیت زندگی روانی انسان‌ها را تشکیل می‌دهند. پژوهش‌های متعدد نشان می‌دهند که توانایی درک و نام‌گذاری هیجانات خود، اولین گام در تنظیم پاسخ‌های هیجانی است.',
-      },
-    },
-    {
-      type: 'audio',
-      data: {
-        media_id: 'm1111111-1111-1111-1111-111111111111',
-        caption: 'پادکست آموزشی تنظیم هیجان',
-      },
-    },
-  ],
-};
-
-let post = fallbackPost;
-
+let post: AdminBlogPostDetail | undefined;
+let error = 'دریافت مقاله موقتاً ممکن نیست.';
 try {
-  const res = await fetch(`${internalApiBase}/v1/admin/blog/${id}`, {
-    headers: {
-      Host: host,
-      ...(sessionToken ? { Cookie: `session_token=${sessionToken}` } : {}),
-      'X-Tenant-ID': tenantId,
-      'Authorization': `Bearer ${sessionToken}`,
-    },
-    signal: AbortSignal.timeout(1000),
+  const res = await fetch(`${internalApiBase}/v1/admin/blog/${encodeURIComponent(id ?? '')}`, {
+    headers: { 'X-Tenant-ID': tenantId, Authorization: `Bearer ${sessionToken}` },
+    signal: AbortSignal.timeout(1500),
   });
-  if (res.ok) {
-    post = await res.json();
+  if (res.ok) post = await res.json();
+  if (res.status === 404) {
+    Astro.response.status = 404;
+    error = 'مقاله یافت نشد.';
+  } else if (!res.ok) {
+    Astro.response.status = res.status >= 500 ? 503 : res.status;
   }
-} catch {
-  // Fallback to demo post
+} catch (err) {
+  Astro.response.status = 503;
+  console.error('Admin blog post unavailable', err instanceof Error ? err.name : 'UnknownError');
 }
+
 ---
 
-<AdminLayout title={`ویرایش: ${post.title}`} currentNav="blog">
+<AdminLayout title={post?.title ?? 'ویرایش مقاله'} currentNav="blog">
+  {!post ? <p class="alert alert-error" role="alert">{error}</p> : <>
+
   <div class="max-w-4xl mx-auto flex flex-col gap-6">
     <!-- Top Action Bar -->
     <div class="flex justify-between items-center flex-wrap gap-4">
@@ -142,6 +115,8 @@ try {
         </div>
       </div>
 
+      <BlogMetadataFields post={post} />
+
       <!-- Block Editor Container -->
       <div class="border-t border-base-200 pt-5">
         <div class="flex justify-between items-center mb-4">
@@ -191,12 +166,13 @@ try {
     </form>
   </div>
 
-  <script define:vars={{ initialBlocks: post.content_blocks, postId: post.id, apiBase: clientApiBase }}>
+  <script define:vars={{ initialBlocks: post.content_blocks, postId: post.id, apiBase: clientApiBase, activeTenantId: tenantId }}>
     const blocksContainer = document.getElementById('blocks-container');
     const blockCountEl = document.getElementById('block-count');
     const titleInput = document.getElementById('post-title');
     const slugInput = document.getElementById('post-slug');
     const seoInput = document.getElementById('post-seo');
+    const blogForm = document.getElementById('edit-blog-form');
 
     let blocks = (initialBlocks || []).map((b) => ({
       id: Math.random().toString(36).substring(2, 9),
@@ -371,6 +347,7 @@ try {
                 headers: {
                   'Content-Type': 'application/json',
                   'X-Requested-With': 'XMLHttpRequest',
+                  'X-Tenant-ID': activeTenantId,
                 },
                 body: JSON.stringify({
                   original_name: file.name,
@@ -400,6 +377,7 @@ try {
                 headers: {
                   'Content-Type': 'application/json',
                   'X-Requested-With': 'XMLHttpRequest',
+                  'X-Tenant-ID': activeTenantId,
                 },
                 body: JSON.stringify({ upload_id: uploadData.upload_id }),
               });
@@ -466,17 +444,23 @@ try {
 
       const content_blocks = blocks.map((b) => ({ type: b.type, data: b.data }));
 
+      const fields = new FormData(blogForm);
       try {
         const res = await fetch(`${apiBase}/v1/admin/blog/${postId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'X-Tenant-ID': activeTenantId,
           },
           body: JSON.stringify({
             title,
             slug,
             seo_description: seo,
+            author_name: fields.get('author_name'),
+            category: fields.get('category'),
+            is_featured: fields.has('is_featured'),
+            cover_media_id: String(fields.get('cover_media_id') ?? '').trim(),
             content_blocks,
           }),
         });
@@ -502,6 +486,7 @@ try {
           headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'X-Tenant-ID': activeTenantId,
           },
         });
         if (res.ok) {
@@ -525,6 +510,7 @@ try {
           headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'X-Tenant-ID': activeTenantId,
           },
         });
         if (res.ok) {
@@ -548,6 +534,7 @@ try {
           headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'X-Tenant-ID': activeTenantId,
           },
         });
         if (res.ok) {
@@ -562,4 +549,5 @@ try {
       }
     });
   </script>
+  </>}
 </AdminLayout>

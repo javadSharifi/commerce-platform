@@ -9,37 +9,38 @@ import (
 	"time"
 
 	"psychology/api/internal/media/mediadb"
+	"psychology/api/internal/platform/db"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
-	MaxPublicImageBytes int64 = 5 * 1024 * 1024        // 5 MiB
-	MaxBlogAudioBytes   int64 = 32 * 1024 * 1024       // 32 MiB
-	MaxBlogVideoBytes   int64 = 128 * 1024 * 1024      // 128 MiB
-	MaxCourseAudioBytes int64 = 128 * 1024 * 1024      // 128 MiB
-	MaxCourseVideoBytes int64 = 512 * 1024 * 1024      // 512 MiB
+	MaxPublicImageBytes int64 = 5 * 1024 * 1024         // 5 MiB
+	MaxBlogAudioBytes   int64 = 32 * 1024 * 1024        // 32 MiB
+	MaxBlogVideoBytes   int64 = 128 * 1024 * 1024       // 128 MiB
+	MaxCourseAudioBytes int64 = 128 * 1024 * 1024       // 128 MiB
+	MaxCourseVideoBytes int64 = 512 * 1024 * 1024       // 512 MiB
 	TenantQuotaLimit    int64 = 10 * 1024 * 1024 * 1024 // 10 GiB
 	StagingTTL                = 15 * time.Minute
 	StreamURLTTL              = 5 * time.Minute
 )
 
 var (
-	ErrQuotaExceeded       = errors.New("storage quota exceeded (10 GiB limit)")
-	ErrInvalidAccessClass  = errors.New("invalid access class (must be public or course_private)")
-	ErrInvalidMimeType     = errors.New("unsupported or disallowed MIME type")
-	ErrFileSizeExceeded    = errors.New("file size exceeds maximum allowed for this media type")
-	ErrInvalidFileSize     = errors.New("file size must be greater than zero")
-	ErrUploadNotFound      = errors.New("media upload reservation not found")
-	ErrUploadExpired       = errors.New("media upload reservation has expired")
-	ErrUploadNotReserved   = errors.New("media upload is not in reserved state")
-	ErrMediaNotFound       = errors.New("media asset not found")
-	ErrMediaNotPublic      = errors.New("media asset is not public")
-	ErrMediaNotCoursePrivate = errors.New("media asset is not course_private")
-	ErrMediaNotVerified    = errors.New("media asset is not verified")
-	ErrStorageMimeMismatch = errors.New("uploaded file MIME type does not match reservation")
-	ErrStorageSizeMismatch = errors.New("uploaded file size exceeds reservation")
+	ErrQuotaExceeded              = errors.New("storage quota exceeded (10 GiB limit)")
+	ErrInvalidAccessClass         = errors.New("invalid access class (must be public or course_private)")
+	ErrInvalidMimeType            = errors.New("unsupported or disallowed MIME type")
+	ErrFileSizeExceeded           = errors.New("file size exceeds maximum allowed for this media type")
+	ErrInvalidFileSize            = errors.New("file size must be greater than zero")
+	ErrUploadNotFound             = errors.New("media upload reservation not found")
+	ErrUploadExpired              = errors.New("media upload reservation has expired")
+	ErrUploadNotReserved          = errors.New("media upload is not in reserved state")
+	ErrMediaNotFound              = errors.New("media asset not found")
+	ErrMediaNotPublic             = errors.New("media asset is not public")
+	ErrMediaNotCoursePrivate      = errors.New("media asset is not course_private")
+	ErrMediaNotVerified           = errors.New("media asset is not verified")
+	ErrStorageMimeMismatch        = errors.New("uploaded file MIME type does not match reservation")
+	ErrStorageSizeMismatch        = errors.New("uploaded file size exceeds reservation")
 	ErrDisallowedPlaylist         = errors.New("playlists (m3u8, mpd, pls, ts) are not allowed; upload standalone MP4 or MP3")
 	ErrIncompatibleMediaContainer = errors.New("incompatible media container; only MP4 (H.264/AAC) and MP3 are supported")
 )
@@ -59,8 +60,9 @@ type MediaQuerier interface {
 }
 
 type Service struct {
-	db      MediaQuerier
-	storage StorageProvider
+	db          MediaQuerier
+	storage     StorageProvider
+	publicStore *db.Store
 }
 
 func NewService(db MediaQuerier, storage StorageProvider) *Service {
@@ -68,6 +70,11 @@ func NewService(db MediaQuerier, storage StorageProvider) *Service {
 		db:      db,
 		storage: storage,
 	}
+}
+
+func (s *Service) WithPublicReadStore(store *db.Store) *Service {
+	s.publicStore = store
+	return s
 }
 
 type RequestUploadInput struct {
@@ -388,28 +395,10 @@ func (s *Service) FinalizeUpload(ctx context.Context, tenantID, userID uuid.UUID
 }
 
 func (s *Service) GetPublicStreamURL(ctx context.Context, tenantID, assetID uuid.UUID) (*StreamURLOutput, error) {
-	var tid pgtype.UUID
-	_ = tid.Scan(tenantID.String())
-
-	var aid pgtype.UUID
-	_ = aid.Scan(assetID.String())
-
-	asset, err := s.db.GetMediaAssetByID(ctx, mediadb.GetMediaAssetByIDParams{
-		TenantID: tid,
-		ID:       aid,
-	})
+	asset, err := s.publicAsset(ctx, tenantID, assetID)
 	if err != nil {
-		return nil, ErrMediaNotFound
+		return nil, err
 	}
-
-	if asset.ValidationStatus != "verified" {
-		return nil, ErrMediaNotVerified
-	}
-
-	if asset.AccessClass != "public" {
-		return nil, ErrMediaNotPublic
-	}
-
 	streamURL, err := s.storage.PresignGetURL(ctx, asset.StorageKey, StreamURLTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate stream url: %w", err)

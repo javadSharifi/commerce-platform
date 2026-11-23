@@ -165,6 +165,7 @@ func (h *Handler) handleGetAdminBlogPost(w http.ResponseWriter, r *http.Request)
 }
 
 type createBlogPostReq struct {
+	MetadataInput
 	Title          string         `json:"title"`
 	Slug           string         `json:"slug"`
 	SeoDescription string         `json:"seo_description"`
@@ -186,6 +187,7 @@ func (h *Handler) handleCreateAdminBlogPost(w http.ResponseWriter, r *http.Reque
 	}
 
 	post, err := h.service.CreatePost(r.Context(), CreatePostParams{
+		MetadataInput:  req.MetadataInput,
 		TenantID:       tenantID,
 		Title:          req.Title,
 		Slug:           req.Slug,
@@ -194,6 +196,14 @@ func (h *Handler) handleCreateAdminBlogPost(w http.ResponseWriter, r *http.Reque
 		Status:         req.Status,
 	})
 	if err != nil {
+		if errors.Is(err, ErrInvalidMetadata) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_METADATA", "نام نویسنده یا دسته‌بندی نامعتبر است.")
+			return
+		}
+		if errors.Is(err, ErrInvalidCover) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_COVER", "تصویر شاخص باید تصویر عمومی تأییدشدهٔ همین کلینیک باشد.")
+			return
+		}
 		if errors.Is(err, ErrInvalidTitle) {
 			writeJSONError(w, http.StatusBadRequest, "INVALID_TITLE", "عنوان مقاله الزامی است.")
 			return
@@ -222,9 +232,10 @@ func (h *Handler) handleCreateAdminBlogPost(w http.ResponseWriter, r *http.Reque
 }
 
 type updateBlogPostReq struct {
+	MetadataInput
 	Title          string         `json:"title"`
 	Slug           string         `json:"slug"`
-	SeoDescription string         `json:"seo_description"`
+	SeoDescription *string        `json:"seo_description"`
 	ContentBlocks  []ContentBlock `json:"content_blocks"`
 }
 
@@ -249,6 +260,7 @@ func (h *Handler) handleUpdateAdminBlogPost(w http.ResponseWriter, r *http.Reque
 	}
 
 	post, err := h.service.UpdatePost(r.Context(), UpdatePostParams{
+		MetadataInput:  req.MetadataInput,
 		TenantID:       tenantID,
 		ID:             postID,
 		Title:          req.Title,
@@ -257,6 +269,14 @@ func (h *Handler) handleUpdateAdminBlogPost(w http.ResponseWriter, r *http.Reque
 		ContentBlocks:  req.ContentBlocks,
 	})
 	if err != nil {
+		if errors.Is(err, ErrInvalidMetadata) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_METADATA", "نام نویسنده یا دسته‌بندی نامعتبر است.")
+			return
+		}
+		if errors.Is(err, ErrInvalidCover) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_COVER", "تصویر شاخص باید تصویر عمومی تأییدشدهٔ همین کلینیک باشد.")
+			return
+		}
 		if errors.Is(err, ErrPostNotFound) {
 			writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "مقاله یافت نشد.")
 			return
@@ -304,6 +324,10 @@ func (h *Handler) handlePublishAdminBlogPost(w http.ResponseWriter, r *http.Requ
 
 	post, err := h.service.PublishPost(r.Context(), tenantID, postID)
 	if err != nil {
+		if errors.Is(err, ErrInvalidCover) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_COVER", "تصویر شاخص مقاله معتبر نیست.")
+			return
+		}
 		if errors.Is(err, ErrPostNotFound) {
 			writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "مقاله یافت نشد.")
 			return

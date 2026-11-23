@@ -696,8 +696,12 @@ func (b *pilotBlogStore) UpdateBlogPost(ctx context.Context, arg blogdb.UpdateBl
 	}
 	bp.Title = arg.Title
 	bp.Slug = arg.Slug
-	bp.SeoDescription = arg.SeoDescription
-	bp.ContentBlocks = arg.ContentBlocks
+	if arg.SeoDescription.Valid {
+		bp.SeoDescription = arg.SeoDescription.String
+	}
+	if arg.ContentBlocks != nil {
+		bp.ContentBlocks = arg.ContentBlocks
+	}
 	bp.UpdatedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	b.posts[fromPgUUID(arg.ID).String()] = bp
 	return bp, nil

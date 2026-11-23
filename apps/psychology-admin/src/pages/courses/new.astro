@@ -45,6 +45,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         </div>
 
         <div>
+          <label for="topic" class="block text-xs font-semibold text-base-content/80 mb-1">موضوع آموزش (اختیاری)</label>
+          <input id="topic" name="topic" type="text" maxlength="80" class="input input-bordered input-sm w-full" />
+        </div>
+
+        <div>
           <label class="block text-xs font-semibold text-base-content/80 mb-1" for="price_tomans">
             مبلغ دوره (تومان) <span class="text-error">*</span>
           </label>
@@ -92,6 +97,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
             title,
             slug,
             instructor_name,
+            topic: String(formData.get('topic') ?? ''),
             description,
             price_rials,
           }),

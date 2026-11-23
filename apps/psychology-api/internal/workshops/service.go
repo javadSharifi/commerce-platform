@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"psychology/api/internal/education"
+	"psychology/api/internal/platform/db"
 	"regexp"
 	"strings"
 	"sync"
@@ -19,16 +21,16 @@ import (
 )
 
 var (
-	ErrWorkshopNotFound                 = errors.New("workshops: workshop not found")
-	ErrWorkshopNotPublished             = errors.New("workshops: workshop is not open for registration")
-	ErrRegistrationDeadlinePassed       = errors.New("workshops: registration deadline has passed")
-	ErrCapacityFull                     = errors.New("workshops: workshop capacity is full (0 seats available)")
-	ErrDuplicateActiveRegistration      = errors.New("workshops: active registration already exists for this phone number")
-	ErrCannotReduceCapacityBelowActive  = errors.New("workshops: cannot reduce capacity below currently booked seats")
-	ErrInvalidDates                     = errors.New("workshops: ends_at must be after starts_at and registration_deadline <= starts_at")
-	ErrRegistrationNotFound             = errors.New("workshops: registration not found")
-	ErrCannotModifyActiveWorkshop       = errors.New("workshops: cannot change price or schedule after registrations exist")
-	ErrInvalidPhone                     = errors.New("workshops: invalid Iranian phone format (must be 09XXXXXXXXX)")
+	ErrWorkshopNotFound                = errors.New("workshops: workshop not found")
+	ErrWorkshopNotPublished            = errors.New("workshops: workshop is not open for registration")
+	ErrRegistrationDeadlinePassed      = errors.New("workshops: registration deadline has passed")
+	ErrCapacityFull                    = errors.New("workshops: workshop capacity is full (0 seats available)")
+	ErrDuplicateActiveRegistration     = errors.New("workshops: active registration already exists for this phone number")
+	ErrCannotReduceCapacityBelowActive = errors.New("workshops: cannot reduce capacity below currently booked seats")
+	ErrInvalidDates                    = errors.New("workshops: ends_at must be after starts_at and registration_deadline <= starts_at")
+	ErrRegistrationNotFound            = errors.New("workshops: registration not found")
+	ErrCannotModifyActiveWorkshop      = errors.New("workshops: cannot change price or schedule after registrations exist")
+	ErrInvalidPhone                    = errors.New("workshops: invalid Iranian phone format (must be 09XXXXXXXXX)")
 )
 
 var phoneRegex = regexp.MustCompile(`^09[0-9]{9}$`)
@@ -94,8 +96,9 @@ type Querier interface {
 }
 
 type Service struct {
-	queries Querier
-	wsLocks sync.Map
+	catalogStore *db.Store
+	queries      Querier
+	wsLocks      sync.Map
 }
 
 func (s *Service) getWorkshopLock(id uuid.UUID) *sync.Mutex {
@@ -122,6 +125,7 @@ func toPgTimestamptz(t time.Time) pgtype.Timestamptz {
 }
 
 type CreateWorkshopParams struct {
+	Topic                string
 	Title                string
 	Slug                 string
 	Description          string
@@ -135,6 +139,7 @@ type CreateWorkshopParams struct {
 }
 
 type Workshop struct {
+	Topic                string
 	ID                   uuid.UUID
 	TenantID             uuid.UUID
 	Title                string
@@ -160,6 +165,7 @@ type WorkshopDetail struct {
 }
 
 type PublicWorkshopItem struct {
+	Topic              string    `json:"topic,omitempty"`
 	ID                 uuid.UUID `json:"id"`
 	Title              string    `json:"title"`
 	Slug               string    `json:"slug"`
@@ -179,6 +185,7 @@ type PublicWorkshopDetail struct {
 }
 
 type AdminWorkshopItem struct {
+	Topic          string    `json:"topic,omitempty"`
 	ID             uuid.UUID `json:"id"`
 	Title          string    `json:"title"`
 	Slug           string    `json:"slug"`
@@ -202,6 +209,7 @@ type AdminWorkshopDetail struct {
 }
 
 type UpdateWorkshopParams struct {
+	Topic                *string
 	Title                *string
 	Slug                 *string
 	Description          *string
@@ -243,6 +251,20 @@ type AdminRegistrationItem struct {
 }
 
 func (s *Service) CreateWorkshop(ctx context.Context, tenantID uuid.UUID, p CreateWorkshopParams) (*Workshop, error) {
+	if s.catalogStore == nil {
+		return s.createWorkshop(ctx, s.queries, tenantID, p)
+	}
+	return education.WriteCatalog(ctx, s.catalogStore, tenantID, func(tx pgx.Tx) (*Workshop, error) {
+		return s.createWorkshop(ctx, workshopsdb.New(tx), tenantID, p)
+	})
+}
+
+func (s *Service) createWorkshop(ctx context.Context, q Querier, tenantID uuid.UUID, p CreateWorkshopParams) (*Workshop, error) {
+	topic, err := education.NormalizeTopic(p.Topic)
+	if err != nil {
+		return nil, err
+	}
+
 	if !p.EndsAt.After(p.StartsAt) || p.RegistrationDeadline.After(p.StartsAt) {
 		return nil, ErrInvalidDates
 	}
@@ -250,9 +272,10 @@ func (s *Service) CreateWorkshop(ctx context.Context, tenantID uuid.UUID, p Crea
 		p.Capacity = 1
 	}
 
-	w, err := s.queries.CreateWorkshop(ctx, workshopsdb.CreateWorkshopParams{
+	w, err := q.CreateWorkshop(ctx, workshopsdb.CreateWorkshopParams{
 		TenantID:             toPgUUID(tenantID),
 		Title:                p.Title,
+		Topic:                topic,
 		Slug:                 p.Slug,
 		Description:          p.Description,
 		InstructorName:       p.InstructorName,
@@ -613,6 +636,7 @@ func mapWorkshop(w workshopsdb.Workshop) *Workshop {
 		ID:                   fromPgUUID(w.ID),
 		TenantID:             fromPgUUID(w.TenantID),
 		Title:                w.Title,
+		Topic:                w.Topic,
 		Slug:                 w.Slug,
 		Description:          w.Description,
 		InstructorName:       w.InstructorName,
@@ -628,103 +652,127 @@ func mapWorkshop(w workshopsdb.Workshop) *Workshop {
 	}
 }
 
+func (s *Service) WithCatalogStore(store *db.Store) *Service {
+	s.catalogStore = store
+	return s
+}
+
 func (s *Service) ListPublishedWorkshops(ctx context.Context, tenantID uuid.UUID) ([]PublicWorkshopItem, error) {
-	rows, err := s.queries.ListPublishedWorkshops(ctx, toPgUUID(tenantID))
-	if err != nil {
-		return nil, err
-	}
+	return db.ReadTenant(ctx, s.catalogStore, tenantID, s.queries,
+		func(tx pgx.Tx) Querier { return workshopsdb.New(tx) },
+		func(q Querier) ([]PublicWorkshopItem, error) {
+			rows, err := q.ListPublishedWorkshops(ctx, toPgUUID(tenantID))
+			if err != nil {
+				return nil, err
+			}
 
-	res := make([]PublicWorkshopItem, 0, len(rows))
-	now := time.Now()
-	for _, w := range rows {
-		activeCount, err := s.queries.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
-			TenantID:   w.TenantID,
-			WorkshopID: w.ID,
-		})
-		if err != nil {
-			return nil, err
-		}
+			res := make([]PublicWorkshopItem, 0, len(rows))
+			now := time.Now()
+			for _, w := range rows {
+				activeCount, err := q.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
+					TenantID:   w.TenantID,
+					WorkshopID: w.ID,
+				})
+				if err != nil {
+					return nil, err
+				}
 
-		remaining := int64(w.Capacity) - activeCount
-		if remaining < 0 {
-			remaining = 0
-		}
+				remaining := int64(w.Capacity) - activeCount
+				if remaining < 0 {
+					remaining = 0
+				}
 
-		isOpen := remaining > 0 && now.Before(w.RegistrationDeadline.Time)
+				isOpen := remaining > 0 && now.Before(w.RegistrationDeadline.Time)
 
-		res = append(res, PublicWorkshopItem{
-			ID:                 fromPgUUID(w.ID),
-			Title:              w.Title,
-			Slug:               w.Slug,
-			InstructorName:     w.InstructorName,
-			StartsAt:           w.StartsAt.Time,
-			EndsAt:             w.EndsAt.Time,
-			Location:           w.Location,
-			PriceRials:         w.PriceRials,
-			RemainingCapacity:  remaining,
-			IsRegistrationOpen: isOpen,
-		})
-	}
+				res = append(res, PublicWorkshopItem{
+					ID:                 fromPgUUID(w.ID),
+					Title:              w.Title,
+					Topic:              w.Topic,
+					Slug:               w.Slug,
+					InstructorName:     w.InstructorName,
+					StartsAt:           w.StartsAt.Time,
+					EndsAt:             w.EndsAt.Time,
+					Location:           w.Location,
+					PriceRials:         w.PriceRials,
+					RemainingCapacity:  remaining,
+					IsRegistrationOpen: isOpen,
+				})
+			}
 
-	return res, nil
+			return res, nil
+		},
+	)
 }
 
 func (s *Service) GetPublicWorkshopDetail(ctx context.Context, tenantID, id uuid.UUID) (*PublicWorkshopDetail, error) {
-	w, err := s.queries.GetWorkshopByID(ctx, workshopsdb.GetWorkshopByIDParams{
-		TenantID: toPgUUID(tenantID),
-		ID:       toPgUUID(id),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrWorkshopNotFound
-		}
-		return nil, err
-	}
+	return db.ReadTenant(ctx, s.catalogStore, tenantID, s.queries,
+		func(tx pgx.Tx) Querier { return workshopsdb.New(tx) },
+		func(q Querier) (*PublicWorkshopDetail, error) {
+			w, err := q.GetWorkshopByID(ctx, workshopsdb.GetWorkshopByIDParams{
+				TenantID: toPgUUID(tenantID),
+				ID:       toPgUUID(id),
+			})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil, ErrWorkshopNotFound
+				}
+				return nil, err
+			}
 
-	if w.Status != "published" {
-		return nil, ErrWorkshopNotFound
-	}
+			if w.Status != "published" {
+				return nil, ErrWorkshopNotFound
+			}
 
-	activeCount, err := s.queries.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
-		TenantID:   toPgUUID(tenantID),
-		WorkshopID: toPgUUID(id),
-	})
-	if err != nil {
-		return nil, err
-	}
+			activeCount, err := q.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
+				TenantID:   toPgUUID(tenantID),
+				WorkshopID: toPgUUID(id),
+			})
+			if err != nil {
+				return nil, err
+			}
 
-	remaining := int64(w.Capacity) - activeCount
-	if remaining < 0 {
-		remaining = 0
-	}
+			remaining := int64(w.Capacity) - activeCount
+			if remaining < 0 {
+				remaining = 0
+			}
 
-	isOpen := remaining > 0 && time.Now().Before(w.RegistrationDeadline.Time)
+			isOpen := remaining > 0 && time.Now().Before(w.RegistrationDeadline.Time)
 
-	return &PublicWorkshopDetail{
-		PublicWorkshopItem: PublicWorkshopItem{
-			ID:                 fromPgUUID(w.ID),
-			Title:              w.Title,
-			Slug:               w.Slug,
-			InstructorName:     w.InstructorName,
-			StartsAt:           w.StartsAt.Time,
-			EndsAt:             w.EndsAt.Time,
-			Location:           w.Location,
-			PriceRials:         w.PriceRials,
-			RemainingCapacity:  remaining,
-			IsRegistrationOpen: isOpen,
+			return &PublicWorkshopDetail{
+				PublicWorkshopItem: PublicWorkshopItem{
+					ID:                 fromPgUUID(w.ID),
+					Title:              w.Title,
+					Topic:              w.Topic,
+					Slug:               w.Slug,
+					InstructorName:     w.InstructorName,
+					StartsAt:           w.StartsAt.Time,
+					EndsAt:             w.EndsAt.Time,
+					Location:           w.Location,
+					PriceRials:         w.PriceRials,
+					RemainingCapacity:  remaining,
+					IsRegistrationOpen: isOpen,
+				},
+				Description:          w.Description,
+				RegistrationDeadline: w.RegistrationDeadline.Time,
+			}, nil
 		},
-		Description:          w.Description,
-		RegistrationDeadline: w.RegistrationDeadline.Time,
-	}, nil
+	)
 }
 
 func (s *Service) ListAdminWorkshops(ctx context.Context, tenantID uuid.UUID, status *string) ([]AdminWorkshopItem, error) {
+	return db.ReadTenant(ctx, s.catalogStore, tenantID, s.queries,
+		func(tx pgx.Tx) Querier { return workshopsdb.New(tx) },
+		func(q Querier) ([]AdminWorkshopItem, error) { return s.listAdminWorkshops(ctx, q, tenantID, status) },
+	)
+}
+
+func (s *Service) listAdminWorkshops(ctx context.Context, q Querier, tenantID uuid.UUID, status *string) ([]AdminWorkshopItem, error) {
 	var statusArg pgtype.Text
 	if status != nil && *status != "" {
 		statusArg = pgtype.Text{String: *status, Valid: true}
 	}
 
-	rows, err := s.queries.ListWorkshops(ctx, workshopsdb.ListWorkshopsParams{
+	rows, err := q.ListWorkshops(ctx, workshopsdb.ListWorkshopsParams{
 		TenantID: toPgUUID(tenantID),
 		Status:   statusArg,
 	})
@@ -734,7 +782,7 @@ func (s *Service) ListAdminWorkshops(ctx context.Context, tenantID uuid.UUID, st
 
 	res := make([]AdminWorkshopItem, 0, len(rows))
 	for _, w := range rows {
-		confirmedCount, err := s.queries.CountConfirmedRegistrations(ctx, workshopsdb.CountConfirmedRegistrationsParams{
+		confirmedCount, err := q.CountConfirmedRegistrations(ctx, workshopsdb.CountConfirmedRegistrationsParams{
 			TenantID:   w.TenantID,
 			WorkshopID: w.ID,
 		})
@@ -742,7 +790,7 @@ func (s *Service) ListAdminWorkshops(ctx context.Context, tenantID uuid.UUID, st
 			return nil, err
 		}
 
-		activeCount, err := s.queries.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
+		activeCount, err := q.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
 			TenantID:   w.TenantID,
 			WorkshopID: w.ID,
 		})
@@ -758,6 +806,7 @@ func (s *Service) ListAdminWorkshops(ctx context.Context, tenantID uuid.UUID, st
 		res = append(res, AdminWorkshopItem{
 			ID:             fromPgUUID(w.ID),
 			Title:          w.Title,
+			Topic:          w.Topic,
 			Slug:           w.Slug,
 			InstructorName: w.InstructorName,
 			StartsAt:       w.StartsAt.Time,
@@ -775,7 +824,14 @@ func (s *Service) ListAdminWorkshops(ctx context.Context, tenantID uuid.UUID, st
 }
 
 func (s *Service) GetAdminWorkshopDetail(ctx context.Context, tenantID, id uuid.UUID) (*AdminWorkshopDetail, error) {
-	w, err := s.queries.GetWorkshopByID(ctx, workshopsdb.GetWorkshopByIDParams{
+	return db.ReadTenant(ctx, s.catalogStore, tenantID, s.queries,
+		func(tx pgx.Tx) Querier { return workshopsdb.New(tx) },
+		func(q Querier) (*AdminWorkshopDetail, error) { return s.getAdminWorkshopDetail(ctx, q, tenantID, id) },
+	)
+}
+
+func (s *Service) getAdminWorkshopDetail(ctx context.Context, q Querier, tenantID, id uuid.UUID) (*AdminWorkshopDetail, error) {
+	w, err := q.GetWorkshopByID(ctx, workshopsdb.GetWorkshopByIDParams{
 		TenantID: toPgUUID(tenantID),
 		ID:       toPgUUID(id),
 	})
@@ -786,7 +842,7 @@ func (s *Service) GetAdminWorkshopDetail(ctx context.Context, tenantID, id uuid.
 		return nil, err
 	}
 
-	confirmedCount, err := s.queries.CountConfirmedRegistrations(ctx, workshopsdb.CountConfirmedRegistrationsParams{
+	confirmedCount, err := q.CountConfirmedRegistrations(ctx, workshopsdb.CountConfirmedRegistrationsParams{
 		TenantID:   toPgUUID(tenantID),
 		WorkshopID: toPgUUID(id),
 	})
@@ -794,7 +850,7 @@ func (s *Service) GetAdminWorkshopDetail(ctx context.Context, tenantID, id uuid.
 		return nil, err
 	}
 
-	activeCount, err := s.queries.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
+	activeCount, err := q.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
 		TenantID:   toPgUUID(tenantID),
 		WorkshopID: toPgUUID(id),
 	})
@@ -811,6 +867,7 @@ func (s *Service) GetAdminWorkshopDetail(ctx context.Context, tenantID, id uuid.
 		AdminWorkshopItem: AdminWorkshopItem{
 			ID:             fromPgUUID(w.ID),
 			Title:          w.Title,
+			Topic:          w.Topic,
 			Slug:           w.Slug,
 			InstructorName: w.InstructorName,
 			StartsAt:       w.StartsAt.Time,
@@ -830,8 +887,26 @@ func (s *Service) GetAdminWorkshopDetail(ctx context.Context, tenantID, id uuid.
 }
 
 func (s *Service) UpdateWorkshop(ctx context.Context, tenantID, id uuid.UUID, p UpdateWorkshopParams) (*AdminWorkshopDetail, error) {
+	if s.catalogStore == nil {
+		return s.updateWorkshop(ctx, s.queries, nil, tenantID, id, p)
+	}
+	return education.WriteCatalog(ctx, s.catalogStore, tenantID, func(tx pgx.Tx) (*AdminWorkshopDetail, error) {
+		return s.updateWorkshop(ctx, workshopsdb.New(tx), tx, tenantID, id, p)
+	})
+}
+
+func (s *Service) updateWorkshop(ctx context.Context, q Querier, tx pgx.Tx, tenantID, id uuid.UUID, p UpdateWorkshopParams) (*AdminWorkshopDetail, error) {
+	var topic pgtype.Text
+	if p.Topic != nil {
+		value, err := education.NormalizeTopic(*p.Topic)
+		if err != nil {
+			return nil, err
+		}
+		topic = pgtype.Text{String: value, Valid: true}
+	}
+
 	// 1. Lock workshop row for update
-	current, err := s.queries.GetWorkshopByIDForUpdate(ctx, workshopsdb.GetWorkshopByIDForUpdateParams{
+	current, err := q.GetWorkshopByIDForUpdate(ctx, workshopsdb.GetWorkshopByIDForUpdateParams{
 		TenantID: toPgUUID(tenantID),
 		ID:       toPgUUID(id),
 	})
@@ -843,7 +918,7 @@ func (s *Service) UpdateWorkshop(ctx context.Context, tenantID, id uuid.UUID, p 
 	}
 
 	// 2. Count confirmed registrations
-	confirmedCount, err := s.queries.CountConfirmedRegistrations(ctx, workshopsdb.CountConfirmedRegistrationsParams{
+	confirmedCount, err := q.CountConfirmedRegistrations(ctx, workshopsdb.CountConfirmedRegistrationsParams{
 		TenantID:   toPgUUID(tenantID),
 		WorkshopID: toPgUUID(id),
 	})
@@ -915,7 +990,7 @@ func (s *Service) UpdateWorkshop(ctx context.Context, tenantID, id uuid.UUID, p 
 	}
 
 	// Validate capacity against active registrations
-	activeCount, err := s.queries.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
+	activeCount, err := q.CountActiveRegistrations(ctx, workshopsdb.CountActiveRegistrationsParams{
 		TenantID:   toPgUUID(tenantID),
 		WorkshopID: toPgUUID(id),
 	})
@@ -926,7 +1001,7 @@ func (s *Service) UpdateWorkshop(ctx context.Context, tenantID, id uuid.UUID, p 
 		return nil, ErrCannotReduceCapacityBelowActive
 	}
 
-	_, err = s.queries.UpdateWorkshop(ctx, workshopsdb.UpdateWorkshopParams{
+	_, err = q.UpdateWorkshop(ctx, workshopsdb.UpdateWorkshopParams{
 		TenantID:             toPgUUID(tenantID),
 		ID:                   toPgUUID(id),
 		Title:                targetTitle,
@@ -939,12 +1014,18 @@ func (s *Service) UpdateWorkshop(ctx context.Context, tenantID, id uuid.UUID, p 
 		RegistrationDeadline: toPgTimestamptz(targetDeadline),
 		Capacity:             targetCapacity,
 		PriceRials:           targetPrice,
+		Topic:                topic,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return s.GetAdminWorkshopDetail(ctx, tenantID, id)
+	if tx != nil && current.Status == "published" {
+		if err := education.InvalidateCatalog(ctx, tx, tenantID, "/", "/courses", "/workshops", "/workshops/"+id.String()); err != nil {
+			return nil, err
+		}
+	}
+	return s.getAdminWorkshopDetail(ctx, q, tenantID, id)
 }
 
 func (s *Service) PublishWorkshop(ctx context.Context, tenantID, id uuid.UUID) (*AdminWorkshopDetail, error) {
@@ -1018,4 +1099,3 @@ func (s *Service) CancelWorkshop(ctx context.Context, tenantID, id uuid.UUID) (*
 
 	return s.GetAdminWorkshopDetail(ctx, tenantID, id)
 }
-
